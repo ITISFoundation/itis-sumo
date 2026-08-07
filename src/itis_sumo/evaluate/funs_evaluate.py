@@ -11,7 +11,6 @@ import pandas as pd
 from scipy.stats import ttest_rel
 from sklearn.model_selection import KFold
 
-from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.config.funs_create_dakota_conf import (
     create_moga_optimization_conffile,
     create_sumo_crossvalidation_conffile,
@@ -19,6 +18,7 @@ from itis_sumo.config.funs_create_dakota_conf import (
     create_sumo_manual_crossvalidation_conffile,
     create_uq_propagation_conffile,
 )
+from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.data.funs_data_processing import (
     create_grid_samples,
     create_samples_along_axes,
@@ -263,7 +263,7 @@ def evaluate_sumo_manual_crossvalidation(
         try:
             dakobj = DakotaObject()
             dakobj.run(dakota_conf, fold_run_dir)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - fold-scoped warn & continue (B23)
             parse_warnings.append(
                 f"Fold {fold} of {N_CROSS_VALIDATION}: Dakota run raised "
                 f"({exc}); skipping this fold"
@@ -290,7 +290,7 @@ def evaluate_sumo_manual_crossvalidation(
                 on_malformed_row="heal_or_drop",
                 warnings=parse_warnings,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - fold-scoped warn & continue (B22)
             parse_warnings.append(
                 f"Fold {fold} of {N_CROSS_VALIDATION}: failed to parse Dakota's "
                 f"predictions.dat ({exc}); skipping this fold"
@@ -989,9 +989,8 @@ def evaluate_sobol_indices(
             val = sobol[var][key]
             if not np.isfinite(val):
                 raise ValueError(f"Sobol' index for {var}.{key} is not finite: {val}")
-    for var_a in sobol_second_order:
-        for var_b in sobol_second_order[var_a]:
-            val = sobol_second_order[var_a][var_b]
+    for var_a, inner in sobol_second_order.items():
+        for var_b, val in inner.items():
             if not np.isfinite(val):
                 raise ValueError(f"Second-order Sobol' index {var_a}:{var_b} is not finite: {val}")
 

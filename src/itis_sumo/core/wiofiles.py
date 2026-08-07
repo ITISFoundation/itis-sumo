@@ -29,14 +29,16 @@ def capture_to_file(stdout="./stdout", stderr="./stderr"):
     stdout_f: IO[bytes] | None = None
     stderr_f: IO[bytes] | None = None
     if stdout:
-        stdout_f = open(stdout, mode="wb")
+        # Handles must stay open across the yield: dup2 redirects to them and
+        # the finally block restores + closes them.
+        stdout_f = open(stdout, mode="wb")  # noqa: SIM115
         if sys.__stdout__ is None:
             raise RuntimeError("sys.__stdout__ is not available")
         real_stdout = sys.__stdout__.fileno()
         save_stdout = os.dup(real_stdout)
         os.dup2(stdout_f.fileno(), real_stdout)
     if stderr:
-        stderr_f = open(stderr, mode="wb")
+        stderr_f = open(stderr, mode="wb")  # noqa: SIM115
         if sys.__stderr__ is None:
             raise RuntimeError("sys.__stderr__ is not available")
         real_stderr = sys.__stderr__.fileno()

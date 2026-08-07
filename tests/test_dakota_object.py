@@ -13,7 +13,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from itis_sumo.core import dakota_object as dakobj
-from itis_sumo.core.dakota_object import DakotaObject, _dak_exec_static, working_directory
+from itis_sumo.core.dakota_object import (
+    DakotaObject,
+    _dak_exec_static,
+    working_directory,
+)
 
 
 def test_working_directory_changes_and_restores_cwd(tmp_path):

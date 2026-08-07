@@ -39,7 +39,7 @@ Examples:
             parser.print_help()
             return 1
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CLI boundary: always fail cleanly
         print(f"Error: {e}", file=sys.stderr)
         return 1
 

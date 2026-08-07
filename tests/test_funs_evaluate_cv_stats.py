@@ -128,8 +128,7 @@ class TestComputeCvConvergence:
         y = x1 * 2.0
         with open(training_file, "w") as f:
             f.write("x1 y\n")
-            for xi, yi in zip(x1, y):
-                f.write(f"{xi} {yi}\n")
+            f.writelines(f"{xi} {yi}\n" for xi, yi in zip(x1, y))
 
         call_sizes = []
 

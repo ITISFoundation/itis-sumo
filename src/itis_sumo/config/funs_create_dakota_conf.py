@@ -301,7 +301,6 @@ def add_evaluator_model(
 def write_to_file(dakota_conf_text, dakota_conf_path):
     dakota_conf_path = Path(dakota_conf_path)
     dakota_conf_path.write_text(dakota_conf_text)
-    pass
 
 
 ############## COMMON WORKFLOWS ######################
@@ -426,7 +425,6 @@ def create_sumo_manual_crossvalidation_conffile(
     dakota_conf += add_surrogate_model(
         training_samples_file=str(TRAINING_SAMPLES_FILE.resolve()),
     )
-    #
     JUST_INPUTS_FILE = process_input_file(
         build_file,
         keep_idxs=validation_indices,

@@ -59,7 +59,7 @@ def get_variable_names(file: str | Path) -> list[str]:
         lines = _parse_data(file)
         return sanitize_varnames(lines[0])
     elif ext == ".json":
-        columns, data = _parse_json_dict(file)
+        columns, _ = _parse_json_dict(file)
         return sanitize_varnames(columns)
     elif ext == ".csv":
         df = pd.read_csv(file)
@@ -177,7 +177,7 @@ def load_data(
 def process_input_file(
     files: str | Path | list[Path],
     columns_to_keep: list[str] | None = None,
-    columns_to_remove: list[str] = ["interface"],
+    columns_to_remove: list[str] | None = None,
     make_log: bool | list[str] | None = None,
     custom_operations: Callable | None = None,
     suffix: str = "processed",
@@ -196,6 +196,8 @@ def process_input_file(
     Returns:
         output_file: Path to the processed file.
     """
+    if columns_to_remove is None:
+        columns_to_remove = ["interface"]
     if isinstance(files, (str, Path)):
         files = [Path(files)]
     df = load_data(files)

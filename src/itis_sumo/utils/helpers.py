@@ -50,7 +50,7 @@ def validate_dakota_installation() -> dict[str, Any]:
                     result["dakota_version"] = version
                 except PackageNotFoundError:
                     warnings.append("Could not determine itis-dakota version")
-        except Exception as e:
+        except (PackageNotFoundError, ImportError) as e:
             warnings.append(f"Error getting itis-dakota version: {e}")
 
     except ImportError:
@@ -91,8 +91,8 @@ def get_dakota_version() -> str | None:
 def create_run_dir(script_dir: Path, dir_name: str = "sampling"):
     """Create a unique timestamped run directory under ``script_dir/runs``."""
     main_runs_dir = script_dir / "runs"
-    current_time = datetime.datetime.now().strftime("%Y%m%d.%H%M%S%d")
+    current_time = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d.%H%M%S%d")
     uid = uuid.uuid4().hex
-    temp_dir = main_runs_dir / "_".join(["dakota", current_time, uid, dir_name])
+    temp_dir = main_runs_dir / f"dakota_{current_time}_{uid}_{dir_name}"
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir

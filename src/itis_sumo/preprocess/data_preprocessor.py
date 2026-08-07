@@ -77,7 +77,6 @@ class DataPreprocessor:
         _logger.info(
             f"Set up {len(self.input_variables)} input variables and {len(self.output_variables)} output variables"
         )
-        return
 
     def setup_normalization(
         self,
@@ -103,7 +102,6 @@ class DataPreprocessor:
                 f"Configured normalization for {len(output_normalizations)} output variables"
             )
 
-        return
 
     def setup_sign_switching(
         self,
@@ -431,12 +429,12 @@ class DataPreprocessor:
         if not self._is_fitted:
             raise ValueError("Preprocessor must be fitted before saving config")
 
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         config = PreprocessorConfig(
             input_variables={name: config for name, config in self.input_variables.items()},
             output_variables={name: config for name, config in self.output_variables.items()},
-            created_timestamp=datetime.now().isoformat(),
+            created_timestamp=datetime.now(UTC).isoformat(),
         )
 
         config_dict = asdict(config)

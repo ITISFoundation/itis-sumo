@@ -13,8 +13,8 @@ from typing import Any, TypedDict
 import pandas as pd
 from pydantic import ValidationError
 
-from itis_sumo.preprocess.models import JobVariableSelection, required_completed_jobs
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
+from itis_sumo.preprocess.models import JobVariableSelection, required_completed_jobs
 
 _logger = logging.getLogger(__name__)
 
@@ -217,7 +217,7 @@ def load_and_inverse_transform_results(
     elif isinstance(results, list):
         return [preprocessor.inverse_transform(result) for result in results]
     else:
-        raise ValueError(f"Unsupported results format: {type(results)}")
+        raise TypeError(f"Unsupported results format: {type(results)}")
 
 
 def get_preprocessing_summary(config_file_path: str | Path) -> dict[str, Any]:
@@ -402,10 +402,9 @@ def filter_variables_by_statistics(
         if min_range is not None and (stats["range"] is None or stats["range"] < min_range):
             return False
 
-        if max_range is not None and (stats["range"] is None or stats["range"] > max_range):
-            return False
-
-        return True
+        return max_range is None or (
+            stats["range"] is not None and stats["range"] <= max_range
+        )
 
     filtered_inputs = [var for var, stats in input_stats.items() if passes_filter(stats)]
     filtered_outputs = [var for var, stats in output_stats.items() if passes_filter(stats)]

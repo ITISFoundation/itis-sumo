@@ -20,12 +20,12 @@ __all__ = [
     "DataPreprocessor",
     "FunctionJob",
     "JobVariableSelection",
-    "required_completed_jobs",
     "create_filtered_preprocessor",
     "create_training_file_with_preprocessor",
     "filter_variables_by_statistics",
     "get_preprocessing_summary",
     "get_variable_statistics",
     "load_and_inverse_transform_results",
+    "required_completed_jobs",
     "setup_preprocessor_from_config",
 ]
