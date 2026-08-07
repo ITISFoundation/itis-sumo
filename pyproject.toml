@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "itis-sumo"
+version = "0.1.0"
+description = "MetaModeling (Surrogate Model) core: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    # Parity with mmux/vite flaskapi (itis-dakota==1.5.9, Dakota 6.20). Stay
+    # here until the 6.23+ `Interface::interface_cache()` regression on
+    # interface-less surrogate confs is resolved (see SPEC §T T16mo ladder).
+    "itis-dakota==1.5.9",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "pydantic>=2.0",
+    "scikit-learn>=1.6",
+    "scipy>=1.15",
+]
+
+[project.scripts]
+itis-sumo = "itis_sumo.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/itis_sumo"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/itis_sumo/py.typed" = "itis_sumo/py.typed"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "ty>=0.0.58",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-v", "--tb=short", "--strict-markers"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
