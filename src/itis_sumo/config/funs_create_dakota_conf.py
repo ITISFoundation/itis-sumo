@@ -314,12 +314,14 @@ def create_sumo_evaluation_conffile(
     dakota_conf_file: str | Path | None = None,
     sumo_import_name: str | None = None,
     sumo_export_name: str | None = None,
+    export_import_format: str = "text_archive",
 ) -> str:
     dakota_conf = start_dakota_file()
     dakota_conf += add_surrogate_model(
         training_samples_file=str(build_file.resolve()),
         sumo_export_name=sumo_export_name,
         sumo_import_name=sumo_import_name,
+        export_import_format=export_import_format,
     )
     dakota_conf += add_evaluation_method(str(samples_file.resolve()))
     dakota_conf += add_continuous_variables(variables=input_variables)

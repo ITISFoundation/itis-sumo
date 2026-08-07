@@ -12,6 +12,7 @@ from scipy.stats import ttest_rel
 from sklearn.model_selection import KFold
 
 from itis_sumo.config.funs_create_dakota_conf import (
+    add_surrogate_model,
     create_moga_optimization_conffile,
     create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
@@ -19,6 +20,7 @@ from itis_sumo.config.funs_create_dakota_conf import (
     create_uq_propagation_conffile,
 )
 from itis_sumo.core.dakota_object import DakotaObject
+from itis_sumo.core.sumo_model_store import stage_model_for_import, store_exported_model
 from itis_sumo.data.funs_data_processing import (
     create_grid_samples,
     create_samples_along_axes,
@@ -517,6 +519,130 @@ def evaluate_sumo(
 
     results = {
         response_var + "_hat": get_results(run_dir / "predictions.dat", response_var).tolist()
+    }
+    if (run_dir / "variances.dat").is_file():
+        variances = get_results(run_dir / "variances.dat", response_var + "_variance")
+        results[response_var + "_std_hat"] = np.sqrt(variances).tolist()
+
+    return results
+
+
+def export_sumo_model(
+    run_dir: Path,
+    PROCESSED_TRAINING_FILE: Path,
+    PROCESSED_EVALUATION_SAMPLES_FILE: Path,
+    input_vars: list[str],
+    response_var: str,
+    export_format: str = "text_archive",
+) -> tuple[dict[str, list[float]], str]:
+    """Build+evaluate a SuMo surrogate and persist it to the model store (E1, T12).
+
+    Behaves like `evaluate_sumo` but also has Dakota export the trained
+    surrogate (`export_model`), then hands the resulting archive files off to
+    `sumo_model_store` under a freshly minted `sumo_model_id` (V12) -- callers
+    never choose the on-disk key.
+
+    Returns the usual `evaluate_sumo` predictions dict plus that `sumo_model_id`.
+    """
+    input_vars = sanitize_varnames(input_vars)
+    response_var = sanitize_varnames(response_var)
+    export_prefix = (
+        "export"  # internal Dakota-side prefix; the real key is sumo_model_id
+    )
+
+    dakota_conf = create_sumo_evaluation_conffile(
+        build_file=PROCESSED_TRAINING_FILE,
+        samples_file=PROCESSED_EVALUATION_SAMPLES_FILE,
+        input_variables=input_vars,
+        output_responses=[response_var],
+        sumo_export_name=export_prefix,
+        export_import_format=export_format,
+    )
+
+    dakobj = DakotaObject()
+    dakobj.run(dakota_conf, run_dir)
+
+    results = {
+        response_var + "_hat": get_results(
+            run_dir / "predictions.dat", response_var
+        ).tolist()
+    }
+    if (run_dir / "variances.dat").is_file():
+        variances = get_results(run_dir / "variances.dat", response_var + "_variance")
+        results[response_var + "_std_hat"] = np.sqrt(variances).tolist()
+
+    surrogate_conf_block = add_surrogate_model(
+        sumo_export_name=export_prefix,
+        export_import_format=export_format,
+        training_samples_file=str(PROCESSED_TRAINING_FILE.resolve()),
+    )
+    sumo_model_id = store_exported_model(
+        run_dir=run_dir,
+        training_file=PROCESSED_TRAINING_FILE,
+        surrogate_conf_block=surrogate_conf_block,
+        input_descriptors=input_vars,
+        output_descriptor=response_var,
+        export_prefix=export_prefix,
+        export_format=export_format,
+    )
+
+    return results, sumo_model_id
+
+
+def import_sumo_model(
+    run_dir: Path,
+    sumo_model_id: str,
+    PROCESSED_EVALUATION_SAMPLES_FILE: Path,
+    input_vars: list[str],
+    response_var: str,
+) -> dict[str, list[float]]:
+    """Evaluate samples through a previously exported SuMo model (E1, T12).
+
+    No re-training / no training file from the caller: stages the stored
+    archive + the stored copy of the original training-data file into
+    `run_dir` (falling back to a synthesized header-only placeholder with a
+    loud warning if that copy is missing -- safe because R9 established the
+    surrogate is fully reconstructed from the archive; the points file's
+    values are never read back, only its descriptors matter), then runs
+    Dakota's `import_model` (V11: same surrogate-model conf block as at
+    export time, bar the export_model -> import_model swap -- the staged
+    file supplies the `import_build_points_file` keyword the block still
+    needs, R2).
+
+    Validates that `input_vars`/`response_var` (order-sensitive) match the
+    model's stored descriptors (V10) before evaluating, since Dakota's
+    archive formats are not proven to self-describe variable names/order (R8).
+    """
+    input_vars = sanitize_varnames(input_vars)
+    response_var = sanitize_varnames(response_var)
+
+    metadata, staged_training_file = stage_model_for_import(sumo_model_id, run_dir)
+    if (
+        input_vars != metadata.input_descriptors
+        or response_var != metadata.output_descriptor
+    ):
+        raise ValueError(
+            f"SuMo model '{sumo_model_id}' was exported with inputs "
+            f"{metadata.input_descriptors} / output '{metadata.output_descriptor}', "
+            f"but import was requested with inputs {input_vars} / output '{response_var}'"
+        )
+
+    dakota_conf = create_sumo_evaluation_conffile(
+        build_file=staged_training_file,
+        samples_file=PROCESSED_EVALUATION_SAMPLES_FILE,
+        input_variables=input_vars,
+        output_responses=[response_var],
+        sumo_import_name=sumo_model_id,
+        export_import_format=metadata.export_format,
+    )
+
+    dakobj = DakotaObject()
+    dakobj.run(dakota_conf, run_dir)
+
+    results = {
+        response_var + "_hat": get_results(
+            run_dir / "predictions.dat", response_var
+        ).tolist()
     }
     if (run_dir / "variances.dat").is_file():
         variances = get_results(run_dir / "variances.dat", response_var + "_variance")
