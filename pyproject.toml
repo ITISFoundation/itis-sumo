@@ -48,4 +48,5 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "analytical: marks tests that spawn a real Dakota subprocess against known analytical functions",
 ]
