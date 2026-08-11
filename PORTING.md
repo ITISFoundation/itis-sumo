@@ -64,8 +64,8 @@ Deliberately dropped composers (dead / web- or S4L-specific / superseded):
 ### E1 export/import — IMPLEMENTED on branch `feat/sumo-model-export-import` (not merged into main)
 - **Where:** worktree `.claude/worktrees/feat+sumo-model-export-import` (branch
   `feat/sumo-model-export-import`, based on main `955ec99`). The implementation
-  exists as **uncommitted** working-tree changes on that branch — it has NOT been
-  merged into `main`.
+  is **committed** on that branch as `cad02c5` ("feat: add SuMo model
+  export/import (E1)") — it has NOT been merged into `main`.
 - **What:** `src/itis_sumo/core/sumo_model_store.py` (148 lines, V12 uuid keying /
   V13 single `ITIS_SUMO_MODELS_DIR` env source / V10 metadata sidecar),
   `evaluate/funs_evaluate.py::export_sumo_model` / `import_sumo_model`,
@@ -188,5 +188,5 @@ SPEC §T reflects the **actual** port state (main SPEC now matches the E1 branch
 SPEC). E1 T12ze/T13uv/T14qa = ✓ on branch `feat/sumo-model-export-import`
 (implementation + real round-trip test exist in that worktree); T15mn = `.` —
 explicitly a separate mmux/vite PR, not this repo. The branch's E1 changes are
-**uncommitted working-tree edits on top of `955ec99`**; nothing E1-related is in
-`main` yet, and nothing E1-related was ever in this package's commits.
+**committed as `cad02c5` on top of `955ec99`**, but that commit is NOT yet in
+`main` — nothing E1-related is in `main`'s history yet.

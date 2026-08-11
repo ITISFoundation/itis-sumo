@@ -17,3 +17,9 @@ runs/
 
 # Engine fork: nested git repo, versioned separately
 itis-dakota/
+
+# Project House dev-folder link
+.vscode/
+
+# MkDocs build output
+site/
