@@ -11,6 +11,16 @@ wheels/
 
 # Test cache
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Machine-local editor settings
+.vscode/
+
+# MkDocs build output
+site/
 
 # Dakota run outputs
 runs/
