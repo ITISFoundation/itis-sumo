@@ -78,7 +78,7 @@ analytical values (`tests/test_metamodeling_analytical.py`, real Dakota).
 ## Evaluation pathways (Categories C–E)
 
 Axis sweep, grid evaluation, and cross-validation — see
-[Evaluate: core evaluation & cross-validation](algorithms/evaluate.md).
+[Evaluate: core evaluation & cross-validation](reference/evaluate.md).
 
 | Category | What | Status |
 |---|---|---|
@@ -97,7 +97,7 @@ independently verified by B1-B8-style checks).
 Tests the pathway actually reachable from the web UI — manual per-variable
 sampling (`create_manual_uq_samples`) + surrogate evaluation + erfinv-based
 predictive-uncertainty injection (see
-[Sensitivity & UQ propagation](algorithms/sensitivity-uq.md)) —
+[Sensitivity & UQ propagation](reference/sensitivity-uq.md)) —
 against closed-form output distributions.
 
 | Test | Function | Input | Analytical output | Status |
@@ -112,7 +112,7 @@ against closed-form output distributions.
 
 ## Category G: MOGA Optimization
 
-See [MOGA optimization](algorithms/moga.md) for the known
+See [MOGA optimization](reference/moga.md) for the known
 `max_function_evaluations` limitation.
 
 | Test | What | Status |
@@ -124,7 +124,7 @@ See [MOGA optimization](algorithms/moga.md) for the known
 
 ## Category H: Data Preprocessor
 
-See [Data preprocessing](algorithms/preprocess.md).
+See [Data preprocessing](reference/preprocess.md).
 
 | Test | What | Status |
 |---|---|---|
@@ -180,7 +180,7 @@ Carried over from the original test plan, still true of the pinned engine
   exercised.
 - **`propagate_uq` (Dakota-native UQ)** is implemented and tested but not
   the pathway actually wired to the web UI — see
-  [Evaluate § Uncertainty propagation](algorithms/evaluate.md#uncertainty-propagation).
+  [Evaluate § Uncertainty propagation](reference/evaluate.md#uncertainty-propagation).
   Don't assume it's the one production traffic exercises.
 
 ## Summary

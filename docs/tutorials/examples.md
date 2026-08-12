@@ -13,12 +13,12 @@ uv run --group docs python examples/generate_docs_figures.py
 
 For the real-application examples referenced in the roadmap below (NIH
 in-silico model, and datasets from Paria, Giuliana, Luisa), see the
-[Provenance / Porting](../porting.md) page and the corresponding Project House
+[Provenance / Porting](../about/porting.md) page and the corresponding Project House
 tasks — those write-ups will be added here as they land.
 
 ## 1. A GP surrogate fit, with its own uncertainty
 
-[Theory: how Gaussian Processes work](gaussian-processes.md) covers the math;
+[Theory: how Gaussian Processes work](../explanation/gaussian-processes.md) covers the math;
 here is the actual shape of it. Nine training points sampled from
 \(f(x) = \sin(x)\) on \([0, 2\pi]\), fit through itis-sumo's real
 `evaluate_sumo`, evaluated on a dense grid:
@@ -37,7 +37,7 @@ y_std = result["y_std_hat"]    # posterior std, σ(x) — V8df in SPEC.md
 Notice the band pinches to (near) zero width right at each training point and
 widens between them — that's the posterior variance formula
 \(\sigma^2(\mathbf{x}_*) = k(\mathbf{x}_*,\mathbf{x}_*) - \mathbf{k}_*^\top (K+\sigma_n^2 I)^{-1}\mathbf{k}_*\)
-from the [GP theory page](gaussian-processes.md#fitting-prior-posterior-conditioned-on-training-data)
+from the [GP theory page](../explanation/gaussian-processes.md#fitting-prior-posterior-conditioned-on-training-data)
 made visible: query points near training data have large kernel similarity to
 something already observed (small subtracted term, small variance); query
 points far from all training data don't (large variance). This is the same
@@ -46,7 +46,7 @@ mechanism the test suite checks numerically in
 
 ## 2. Why Latin Hypercube sampling, not plain random
 
-[Sampling theory](surrogate-modeling.md#what-makes-a-function-a-good-or-bad-surrogate-target)
+[Sampling theory](../explanation/surrogate-modeling.md#what-makes-a-function-a-good-or-bad-surrogate-target)
 argues that training-point placement matters as much as training-point count.
 25 points each, drawn two ways, using itis-sumo's real `lhs()`:
 
@@ -65,13 +65,13 @@ land close together and tell the surrogate almost nothing it didn't already
 know. LHS (right) guarantees each of the 25 equal-width bins along **both**
 `x1` and `x2` contains exactly one point — every training run is guaranteed
 even 1D marginal coverage, which is what the seeded-RNG invariant `V3er` in
-[SPEC.md](../spec.md) exists to make reproducible.
+[SPEC.md](../about/spec.md) exists to make reproducible.
 
 ## 3. Sensitivity analysis on a surrogate: does it recover the right physics?
 
 The Ishigami function is the standard analytical test case for sensitivity
 methods because its Sobol' indices are known in closed form — see
-[Algorithms → Sensitivity (Sobol) & UQ](../algorithms/sensitivity-uq.md#validation-ishigami-analytical-acceptance-gate)
+[Reference → Sensitivity (Sobol) & UQ](../reference/sensitivity-uq.md#validation-ishigami-analytical-acceptance-gate)
 for the derivation. This is *not* the pure-math validation already covered
 there (which bypasses the surrogate entirely) — this trains a real GP on 300
 noisy-free samples of the Ishigami function and runs the full

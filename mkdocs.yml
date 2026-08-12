@@ -43,22 +43,32 @@ extra_javascript:
 
 nav:
   - Home: index.md
-  - Theory & Background:
-      - Why surrogate modeling: theory/surrogate-modeling.md
-      - How Gaussian Processes work: theory/gaussian-processes.md
-      - Worked examples: theory/examples.md
-  - Algorithms:
-      - Overview: algorithms/index.md
-      - Dakota engine core: algorithms/core.md
-      - Config (NIDR composers): algorithms/config.md
-      - Sampling: algorithms/sampling.md
-      - Surrogate evaluation & cross-validation: algorithms/evaluate.md
-      - Sensitivity (Sobol) & UQ propagation: algorithms/sensitivity-uq.md
-      - MOGA optimization: algorithms/moga.md
-      - Data preprocessing: algorithms/preprocess.md
+  - Tutorials:
+      - Getting started: tutorials/getting-started.md
+      - Worked examples: tutorials/examples.md
+  - How-to guides:
+      - Cross-validate a surrogate: how-to/cross-validate.md
+      - Run a sensitivity analysis: how-to/sensitivity-analysis.md
+      - Find a Pareto front with MOGA: how-to/moga.md
+      - Preprocess data: how-to/preprocess.md
+  - Reference:
+      - Overview: reference/index.md
+      - Dakota engine core: reference/core.md
+      - Config (NIDR composers): reference/config.md
+      - Sampling: reference/sampling.md
+      - Surrogate evaluation & cross-validation: reference/evaluate.md
+      - Sensitivity (Sobol) & UQ propagation: reference/sensitivity-uq.md
+      - MOGA optimization: reference/moga.md
+      - Data preprocessing: reference/preprocess.md
+  - Explanation:
+      - Why surrogate modeling: explanation/surrogate-modeling.md
+      - How Gaussian Processes work: explanation/gaussian-processes.md
   - Verification & Validation:
       - Report: verification-validation.md
-      - Test plan (source): VERIFICATION_VALIDATION_PLAN.md
-      - Unit/property test plan: TIER1_TIER2_UNIT_TESTS_PLAN.md
-  - Provenance / Porting: porting.md
-  - Spec (living design doc): spec.md
+      - Plans (internal):
+          - Test plan (source): VERIFICATION_VALIDATION_PLAN.md
+          - Unit/property test plan: TIER1_TIER2_UNIT_TESTS_PLAN.md
+  - About:
+      - Overview: about/index.md
+      - Provenance / Porting: about/porting.md
+      - Spec (living design doc): about/spec.md

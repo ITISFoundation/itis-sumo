@@ -6,7 +6,8 @@ with known closed-form answers — nothing is hand-drawn or faked. Regenerate wi
 
     uv run --group docs python examples/generate_docs_figures.py
 
-Outputs land in docs/assets/examples/, referenced from docs/theory/*.md.
+Outputs land in docs/assets/examples/, referenced from docs/tutorials/*.md
+and docs/explanation/*.md.
 """
 
 import sys

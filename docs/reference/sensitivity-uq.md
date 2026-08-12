@@ -1,6 +1,6 @@
 # Sensitivity (Sobol) & UQ propagation
 
-See [Worked examples § Sensitivity analysis on a surrogate](../theory/examples.md#3-sensitivity-analysis-on-a-surrogate-does-it-recover-the-right-physics)
+See [Worked examples § Sensitivity analysis on a surrogate](../tutorials/examples.md#3-sensitivity-analysis-on-a-surrogate-does-it-recover-the-right-physics)
 for a runnable demonstration of this pipeline against the Ishigami function,
 GP surrogate included.
 

@@ -1,8 +1,8 @@
 # How Gaussian Processes work (and why itis-sumo uses them)
 
-Background theory — see [Algorithms → Config](../algorithms/config.md) for how
+Background theory — see [Reference → Config](../reference/config.md) for how
 the `gaussian_process surfpack` block is actually composed and shipped to
-Dakota, and [Worked examples](examples.md) for a runnable fit.
+Dakota, and [Worked examples](../tutorials/examples.md) for a runnable fit.
 
 ## What "Gaussian Process" means
 
@@ -61,7 +61,7 @@ where \(\mathbf{k}_*\) is the vector of kernel values between \(\mathbf{x}_*\)
 and every training point, \(K\) is the training-point kernel (Gram) matrix, and
 \(\sigma_n^2\) is an observation-noise term (zero, or near-zero, for a
 deterministic simulator; nonzero if the training data itself is noisy). This
-is exactly the shape of every [worked example](examples.md) plot on this
+is exactly the shape of every [worked example](../tutorials/examples.md) plot on this
 site: a mean curve \(\mu(\mathbf{x})\) plus a shaded band from
 \(\sigma(\mathbf{x})\) — narrow right at training points (where the kernel
 "recognizes" the input as close to something already seen) and widening in
@@ -83,7 +83,7 @@ penalizes kernels that are needlessly wiggly/informative), which is why GPs
 don't typically need a separate regularization hyperparameter tuned by hand
 the way, say, ridge regression does. In itis-sumo, this whole fitting step
 happens inside the Dakota/Surfpack `gaussian_process surfpack` engine — see
-[Algorithms → Config](../algorithms/config.md) for the NIDR block that
+[Reference → Config](../reference/config.md) for the NIDR block that
 requests it; itis-sumo itself never touches the kernel machinery directly, it
 only supplies training data and reads back predictions.
 
@@ -99,19 +99,19 @@ only supplies training data and reads back predictions.
 The decisive reason for this codebase specifically: **every downstream
 consumer of the surrogate needs the variance, not just the mean.**
 
-- [Cross-validation](../algorithms/evaluate.md#cross-validation)
+- [Cross-validation](../reference/evaluate.md#cross-validation)
   metrics (RMSE, R²) only need the mean — but
 - Prediction-interval coverage checks
   ([Category F](../verification-validation.md#category-f-uq-propagation))
   need \(\sigma(\mathbf{x})\) to construct the interval in the first place.
 - The manual UQ-propagation pathway
-  ([Algorithms → Evaluate](../algorithms/evaluate.md#uncertainty-propagation))
+  ([Reference → Evaluate](../reference/evaluate.md#uncertainty-propagation))
   explicitly injects each prediction's own \(\hat\sigma\) via an erfinv
   transform before propagating — this only works because the surrogate
-  reports per-point variance natively (`V8df` in [SPEC.md](../spec.md) — the
+  reports per-point variance natively (`V8df` in [SPEC.md](../about/spec.md) — the
   `{output}_std_hat` column comes straight from the GP posterior, not a
   side-channel estimate).
-- MOGA optimization ([Algorithms → MOGA](../algorithms/moga.md)) over a
+- MOGA optimization ([Reference → MOGA](../reference/moga.md)) over a
   surrogate is only trustworthy in regions the GP is actually confident about
   — a design that looks optimal purely because the surrogate is
   under-constrained there (wide \(\sigma\)) is a modeling artifact, not a real
@@ -121,7 +121,7 @@ consumer of the surrogate needs the variance, not just the mean.**
 None of the alternatives in the table above give you that variance signal for
 free — a GP does, which is why it's the one surrogate family used throughout
 this pipeline (Dakota/Surfpack's `gaussian_process` model type — see
-`V14nm` in [SPEC.md](../spec.md): itis-sumo deliberately avoids also vendoring
+`V14nm` in [SPEC.md](../about/spec.md): itis-sumo deliberately avoids also vendoring
 a standalone `surfpack` dependency, relying on the wheel's built-in GP path
 instead).
 
@@ -146,4 +146,4 @@ prose:
   design didn't resolve the function's actual length scale, included precisely
   so this isn't overstated as "GPs are always well-calibrated."
 
-See [Worked examples](examples.md) for the code and figures.
+See [Worked examples](../tutorials/examples.md) for the code and figures.

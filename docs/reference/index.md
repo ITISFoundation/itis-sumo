@@ -40,7 +40,7 @@ Two capabilities not part of that straight-line pipeline:
 
 ## Design invariants worth knowing
 
-These are enforced by the test suite (see [`SPEC.md`](../spec.md) §V for the
+These are enforced by the test suite (see [`SPEC.md`](../about/spec.md) §V for the
 full, authoritative list):
 
 - **No global RNG state** — every sampling function takes an explicit seed

@@ -3,7 +3,7 @@
 `itis_sumo.config.funs_create_dakota_conf` builds Dakota's NIDR
 (Named Input, Reduced) input-file syntax as plain Python f-strings — no
 templating engine, no intermediate object model. This is deliberate (`V5ui`
-in [`SPEC.md`](../spec.md)): it's the proven, near-verbatim port of the
+in [`SPEC.md`](../about/spec.md)): it's the proven, near-verbatim port of the
 mmux/vite flaskapi composers, with a seam left for a JSON/pydantic input
 layer later (see the Dakota 6.24 experimental JSON-input work referenced in
 [`DAKOTA-STUBS.md`](https://github.com/ITISFoundation/itis-sumo/blob/main/DAKOTA-STUBS.md)).
@@ -18,7 +18,7 @@ higher-level `create_*_conffile` functions:
 | `start_dakota_file` | `environment` block + `tabular_data_file` |
 | `add_continuous_variables` | `variables` block (continuous design vars) |
 | `add_responses` | `responses` block from output descriptors |
-| `add_surrogate_model` | `model` block wrapping a Gaussian-process surrogate over training data — see [How Gaussian Processes work](../theory/gaussian-processes.md) for the theory behind this block |
+| `add_surrogate_model` | `model` block wrapping a Gaussian-process surrogate over training data — see [How Gaussian Processes work](../explanation/gaussian-processes.md) for the theory behind this block |
 | `add_sampling_method` | `method` block for LHS/sampling studies |
 | `add_evaluation_method` | `method` block for a surrogate-evaluation-only study |
 | `add_moga_method` | `method` block for MOGA multi-objective optimization |
