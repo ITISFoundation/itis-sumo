@@ -46,6 +46,7 @@ V11lz: E1 import ! conf block identical to export block bar export↔import swap
 V12xc: E1 keying ! server `sumo_model_id` uuid; ⊥ user-supplied path keys
 V13vb: E1 models dir ! single env-overridable source (⊥ branch's dual-strategy split)
 V14nm: ⊥ standalone surfpack dep; future standalone-eval → bump itis-dakota (`dakota.surrogates`)
+V15zx (proposed, T17bq): `add_surrogate_model` training-file header layout ! explicit `has_eval_id_column: bool` param supplied by caller (whoever wrote/staged the file knows its structure); ⊥ infer from `"processed"` substring in filename — closes B2's root cause (workaround only renamed the staged file to preserve the substring)
 
 ## §R
 R1: `export_model`/`import_model` child keywords; formats `text_archive`(.sps)/`binary_archive`(.bsps)/`algebraic_file`(.alg); naming `{prefix}.{resp}.{ext}` | branch R2
@@ -65,15 +66,16 @@ T6hy|✓|port `preprocess/` DataPreprocessor + integration; move pydantic models
 T7nv|✓|recycle utils: `validate_dakota_installation`, `get_dakota_version`, `validate` CLI, config guard|§C
 T8bx|✓|prune dead paths in ported modules|§C
 T9kz|✓|port pure-core tests (test_dakota_*, cv-stats, preprocessor, sobol, correlation) + headless smoke|V4
-T10le|.|docs README + MkDocs + headless notebook|§G
+T10le|.|docs README + MkDocs + headless notebook — README ✓, MkDocs site ✓ (`mkdocs.yml`, algorithm pages + live V&V report w/ real pytest results, served via `mkdocs serve`), headless notebook still open|§G
 T11rt|✓|verify: standalone pytest green (⊖ flask), clean-venv install, `itis-sumo validate`, headless surrogate→CV→Sobol|§C
 T12ze|✓|E1: `core/sumo_model_store.py` (models dir single env-overridable source `ITIS_SUMO_MODELS_DIR`, uuid keying, metadata sidecar) + `evaluate/funs_evaluate.py::export_sumo_model`/`import_sumo_model` public API|V10,V12,V13
 T13uv|✓|E1: capture verbatim conf block for sidecar (close branch placeholder gap)|V10
 T14qa|✓|E1: empirical export→import round-trip test (real, unmocked Dakota run — `tests/test_sumo_model_store.py`); resolves R2 `?`|R2,V11
 T15mn|.|E1: wire mmux/vite flaskapi endpoints to pkg export/import — separate PR in `../mmux_vite` (jgo/sumo-model-export-import branch T24, itself still `.` there); NOT part of this repo|§I,R1-R4
 T16mo|.|stepwise engine modernization: rung 1 `1.5.9→1.5.11` (packaging-only: drop py3.8, add cp313; same 6.20 engine — behavior-identical; re-run smoke); rung 2 `1.5.11→6.24.x` co-shipped w/ JSON input seam (R5 regression fixed upstream first, re-align py 3.13, re-run full smoke)|R4,R5
+T17bq|.|deepen (proposed, not implemented): `add_surrogate_model` (`config/funs_create_dakota_conf.py:160`) ! replace filename-substring sniffing w/ explicit `has_eval_id_column` param; update all `create_sumo_*_conffile` call sites (5) + E1 export/import call site (`evaluate/funs_evaluate.py`); behavior-preserving, tests green before/after|V15,B2
 
 ## §B
 id|date|cause|fix
 B1|2026-08-07|itis-dakota 6.23+ `Interface::interface_cache()` throws `IndexError: map::at` on interface-less surrogate confs (`study()` ctor, before `execute()`) — pure data-fit surrogates never instantiate an interface → static map missing entry (R5)|pin `==1.5.9` (Dakota 6.20, no cache) for flaskapi parity; ladder T16mo; upstream get-or-create fix
-B2|2026-08-07|E1 import round-trip: `add_surrogate_model` (`config/funs_create_dakota_conf.py`) decides whether the training file has a leading `eval_id` column purely from whether the substring `"processed"` appears in the training filename, not an explicit flag — staging the re-import training file as `{id}.training.dat` (T12ze) desynced Dakota's `use_variable_labels` column expectation from the actual CSV, surfacing as `Cannot reorder variables ... not a permutation of expected variable labels`|`sumo_model_store.py::_training_file_path` names staged file `{id}.processed_training.dat`, preserving the substring; underlying heuristic in `add_surrogate_model` left untouched (pre-existing, other callers depend on it)
+B2|2026-08-07|E1 import round-trip: `add_surrogate_model` (`config/funs_create_dakota_conf.py`) decides whether the training file has a leading `eval_id` column purely from whether the substring `"processed"` appears in the training filename, not an explicit flag — staging the re-import training file as `{id}.training.dat` (T12ze) desynced Dakota's `use_variable_labels` column expectation from the actual CSV, surfacing as `Cannot reorder variables ... not a permutation of expected variable labels`|`sumo_model_store.py::_training_file_path` names staged file `{id}.processed_training.dat`, preserving the substring; underlying heuristic in `add_surrogate_model` left untouched (pre-existing, other callers depend on it) — root-cause fix proposed as T17bq/V15zx, not yet implemented

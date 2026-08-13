@@ -14,6 +14,7 @@ from itis_sumo.config.funs_create_dakota_conf import (
     create_sumo_evaluation_conffile,
     create_sumo_manual_crossvalidation_conffile,
     create_uq_propagation_conffile,
+    infer_has_eval_id_column_from_filename,
     start_dakota_file,
     write_to_file,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "create_sumo_evaluation_conffile",
     "create_sumo_manual_crossvalidation_conffile",
     "create_uq_propagation_conffile",
+    "infer_has_eval_id_column_from_filename",
     "start_dakota_file",
     "write_to_file",
 ]
