@@ -1,4 +1,4 @@
-.PHONY: help sync docs-serve docs-build docs-figures docs-forward test lint format typecheck validate clean
+.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck validate clean
 
 DOCS_PORT := 7777
 
@@ -6,6 +6,7 @@ help:
 	@echo "Available targets:"
 	@echo "  sync          - uv sync (installs dev + docs dependency groups)"
 	@echo "  docs-serve    - serve MkDocs site on 0.0.0.0:8000 (reachable over LAN/Tailscale)"
+	@echo "  docs-serve-docker - serve MkDocs site in Docker on :8000 (auto-forwarded to Windows via Docker Desktop, no netsh needed)"
 	@echo "  docs-build    - build MkDocs site with --strict (fails on broken links/warnings)"
 	@echo "  docs-figures  - regenerate the real figures used in docs/theory/examples.md"
 	@echo "  docs-forward  - print the Windows netsh portproxy command to reach docs-serve from Windows"
@@ -21,6 +22,17 @@ sync:
 
 docs-serve:
 	uv run --group docs mkdocs serve -a 0.0.0.0:7777
+
+# Serves via a container instead of a bare host process. Under WSL2, a
+# plain `mkdocs serve` bound to 0.0.0.0 is not reliably reachable from a
+# Windows browser without manual netsh portproxy (see docs-forward);
+# Docker Desktop's WSL2 integration forwards published container ports to
+# Windows localhost automatically.
+docs-serve-docker:
+	docker build -t itis-sumo-docs -f docker/Dockerfile.docs .
+	docker rm -f itis-sumo-docs 2>/dev/null; \
+	docker run -d --name itis-sumo-docs -p 8000:8000 -v $(CURDIR):/docs itis-sumo-docs
+	@echo "Serving at http://localhost:8000/ (stop with: docker rm -f itis-sumo-docs)"
 
 docs-build:
 	uv run --group docs mkdocs build --strict
