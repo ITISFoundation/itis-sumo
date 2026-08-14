@@ -13,6 +13,7 @@ from sklearn.model_selection import KFold
 
 from itis_sumo.config.funs_create_dakota_conf import (
     add_surrogate_model,
+    infer_has_eval_id_column_from_filename,
     create_moga_optimization_conffile,
     create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
@@ -571,10 +572,14 @@ def export_sumo_model(
         variances = get_results(run_dir / "variances.dat", response_var + "_variance")
         results[response_var + "_std_hat"] = np.sqrt(variances).tolist()
 
+    training_samples_file = str(PROCESSED_TRAINING_FILE.resolve())
     surrogate_conf_block = add_surrogate_model(
         sumo_export_name=export_prefix,
         export_import_format=export_format,
-        training_samples_file=str(PROCESSED_TRAINING_FILE.resolve()),
+        training_samples_file=training_samples_file,
+        has_eval_id_column=infer_has_eval_id_column_from_filename(
+            training_samples_file
+        ),
     )
     sumo_model_id = store_exported_model(
         run_dir=run_dir,
