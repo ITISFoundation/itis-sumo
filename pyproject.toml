@@ -1,14 +1,25 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "itis-sumo"
-version = "0.1.0"
+dynamic = ["version"]
 description = "MetaModeling (Surrogate Model) core: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [
+    { name = "Javier Garcia Ordonez", email = "ordonez@zmt.swiss" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     # Parity with mmux/vite flaskapi (itis-dakota==1.5.9, Dakota 6.20). Stay
     # here until the 6.23+ `Interface::interface_cache()` regression on
@@ -21,8 +32,20 @@ dependencies = [
     "scipy>=1.15",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ITISFoundation/itis-sumo"
+Repository = "https://github.com/ITISFoundation/itis-sumo.git"
+Issues = "https://github.com/ITISFoundation/itis-sumo/issues"
+
 [project.scripts]
 itis-sumo = "itis_sumo.cli:main"
+
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.1.0"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/itis_sumo/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/itis_sumo"]
