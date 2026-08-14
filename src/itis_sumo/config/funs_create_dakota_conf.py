@@ -326,6 +326,7 @@ def create_sumo_evaluation_conffile(
     dakota_conf_file: str | Path | None = None,
     sumo_import_name: str | None = None,
     sumo_export_name: str | None = None,
+    export_import_format: str = "text_archive",
     has_eval_id_column: bool | None = None,
 ) -> str:
     dakota_conf = start_dakota_file()
@@ -334,6 +335,7 @@ def create_sumo_evaluation_conffile(
         training_samples_file=training_samples_file,
         sumo_export_name=sumo_export_name,
         sumo_import_name=sumo_import_name,
+        export_import_format=export_import_format,
         has_eval_id_column=(
             has_eval_id_column
             if has_eval_id_column is not None
