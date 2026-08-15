@@ -35,7 +35,7 @@ TD4kl|x|`docs/index.md`: fix the "Explanation" bullet — currently links only `
 TD5mn|x|`docs/index.md`: add a new "Worked examples" bullet linking `tutorials/examples.md` (real Dakota fits against closed-form analytical answers, with figures) — currently unlinked from the landing page entirely|§C
 TD6op|x|`docs/index.md`: embed `docs/assets/examples/gp_fit_uncertainty.png` near the top of the page with a one-line caption, so the payoff is visible, not just described|§C
 TD7qr|x|`docs/index.md`: move the scope statement from `about/index.md`'s opening ("headless core, no Flask/oSPARC/UI dependency; for the web UI see `mmux_documentation`") onto the landing page, near the top, right after the opening paragraph|§C,I
-TD8st|.|`docs/index.md`: promote the V&V trust-signal line (currently the closing sentence) further up the page and reframe it positively — drop the "not just 'didn't crash'" defensive phrasing, state directly what's been verified against analytical solutions|§C
+TD8st|x|`docs/index.md`: promote the V&V trust-signal line (currently the closing sentence) further up the page and reframe it positively — drop the "not just 'didn't crash'" defensive phrasing, state directly what's been verified against analytical solutions|§C
 TD9uv|.|`docs/about/index.md`: after TD7qr moves the scope statement out, trim the opening so `about/index.md` stops functioning as a second landing page — keep a short one-line pointer back instead of restating scope, keep provenance/engine/spec pointers as-is|§G,TD7qr
 
 ## §B
