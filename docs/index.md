@@ -4,7 +4,7 @@ Running complex simulations across design spaces is slow and expensive, but itis
 
 ![A trained surrogate (blue) with 95% prediction-interval uncertainty bands tracking the true response (black).](assets/examples/gp_fit_uncertainty.png)
 
-**Scope:** itis-sumo is a headless computational core with no Flask, oSPARC, or web-UI dependency. For the web UI, see the separate [`mmux_documentation`](https://github.com/ITISFoundation/mmux_documentation) site.
+**Scope:** itis-sumo is a headless computational core with no Flask, oSPARC, or web-UI dependency. For the web UI, see the separate `mmux_documentation` site.
 
 **New to itis-sumo?** Start with the [Getting started](tutorials/getting-started.md) guide to install, verify the engine, and build your first surrogate.
 
