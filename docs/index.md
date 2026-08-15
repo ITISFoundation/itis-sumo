@@ -2,6 +2,8 @@
 
 Running complex simulations across design spaces is slow and expensive, but itis-sumo lets you train a fast surrogate model that captures the simulation's behavior—enabling you to sweep parameters, optimize designs, and quantify sensitivity with honest uncertainty bars. It provides uncertainty quantification (Sobol' indices, propagation), sampling strategies (LHS, grid, manual-UQ), MOGA optimization, and tools to build, cross-validate, and interrogate your surrogate models, all as an importable Python package.
 
+![A trained surrogate (blue) with 95% prediction-interval uncertainty bands tracking the true response (black).](assets/examples/gp_fit_uncertainty.png)
+
 **New to itis-sumo?** Start with the [Getting started](tutorials/getting-started.md) guide to install, verify the engine, and build your first surrogate.
 
 ## Where to go
