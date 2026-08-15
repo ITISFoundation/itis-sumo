@@ -9,9 +9,9 @@ Running complex simulations across design spaces is slow and expensive, but itis
 - **New here?** [Getting started](tutorials/getting-started.md) — build,
   cross-validate, and interrogate one surrogate end to end, real runnable
   code throughout.
-- **Need to do something specific?** [How-to guides](how-to/cross-validate.md) —
-  task recipes for cross-validation, sensitivity/UQ, MOGA optimization, and
-  data preprocessing.
+- **Need to do something specific?** How-to guides —
+  task recipes for [cross-validation](how-to/cross-validate.md), [sensitivity/UQ](how-to/sensitivity-analysis.md), [MOGA optimization](how-to/moga.md), and
+  [data preprocessing](how-to/preprocess.md).
 - **Want the why, not just the how?** [Explanation](explanation/surrogate-modeling.md) —
   why surrogate modeling, how Gaussian Processes work, worked examples.
 - **Looking up an exact function signature?** [Reference](reference/index.md) —
