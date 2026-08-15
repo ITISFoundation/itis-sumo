@@ -2,16 +2,7 @@
 
 ## What this is
 
-Aggregates the computational core of the mmux/vite flaskapi Dakota modules
-plus recycled utilities from earlier MetaModeling trials. No Flask, no
-oSPARC, no UI dependency: pure computation on top of the [itis-dakota
-wheel](https://pypi.org/project/itis-dakota/).
-
-This site documents the **algorithms and implementation** — what each
-module does, how it works, and what assumptions it makes. For how to *use*
-SuMo through the MMUX web UI, see the separate `mmux_documentation` site;
-this package is the headless computational core underneath that UI (and
-usable directly, without it).
+For what itis-sumo is and who it's for, see the [landing page](../index.md). This section covers the **algorithms and implementation**—design, mechanics, and assumptions behind each module.
 
 ## Engine
 
