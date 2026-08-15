@@ -29,7 +29,7 @@ V2cd: every landing-page section bullet ! links either that section's index page
 ## §T
 id|status|task|cites
 TD1ef|x|`docs/index.md`: rewrite opening paragraph — lead with one plain-language sentence on the problem this solves and the payoff (simulation is slow → train a fast stand-in you can sweep/optimize/analyze, with honest error bars), THEN the existing feature list (UQ/Sobol/sampling/MOGA) as elaboration, not replacement|§G,V1ab
-TD2gh|.|`docs/index.md`: delete the "Install & verify" section (`uv sync` / `itis-sumo validate` block) — it duplicates `tutorials/getting-started.md` step 1 and is reference/tutorial material, not front-door material; replace with a single one-line "Getting started" call-to-action sentence linking there|§C
+TD2gh|x|`docs/index.md`: delete the "Install & verify" section (`uv sync` / `itis-sumo validate` block) — it duplicates `tutorials/getting-started.md` step 1 and is reference/tutorial material, not front-door material; replace with a single one-line "Getting started" call-to-action sentence linking there|§C
 TD3ij|.|`docs/index.md`: fix the "How-to guides" bullet — currently links only `how-to/cross-validate.md`; change to link all four recipes inline (cross-validate, sensitivity-analysis, moga, preprocess) so it represents the whole section|§C,V2cd
 TD4kl|.|`docs/index.md`: fix the "Explanation" bullet — currently links only `explanation/surrogate-modeling.md`; change to link both pages inline (surrogate-modeling, gaussian-processes)|§C,V2cd
 TD5mn|.|`docs/index.md`: add a new "Worked examples" bullet linking `tutorials/examples.md` (real Dakota fits against closed-form analytical answers, with figures) — currently unlinked from the landing page entirely|§C
