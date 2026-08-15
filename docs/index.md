@@ -1,9 +1,6 @@
 # itis-sumo
 
-Headless core of the SuMo (**Su**rrogate **Mo**del) meta-modeling tools: build,
-evaluate, cross-validate, and interrogate surrogate models — UQ (Sobol'
-indices, uncertainty propagation), sampling (LHS / grid / manual-UQ), and
-MOGA optimization — as a standalone, importable Python package.
+Running complex simulations across design spaces is slow and expensive, but itis-sumo lets you train a fast surrogate model that captures the simulation's behavior—enabling you to sweep parameters, optimize designs, and quantify sensitivity with honest uncertainty bars. It provides uncertainty quantification (Sobol' indices, propagation), sampling strategies (LHS, grid, manual-UQ), MOGA optimization, and tools to build, cross-validate, and interrogate your surrogate models, all as an importable Python package.
 
 ## Install & verify
 
