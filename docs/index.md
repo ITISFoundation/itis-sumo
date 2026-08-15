@@ -8,7 +8,7 @@ Running complex simulations across design spaces is slow and expensive, but itis
 
 **New to itis-sumo?** Start with the [Getting started](tutorials/getting-started.md) guide to install, verify the engine, and build your first surrogate.
 
-The pipeline has been verified against known analytical solutions—see the [Verification & Validation report](verification-validation.md).
+A full Verification & Validation report — the pipeline checked against known analytical solutions — is available on request: see the [current report](verification-validation.md).
 
 ## Where to go
 

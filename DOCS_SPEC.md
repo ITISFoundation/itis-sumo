@@ -7,6 +7,7 @@ Caveman-encoded (drop articles/filler; `→` becomes, `!` must, `?` may/uncertai
 - site config → `mkdocs.yml` nav tree = source of truth for section membership
 - source review → Opus UX pass on `develop`'s `docs/index.md`, `docs/about/index.md`, `docs/reference/index.md` (2026-08-14): verdict = page has the right routing idiom but fails as a front door — no value prop, wrong lede, dead-weight install block, broken section links, missing visual
 - scope: this SPEC covers docs shipped on `develop` (tutorials/{getting-started,examples}, how-to/{cross-validate,sensitivity-analysis,moga,preprocess}, reference/*, explanation/{surrogate-modeling,gaussian-processes}, about/*). NIH-in-silico/Merck-specific docs (`nih-in-silico.md`, `convergence-diagnostics.md`, `select-distribution-scale.md`) live only on the confidential `feat/nih-in-silico-example` incubator branch — ⊥ in scope here until individually ported (see root SPEC's promotion rule)
+- V&V report distribution model (product decision, 2026-08-15): target format = standalone downloadable PDF, ⊥ in Nav either way (request-gated, not browsable). Current format = in-progress HTML page — landing-page line uses "available on request" framing already, but link target stays the HTML report until a real PDF deliverable exists; see TD11zb for the deferred swap to a `support@sim4life.io` contact flow
 
 ## §G
 `docs/index.md` ! work as a front door: state what a visitor can DO here + WHY it matters + route them onward, skimmable in under one screen. ⊥ technical detail (that's reference's job), ⊥ lengthy explanation/rationale (that's explanation's or tutorials'). Every Diátaxis section stays in its lane end to end.
@@ -39,6 +40,8 @@ TD6op|x|`docs/index.md`: embed `docs/assets/examples/gp_fit_uncertainty.png` nea
 TD7qr|x|`docs/index.md`: move the scope statement from `about/index.md`'s opening ("headless core, no Flask/oSPARC/UI dependency; for the web UI see `mmux_documentation`") onto the landing page, near the top, right after the opening paragraph|§C,I
 TD8st|x|`docs/index.md`: promote the V&V trust-signal line (currently the closing sentence) further up the page and reframe it positively — drop the "not just 'didn't crash'" defensive phrasing, state directly what's been verified against analytical solutions|§C
 TD9uv|x|`docs/about/index.md`: after TD7qr moves the scope statement out, trim the opening so `about/index.md` stops functioning as a second landing page — keep a short one-line pointer back instead of restating scope, keep provenance/engine/spec pointers as-is|§G,TD7qr
+TD10wx|x|`mkdocs.yml`: remove the "Verification & Validation" section from Nav (report stays a built, linkable page — just not a first-class nav item); `docs/index.md`: reframe the V&V line from "see the report" to "available on request" — reads as a deliberate, serious offering rather than a defensive plea for trust|§C
+TD11zb|.|`docs/index.md`: once the V&V report ships as a standalone downloadable PDF (not before — see LINKS decision), swap the "available on request" link target from `verification-validation.md` to a `mailto:support@sim4life.io` contact flow (or a direct download link, if self-serve becomes the model instead of request-gated) — ⊥ make this swap while the report is still the in-progress HTML page|§C
 
 ## §B
 id|date|cause|fix
