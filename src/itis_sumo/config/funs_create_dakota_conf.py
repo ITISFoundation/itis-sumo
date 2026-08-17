@@ -216,7 +216,9 @@ def add_sampling_method(
         """
 
     if variance_based_decomp:
-        assert sampling_method == "lhs", "variance_based_decomp only available for LHS sampling"
+        assert sampling_method == "lhs", (
+            "variance_based_decomp only available for LHS sampling"
+        )
 
     if refinement:
         assert sampling_method == "lhs", "Refinement only available for LHS"
@@ -271,7 +273,9 @@ def add_moga_method(
     #####################################################
 ):
     if max_function_evaluations:
-        _logger.warning("Max Function Evaluations for MOGA is deprecated; will be ignored")
+        _logger.warning(
+            "Max Function Evaluations for MOGA is deprecated; will be ignored"
+        )
     return f"""
         method
             id_method = '{id_method}'
@@ -523,8 +527,12 @@ def create_moga_optimization_conffile(
     dakota_conf += add_moga_method(**moga_kwargs)
     dakota_conf += add_continuous_variables(
         variables=input_variables,
-        lower_bounds=(lower_bounds if lower_bounds else [0.0 for _ in range(len(input_variables))]),
-        upper_bounds=(upper_bounds if upper_bounds else [1.0 for _ in range(len(input_variables))]),
+        lower_bounds=(
+            lower_bounds if lower_bounds else [0.0 for _ in range(len(input_variables))]
+        ),
+        upper_bounds=(
+            upper_bounds if upper_bounds else [1.0 for _ in range(len(input_variables))]
+        ),
     )
     dakota_conf += add_responses(descriptors=output_responses)
     # dakota_conf += add_python_interface("model", batch_mode=batch_mode)
@@ -532,4 +540,3 @@ def create_moga_optimization_conffile(
     if dakota_conf_file:
         write_to_file(dakota_conf, dakota_conf_file)
     return dakota_conf
-
