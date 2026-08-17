@@ -76,7 +76,30 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run prek
-        run: uvx prek run --all-files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+          fi
+
+          if [[ "$base_sha" =~ ^0+$ ]]; then
+            changed_py_files="$(git diff-tree --no-commit-id --name-only -r "$head_sha" | grep -E '\.py$' || true)"
+          else
+            changed_py_files="$(git diff --name-only "$base_sha" "$head_sha" | grep -E '\.py$' || true)"
+          fi
+
+          if [[ -z "$changed_py_files" ]]; then
+            echo "No Python files changed; skipping prek"
+            exit 0
+          fi
+
+          printf '%s\n' "$changed_py_files" | xargs uvx prek run --files
 
   unit_tests:
     runs-on: ubuntu-latest
