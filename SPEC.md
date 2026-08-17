@@ -24,11 +24,12 @@ Standalone pkg `itis-sumo` (SuMo = Surrogate Model): aggregate MetaModeling core
 - versioning single-source; uv + pip-compile pins; Conventional Commits
 - E1: artifacts keyed server `sumo_model_id` (uuid); metadata sidecar `{id}.metadata.json`; ⊥ user-supplied path/prefix keys (traversal)
 - py ! 3.11 (match mmux/vite; 1.5.9 ships no cp313 wheel); 3.13 only via T16mo rung 1 (1.5.11 cp313) or rung 2 (6.24)
+- cross-repo call surface ! narrow, versioned, "deep" entrypoints — one stitched public function per feature (e.g. `analyze_dataset()`), ⊥ flaskapi orchestrating several itis-sumo internals itself; version-pinning itis-sumo is fine (same pattern as the itis-dakota engine pin, T16mo) — the coupling risk is a *wide* call surface, not the pin
 
 ## §I
 - wheel: `dakota.environment.study`, `study.execute()` (⊖ `dakota.surrogates` until wheel bump, R4)
 - CLI: `itis-sumo validate`
-- python: `itis_sumo.{core,config,data,sampling,evaluate,preprocess,utils}` public funcs
+- python: `itis_sumo.{core,config,data,sampling,evaluate,preprocess,utils}` public funcs (+ forthcoming `analyze_dataset` narrow diagnostics entrypoint, T18ry)
 - artifacts: run_dir `{dakota_stdout.txt,dakota_stderr.txt,*.dat,*.sps/.alg}`; models dir `{id}.metadata.json` (E1)
 
 ## §V
@@ -47,6 +48,7 @@ V12xc: E1 keying ! server `sumo_model_id` uuid; ⊥ user-supplied path keys
 V13vb: E1 models dir ! single env-overridable source (⊥ branch's dual-strategy split)
 V14nm: ⊥ standalone surfpack dep; future standalone-eval → bump itis-dakota (`dakota.surrogates`)
 V15zx (proposed, T17bq): `add_surrogate_model` training-file header layout ! explicit `has_eval_id_column: bool` param supplied by caller (whoever wrote/staged the file knows its structure); ⊥ infer from `"processed"` substring in filename — closes B2's root cause (workaround only renamed the staged file to preserve the substring)
+V16qf: itis-sumo's cross-repo-facing API (flaskapi/mmux_vite) ! consumed only via §I's documented top-level entrypoints; ⊥ consumer reaches into internal submodules/functions directly — keeps refactors inside itis-sumo from forcing coordinated cross-repo changes; grows w/ each new feature surfaced (starts w/ `analyze_dataset`, T18ry)
 
 ## §R
 R1: `export_model`/`import_model` child keywords; formats `text_archive`(.sps)/`binary_archive`(.bsps)/`algebraic_file`(.alg); naming `{prefix}.{resp}.{ext}` | branch R2
@@ -78,6 +80,7 @@ T15mn|.|E1: wire mmux/vite flaskapi endpoints to pkg export/import — separate 
 T16mo|.|stepwise engine modernization: rung 1 `1.5.9→1.5.11` (packaging-only: drop py3.8, add cp313; same 6.20 engine — behavior-identical; re-run smoke); rung 2 `1.5.11→6.24.x` co-shipped w/ JSON input seam (R5 regression fixed upstream first, re-align py 3.13, re-run full smoke)|R4,R5
 T17bq|✓|`add_surrogate_model` (`config/funs_create_dakota_conf.py`) ! replaced filename-substring sniffing w/ explicit `has_eval_id_column` param (infer-or-override idiom); all 5 `create_sumo_*_conffile` call sites updated (landed via `feat/vv-port-tests-and-docs`, `a6d694e`, ahead of this merge)|V15,B2
 T17bc|✓|E1: persist real training data on export for reference (`{id}.processed_training.dat` sidecar copy, user preference over the leaner archive-only design); `stage_model_for_import` stages it back, falling back to a synthesized header-only placeholder + loud warning log only when that stored copy is missing (legacy model / deleted out-of-band) — fallback verified safe vs Dakota source + fake-points empirical tests (header reorder, wrong/missing descriptors, 0/1/2-row placeholders)|R8,R9,V10,V11
+T18ry|.|design+implement `analyze_dataset(df, input_cols, output_cols, alpha=0.05, include_detail=False) -> DatasetDiagnostics` narrow entrypoint (scale/distribution auto-selection + outlier surfacing, plain dataclasses, JSON-serializable via `dataclasses.asdict()`) as the sole flaskapi-facing dataset-diagnostics API, replacing any per-function flaskapi orchestration; BLOCKED — building blocks `select_variable_scale`/`auto_select_distributions` (+ a new raw-value outlier detector, reusing `_tukey_outlier_mask`'s IQR technique) currently exist only on confidential incubator branch `feat/nih-in-silico-example`, not `develop` — needs individual promotion first, same promotion rule as T15mn/E1|§C,V16qf,I
 
 ## §B
 id|date|cause|fix
