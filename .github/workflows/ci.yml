@@ -22,16 +22,43 @@ jobs:
 
       - name: Detect changed file types
         id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            py:
-              - "**/*.py"
-              - "pyproject.toml"
-              - "uv.lock"
-            md:
-              - "**/*.md"
-              - "mkdocs.yml"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+          fi
+
+          if [[ "$base_sha" =~ ^0+$ ]]; then
+            changed_files="$(git diff-tree --no-commit-id --name-only -r "$head_sha")"
+          else
+            changed_files="$(git diff --name-only "$base_sha" "$head_sha")"
+          fi
+
+          py=false
+          md=false
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              *.py|pyproject.toml|uv.lock)
+                py=true
+                ;;
+              *.md|mkdocs.yml)
+                md=true
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          {
+            echo "py=$py"
+            echo "md=$md"
+          } >> "$GITHUB_OUTPUT"
 
   prek:
     runs-on: ubuntu-latest
