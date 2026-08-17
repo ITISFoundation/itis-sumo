@@ -36,6 +36,7 @@ dependencies = [
 Homepage = "https://github.com/ITISFoundation/itis-sumo"
 Repository = "https://github.com/ITISFoundation/itis-sumo.git"
 Issues = "https://github.com/ITISFoundation/itis-sumo/issues"
+Documentation = "https://itisfoundation.github.io/itis-sumo/"
 
 [project.scripts]
 itis-sumo = "itis_sumo.cli:main"

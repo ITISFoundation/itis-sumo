@@ -71,7 +71,7 @@ T6hy|✓|port `preprocess/` DataPreprocessor + integration; move pydantic models
 T7nv|✓|recycle utils: `validate_dakota_installation`, `get_dakota_version`, `validate` CLI, config guard|§C
 T8bx|✓|prune dead paths in ported modules|§C
 T9kz|✓|port pure-core tests (test_dakota_*, cv-stats, preprocessor, sobol, correlation) + headless smoke|V4
-T10le|.|docs README + MkDocs + headless notebook — README ✓, MkDocs site ✓ (`mkdocs.yml`, algorithm pages + live V&V report w/ real pytest results, served via `mkdocs serve`), headless notebook still open|§G
+T10le|✓|docs README + MkDocs + headless notebook — README ✓, MkDocs site ✓ (`mkdocs.yml`, algorithm pages + live V&V report w/ real pytest results, served via `mkdocs serve`), headless notebook explicitly deferred past alpha|§G
 T11rt|✓|verify: standalone pytest green (⊖ flask), clean-venv install, `itis-sumo validate`, headless surrogate→CV→Sobol|§C
 T12ze|✓|E1: `core/sumo_model_store.py` (models dir single env-overridable source `ITIS_SUMO_MODELS_DIR`, uuid keying, metadata sidecar) + `evaluate/funs_evaluate.py::export_sumo_model`/`import_sumo_model` public API|V10,V12,V13
 T13uv|✓|E1: capture verbatim conf block for sidecar (close branch placeholder gap)|V10
@@ -81,6 +81,7 @@ T16mo|.|stepwise engine modernization: rung 1 `1.5.9→1.5.11` (packaging-only: 
 T17bq|✓|`add_surrogate_model` (`config/funs_create_dakota_conf.py`) ! replaced filename-substring sniffing w/ explicit `has_eval_id_column` param (infer-or-override idiom); all 5 `create_sumo_*_conffile` call sites updated (landed via `feat/vv-port-tests-and-docs`, `a6d694e`, ahead of this merge)|V15,B2
 T17bc|✓|E1: persist real training data on export for reference (`{id}.processed_training.dat` sidecar copy, user preference over the leaner archive-only design); `stage_model_for_import` stages it back, falling back to a synthesized header-only placeholder + loud warning log only when that stored copy is missing (legacy model / deleted out-of-band) — fallback verified safe vs Dakota source + fake-points empirical tests (header reorder, wrong/missing descriptors, 0/1/2-row placeholders)|R8,R9,V10,V11
 T18ry|.|design+implement `analyze_dataset(df, input_cols, output_cols, alpha=0.05, include_detail=False) -> DatasetDiagnostics` narrow entrypoint (scale/distribution auto-selection + outlier surfacing, plain dataclasses, JSON-serializable via `dataclasses.asdict()`) as the sole flaskapi-facing dataset-diagnostics API, replacing any per-function flaskapi orchestration; BLOCKED — building blocks `select_variable_scale`/`auto_select_distributions` (+ a new raw-value outlier detector, reusing `_tukey_outlier_mask`'s IQR technique) currently exist only on confidential incubator branch `feat/nih-in-silico-example`, not `develop` — needs individual promotion first, same promotion rule as T15mn/E1|§C,V16qf,I
+T19kp|.|headless notebook, post-alpha — add runnable notebook counterpart to docs getting-started flow once alpha docs publish is stable|T10le
 
 ## §B
 id|date|cause|fix

@@ -6,11 +6,39 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  detect_changes:
     runs-on: ubuntu-latest
+    outputs:
+      py: ${{ steps.filter.outputs.py }}
+      md: ${{ steps.filter.outputs.md }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed file types
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            py:
+              - "**/*.py"
+              - "pyproject.toml"
+              - "uv.lock"
+            md:
+              - "**/*.md"
+              - "mkdocs.yml"
+
+  prek:
+    runs-on: ubuntu-latest
+    needs: detect_changes
+    if: needs.detect_changes.outputs.py == 'true'
+    steps:
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -20,14 +48,65 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Ruff check
-        run: uv run ruff check .
+      - name: Run prek
+        run: uvx prek run --all-files
 
-      - name: Type check
-        # 22 pre-existing `ty` errors in tests/lhs.py predate this workflow (see
-        # Task 1.6 follow-up); non-blocking until that debt is cleaned up.
-        run: uv run ty check
-        continue-on-error: true
+  unit_tests:
+    runs-on: ubuntu-latest
+    needs:
+      - detect_changes
+      - prek
+    if: needs.detect_changes.outputs.py == 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - name: Test
-        run: uv run pytest
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run unit tests
+        run: uv run pytest -m "not integration and not analytical"
+
+  integration_analytical_tests:
+    runs-on: ubuntu-latest
+    needs:
+      - detect_changes
+      - unit_tests
+    if: needs.detect_changes.outputs.py == 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run integration and analytical tests
+        run: uv run pytest -m "integration or analytical"
+
+  docs:
+    runs-on: ubuntu-latest
+    needs:
+      - detect_changes
+      - integration_analytical_tests
+    if: ${{ always() && needs.detect_changes.outputs.md == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install docs dependencies
+        run: uv sync --group docs
+
+      - name: Build docs
+        run: uv run --group docs mkdocs build --strict

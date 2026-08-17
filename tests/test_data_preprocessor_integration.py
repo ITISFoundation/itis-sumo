@@ -12,6 +12,8 @@ from itis_sumo.preprocess import (
     setup_preprocessor_from_config,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def _sample_jobs():
     return [

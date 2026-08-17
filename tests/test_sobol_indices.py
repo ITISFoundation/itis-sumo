@@ -13,6 +13,8 @@ import pytest
 
 from itis_sumo.evaluate.funs_evaluate import SOBOL_BASE_SAMPLES
 
+pytestmark = pytest.mark.analytical
+
 # ---------------------------------------------------------------------------
 # Pure-function helpers (no Dakota/surrogate needed)
 # ---------------------------------------------------------------------------

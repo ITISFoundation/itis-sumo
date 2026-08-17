@@ -1,6 +1,7 @@
 site_name: itis-sumo
 site_description: Headless surrogate-modeling (SuMo) core — build, evaluate, cross-validate, and interrogate surrogate models
 repo_url: https://github.com/ITISFoundation/itis-sumo
+site_url: https://itisfoundation.github.io/itis-sumo/
 edit_uri: ""
 
 theme:
