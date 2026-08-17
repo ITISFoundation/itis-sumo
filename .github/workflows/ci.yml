@@ -99,7 +99,8 @@ jobs:
             exit 0
           fi
 
-          printf '%s\n' "$changed_py_files" | xargs uvx prek run --files
+          printf '%s\n' "$changed_py_files" | xargs uv run ruff check
+          printf '%s\n' "$changed_py_files" | xargs uv run ruff format --check
 
   unit_tests:
     runs-on: ubuntu-latest
