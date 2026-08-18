@@ -16,7 +16,7 @@ jobs:
       py: ${{ steps.filter.outputs.py }}
       md: ${{ steps.filter.outputs.md }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -65,7 +65,7 @@ jobs:
     needs: detect_changes
     if: needs.detect_changes.outputs.py == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -109,7 +109,7 @@ jobs:
       - prek
     if: needs.detect_changes.outputs.py == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -129,7 +129,7 @@ jobs:
       - unit_tests
     if: needs.detect_changes.outputs.py == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -149,7 +149,7 @@ jobs:
       - integration_analytical_tests
     if: ${{ always() && needs.detect_changes.outputs.md == 'true' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
