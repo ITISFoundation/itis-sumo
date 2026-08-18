@@ -79,6 +79,8 @@ class TestPublicSurface:
             "evaluate_sobol",
             "evaluate_cv_metrics",
             "evaluate_uncertainty",
+            "generate_grid_samples",
+            "generate_lhs_samples",
             "optimize",
         }
 

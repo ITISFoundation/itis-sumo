@@ -46,6 +46,8 @@ from itis_sumo.api.workflows import (
     evaluate_grid,
     evaluate_sobol,
     evaluate_uncertainty,
+    generate_grid_samples,
+    generate_lhs_samples,
     optimize,
 )
 
@@ -77,5 +79,7 @@ __all__ = [
     "evaluate_grid",
     "evaluate_sobol",
     "evaluate_uncertainty",
+    "generate_grid_samples",
+    "generate_lhs_samples",
     "optimize",
 ]

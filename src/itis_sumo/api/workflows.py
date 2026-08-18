@@ -14,6 +14,8 @@ without changing what these functions do (SPEC V27fq).
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -36,8 +38,14 @@ from itis_sumo.api.types import (
     SobolResult,
     UncertaintyResult,
 )
-from itis_sumo.data.funs_data_processing import compute_correlation_indices
+from itis_sumo.data.funs_data_processing import (
+    compute_correlation_indices,
+    create_grid_samples,
+    load_data,
+)
 from itis_sumo.evaluate.funs_evaluate import compute_cv_accuracy_metrics
+from itis_sumo.sampling.lhs import lhs as _lhs
+from itis_sumo.utils.helpers import create_run_dir
 
 
 def cross_validate(
@@ -263,3 +271,77 @@ def optimize(
         max_evaluations=max_evaluations,
         workspace=workspace,
     )
+
+
+def generate_lhs_samples(
+    domains: Mapping[str, DomainSpec],
+    n_samples: int,
+    *,
+    seed: int = DEFAULT_SEED,
+) -> pd.DataFrame:
+    """Draw a Latin-hypercube design over the given variable domains.
+
+    Args:
+        domains: Variable name -> allowed range to draw from.
+        n_samples: Number of sample rows to generate.
+        seed: Controls the draw.
+
+    Raises:
+        SumoInputError: No domains given.
+    """
+    if not domains:
+        raise SumoInputError("At least one variable domain is required.")
+    names = list(domains)
+    design = _lhs(n_samples, len(names), seed=seed)
+    return pd.DataFrame(
+        {
+            name: design[i] * (domains[name].maximum - domains[name].minimum)
+            + domains[name].minimum
+            for i, name in enumerate(names)
+        }
+    )
+
+
+def generate_grid_samples(
+    domains: Mapping[str, DomainSpec],
+    points_per_variable: Mapping[str, int],
+    *,
+    workspace: Path | None = None,
+) -> pd.DataFrame:
+    """Generate a full-factorial grid of samples over the given variable domains.
+
+    Args:
+        domains: Variable name -> allowed range to draw from.
+        points_per_variable: Variable name -> number of grid points along that axis.
+        workspace: If given, working files are written here and kept. If omitted,
+            they are discarded on success and kept on failure.
+
+    Raises:
+        SumoInputError: No domains given, or a variable is missing its point count.
+    """
+    if not domains:
+        raise SumoInputError("At least one variable domain is required.")
+    names = list(domains)
+    missing = [name for name in names if name not in points_per_variable]
+    if missing:
+        raise SumoInputError(f"Missing points_per_variable for: {', '.join(missing)}")
+
+    run_dir = (
+        create_run_dir(Path(workspace), "grid-sample")
+        if workspace is not None
+        else Path(tempfile.mkdtemp(prefix="itis-sumo-"))
+    )
+    try:
+        grid_file = create_grid_samples(
+            run_dir=run_dir,
+            grid_vars=names,
+            input_vars=names,
+            mins=[domains[name].minimum for name in names],
+            cut_values=[(domains[name].minimum + domains[name].maximum) / 2 for name in names],
+            maxs=[domains[name].maximum for name in names],
+            n_points_per_dimension=[points_per_variable[name] for name in names],
+        )
+        return load_data(grid_file)[names].astype(float)
+    finally:
+        if workspace is None:
+            shutil.rmtree(run_dir, ignore_errors=True)
