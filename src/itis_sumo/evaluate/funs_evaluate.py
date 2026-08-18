@@ -81,6 +81,7 @@ def evaluate_sumo_along_axes(
     sumo_import_name: str | None = None,
     sumo_export_name: str | None = None,
     NSAMPLESPERVAR: int = 21,
+    has_eval_id_column: bool | None = None,
     xscale: Literal["linear", "log"] = "linear",
     yscale: Literal["linear", "log"] = "linear",
     label_converter: Callable | None = None,
@@ -121,6 +122,7 @@ def evaluate_sumo_along_axes(
         samples_file=PROCESSED_SWEEP_INPUT_FILE,
         input_variables=input_vars,
         output_responses=[response_var],
+        has_eval_id_column=has_eval_id_column,
     )
 
     # run dakota
@@ -242,6 +244,8 @@ def evaluate_sumo_manual_crossvalidation(
     input_vars: list[str],
     output_response: str,
     N_CROSS_VALIDATION: int = 5,
+    seed: int = 42,
+    has_eval_id_column: bool | None = None,
 ):
     input_vars = sanitize_varnames(input_vars)
     output_response = sanitize_varnames(output_response)
@@ -251,7 +255,7 @@ def evaluate_sumo_manual_crossvalidation(
     indices = np.arange(n_samples)
     all_predictions = np.full(n_samples, np.nan)
     all_stds = np.full(n_samples, np.nan)
-    kf = KFold(n_splits=N_CROSS_VALIDATION, shuffle=True, random_state=42)
+    kf = KFold(n_splits=N_CROSS_VALIDATION, shuffle=True, random_state=seed)
     parse_warnings: list[str] = []
 
     for fold, (_, val_idx) in enumerate(kf.split(indices)):
@@ -266,6 +270,7 @@ def evaluate_sumo_manual_crossvalidation(
             output_response,
             validation_indices=val_idx.tolist(),
             dakota_conf_file=fold_run_dir / "dakota_config.in",
+            has_eval_id_column=has_eval_id_column,
         )
         # V43 (root SPEC §T33 / B23): a Dakota fold run is non-deterministic in practice
         # (near-degenerate surrogate training can make Dakota abort a fold and never write

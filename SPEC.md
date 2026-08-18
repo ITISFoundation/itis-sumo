@@ -11,13 +11,26 @@ Caveman-encoded (drop articles/filler; `→` becomes, `!` must, `?` may/uncertai
 - future consumer → `../mmux_vite/flaskapi` (swaps in-tree core → this pkg)
 - research → `DAKOTA-STUBS.md` (stubs + JSON→pydantic POC)
 
+## VOCAB
+Canonical nouns for ∀ public API, docs, tests, commit messages. One word per concept, ⊥ synonyms drifting back in.
+- **sample** → one row of tabular data (an observation). ⊥ "job", ⊥ "point", ⊥ "record"
+- **variable** = **parameter** → one INPUT column
+- **response** = **quantity-of-interest (QoI)** → one OUTPUT column
+- variables vs responses ! stay distinguished — they get different downstream treatment (normalization, sign, sampling, Sobol roles)
+- **domain** → where we may draw/explore a variable (bounds + scale). Property of the design space, auto-inferable from existing samples
+- **distribution** → real-world shape of a variable (a claim about the world). ⊥ inferable from a training design
+- **surrogate** = **SuMo** → the trained metamodel
+- oSPARC's `FunctionJob` is ⊥ itis-sumo vocabulary; it lives on the consumer side of the boundary
+
 ## §G
 Standalone pkg `itis-sumo` (SuMo = Surrogate Model): aggregate MetaModeling core from mmux/vite + prior trials (mmux_python, itis_dakota_projects) into one wheel-driven library, usable BOTH inside mmux/vite AND headless (notebook/scripts) → build/evaluate/cross-validate surrogates + UQ (Sobol/correlation) + sampling (LHS/grid) + MOGA. First expansion (E1): SuMo model export/import persistence.
+
+Consumer contract (grill 2026-08-18): itis-sumo owns ALL surrogate machinery end-to-end — training-file creation, preprocessing, Dakota config, run dirs, inverse transforms. Consumers (flaskapi OR a direct python user) pass ONLY tabular samples + configuration, and receive typed results in original units.
 
 ## §C
 - engine ! itis-dakota wheel `dakota.environment.study(input_string=...)`; ⊥ subprocess `dakota` bin, ⊥ vendor surfpack; in-repo `itis-dakota/` fork ! REFERENCE-ONLY (⊥ build; runtime = PyPI wheel)
 - v1 config ! NIDR string composers (proven); JSON/pydantic seam later (DAKOTA-STUBS POC, Dakota 6.24 experimental)
-- port ! near-verbatim from mmux_flaskapi `dakota/`+`data_preprocessor/`; re-root `mmux_flaskapi.`→`itis_sumo.`; prune known-dead (`process_json_file`, `add_interface_s4l`, `create_function_sampling_conffile`, `create_moga_iterative_optimization_conffile`); de-web `JobVariableSelection`/`required_completed_jobs` (move from blueprints into pkg)
+- port ! near-verbatim from mmux_flaskapi `dakota/`+`data_preprocessor/`; re-root `mmux_flaskapi.`→`itis_sumo.`; prune known-dead (`process_json_file`, `add_interface_s4l`, `create_function_sampling_conffile`, `create_moga_iterative_optimization_conffile`); de-web `JobVariableSelection`/`required_completed_jobs` (moved from blueprints into pkg) — SUPERSEDED in part by the tabular-only boundary below: `required_completed_jobs`' Dakota rule stays, the job-shaped models go back to the consumer (T24cm)
 - recycle itis_dakota_projects: `validate_dakota_installation()`, `get_dakota_version()`, `validate` CLI, config sanity-guard; ⊥ subprocess `DakotaProject`/factory/generator/parser/activity-logger
 - deps ! itis-dakota==1.5.9 (Dakota 6.20, parity w/ mmux/vite; stay until T16mo resolves the 6.23+ `interface_cache` regression — R5), numpy, pandas, scipy; scikit-learn ⊥ KFold only
 - py.typed; `src/` layout; docs MkDocs + headless notebook; tests standalone ⊥ flask/osparc
@@ -25,11 +38,24 @@ Standalone pkg `itis-sumo` (SuMo = Surrogate Model): aggregate MetaModeling core
 - E1: artifacts keyed server `sumo_model_id` (uuid); metadata sidecar `{id}.metadata.json`; ⊥ user-supplied path/prefix keys (traversal)
 - py ! 3.11 (match mmux/vite; 1.5.9 ships no cp313 wheel); 3.13 only via T16mo rung 1 (1.5.11 cp313) or rung 2 (6.24)
 - cross-repo call surface ! narrow, versioned, "deep" entrypoints — one stitched public function per feature (e.g. `analyze_dataset()`), ⊥ flaskapi orchestrating several itis-sumo internals itself; version-pinning itis-sumo is fine (same pattern as the itis-dakota engine pin, T16mo) — the coupling risk is a *wide* call surface, not the pin
+- data in ! plain tabular (`pd.DataFrame` or an itis-sumo dataclass trivially convertible to one); ⊥ `FunctionJob`/oSPARC job concepts anywhere in itis_sumo. Ownership split: consumer converts jobs→table AND filters un-completed samples (warning); itis-sumo rejects insufficient/invalid data (raises; consumer catches + surfaces). Dakota sufficiency rule `max(5, n_variables + 1)` stays in itis-sumo
+- preprocessing ! auto-defaulted (novice/normal users pass nothing); advanced override allowed but expressed in DOMAIN vocabulary only (`scale`, `direction`); ⊥ transform vocabulary in any public signature (`sign_switch`, `normalization="zscore"`, `mapped_name`, `_hat`/`_std_hat`). Effective config → INSPECTABLE in results, ⊥ SETTABLE in transform terms. MOGA `direction` defaults `"minimize"` (optimization-field convention)
+- `domain` ⊥ conflated w/ `distribution` (see VOCAB): domain auto-inferable from samples (observed bounds + detected scale) → Sobol box + MOGA search space; distribution ! stated by the modeller → UQ propagation + correlation. Retires the `mean ± 3σ` fallback in `_bounds_from_distributions` (a conflation artifact — its own docstring admits the two uses differ). Lands in the handle transformation (T27fr), ⊥ the port
+- architecture ! handle-primary is the TARGET (`fit(samples, config)` → `model.along_axes/grid/sobol/propagate_uq/...`, `model.save() -> sumo_model_id`); the mmux/vite port ships the current ONE-SHOT shape (no frontend change). One-shot entrypoints ! implemented internally as fit-then-query from day one → handle extraction later = re-export, ⊥ second port
+- run artifacts ! ephemeral on success (⊥ unbounded growth in a web service), PRESERVED on failure w/ `run_dir` + captured stderr tail attached to the raised error (B1/B2/`Unknown error 250` are all Dakota-opacity bugs — the run dir is the only tractable evidence); `workspace=` opt-in for deliberate debugging. E1 model store (`ITIS_SUMO_MODELS_DIR`) = separate, always-persistent concern
+- reproducibility ! fixed default seed `42`, overridable; effective seed returned in the result; ⊥ require caller to supply one
+- errors ! stable taxonomy `SumoError` → `SumoInputError`(→400) / `SumoResultError`(→422, predictions missing) / `SumoEngineError`(→500, carries run_dir + stderr tail); ⊥ consumer classifying by string/regex match (retires the MOGA `re.search` branch)
+- results ! typed dataclasses in ORIGINAL units + ORIGINAL names, JSON-serializable via `dataclasses.asdict()` (same convention as `DatasetDiagnostics`); ⊥ magic suffix keys in the public shape
+- `?` should **distribution** get an auto-generated default the way domain does? User: "probably a good idea but should be explicitly discussed, not a given" → POST-PORT decision (T28gs), ⊥ guess
+- `?` `get_sumo_cv_accuracy_metrics` is the ONE workflow bypassing DataPreprocessor entirely (raw var names + `process_input_file`) — normalize it (changes numbers ⇒ compat decision) or preserve + document?
+- `?` public name/shape of the tabular dataclass vs raw `pd.DataFrame`
 
 ## §I
 - wheel: `dakota.environment.study`, `study.execute()` (⊖ `dakota.surrogates` until wheel bump, R4)
 - CLI: `itis-sumo validate`
-- python: `itis_sumo.{core,config,data,sampling,evaluate,preprocess,utils}` public funcs (+ forthcoming `analyze_dataset` narrow diagnostics entrypoint, T18ry)
+- python (consumer-facing) → `itis_sumo.api` = THE module flaskapi/mmux_vite imports; nothing else. Tabular in, typed results out, taxonomy errors (T22ax)
+- python (in-package/headless) → `itis_sumo.{core,config,data,sampling,evaluate,preprocess,utils}` public funcs; `core` now re-exports the E1 model store, `evaluate` now re-exports `export_sumo_model`/`import_sumo_model` (were reachable only via `funs_evaluate`, breaking V16qf)
+- python (forthcoming) → `analyze_dataset` narrow diagnostics entrypoint (T18ry) — its output IS the override payload for the preprocessing defaults AND the auto-`domain` source, ⊥ a side feature
 - artifacts: run_dir `{dakota_stdout.txt,dakota_stderr.txt,*.dat,*.sps/.alg}`; models dir `{id}.metadata.json` (E1)
 
 ## §V
@@ -51,6 +77,15 @@ V15zx (proposed, T17bq): `add_surrogate_model` training-file header layout ! exp
 V16qf: itis-sumo's cross-repo-facing API (flaskapi/mmux_vite) ! consumed only via §I's documented top-level entrypoints; ⊥ consumer reaches into internal submodules/functions directly — keeps refactors inside itis-sumo from forcing coordinated cross-repo changes; grows w/ each new feature surfaced (starts w/ `analyze_dataset`, T18ry)
 V17ab: ∀ `.py` file in repo ! `ruff check` + `ruff format --check` clean (CI-enforced via `prek` on changed files; catches unsorted imports, unformatted code, executable-bit-without-shebang at review time — prevents B3-class regressions)
 V18rs: ∀ `.github/workflows/**` change ! at least one validation job executes the affected workflow path; shared CI workflow changes ⊥ leave the validation matrix entirely skipped
+V19cn: public API ! use VOCAB nouns (sample/variable=parameter/response=QoI); ⊥ "job" in any itis_sumo signature, docstring, or result field
+V20dm: consumer-facing entrypoints ! accept plain tabular data; ⊥ `FunctionJob`/`JobVariableSelection`/oSPARC status strings inside itis_sumo (test-enforced, sibling of V4ty)
+V21pf: preprocessing ! auto-defaulted + overridable in domain vocabulary only; ⊥ transform vocabulary reachable from a public signature; effective config inspectable in the result
+V22rs: results ! typed dataclass, original units + original names, `dataclasses.asdict()`-serializable; ⊥ `_hat`/`_std_hat` suffix keys in the public shape
+V23er: ∀ error escaping `itis_sumo.api` ! be a `SumoError` subclass; ⊥ raw `KeyError`/`IndexError`/`ValueError` crossing the boundary
+V24af: run dir ! discarded on success, PRESERVED on failure w/ its path + stderr tail attached to the raised `SumoEngineError`
+V25sd: ∀ stochastic entrypoint ! default `seed=42`, overridable, effective seed echoed in the result
+V26dd: `domain` and `distribution` ! remain distinct config objects; ⊥ derive a box from a distribution's `mean ± 3σ`
+V27fq: one-shot entrypoints ! implemented internally as fit-then-query; ⊥ monolithic procedure that would need rewriting to expose a handle
 
 ## §R
 R1: `export_model`/`import_model` child keywords; formats `text_archive`(.sps)/`binary_archive`(.bsps)/`algebraic_file`(.alg); naming `{prefix}.{resp}.{ext}` | branch R2
@@ -85,6 +120,15 @@ T17bc|✓|E1: persist real training data on export for reference (`{id}.processe
 T18ry|.|design+implement `analyze_dataset(df, input_cols, output_cols, alpha=0.05, include_detail=False) -> DatasetDiagnostics` narrow entrypoint (scale/distribution auto-selection + outlier surfacing, plain dataclasses, JSON-serializable via `dataclasses.asdict()`) as the sole flaskapi-facing dataset-diagnostics API, replacing any per-function flaskapi orchestration; BLOCKED — building blocks `select_variable_scale`/`auto_select_distributions` (+ a new raw-value outlier detector, reusing `_tukey_outlier_mask`'s IQR technique) currently exist only on confidential incubator branch `feat/nih-in-silico-example`, not `develop` — needs individual promotion first, same promotion rule as T15mn/E1|§C,V16qf,I
 T19kp|.|headless notebook, post-alpha — add runnable notebook counterpart to docs getting-started flow once alpha docs publish is stable|T10le
 T20hm|.|CI workflow changes ! activate shared validation jobs and regression-check detector classification|V18rs
+T21vk|✓|VOCAB section (above) + `docs/reference/glossary.md` (nav-registered, strict build green); vocabulary enforced on the api layer by `tests/test_api_contract.py::TestPublicSurface`. Sweep of the OLDER modules' docstrings still outstanding → folded into T24cm|V19cn
+T22ax|✓|`itis_sumo/api` spine ( `errors.py` taxonomy, `types.py` config+results, `_session.py` fit-then-query + run-dir lifetime, `workflows.py` public funcs, `__init__.py` surface): tabular input type, `PreprocessingSpec` (domain vocabulary), `SumoError` taxonomy, typed result dataclasses, seed policy, artifact policy|V20dm,V21pf,V22rs,V23er,V24af,V25sd
+T23bn|✓|`itis_sumo.api`: `cross_validate()` + `evaluate_along_axes()` — internally fit-then-query; 34 contract tests + 10 real-Dakota end-to-end tests green. Equivalence-vs-flaskapi-glue pinning ⊥ done here (needs the mmux_vite checkout) → moves to the consumer PR|V27fq
+T24cm|.|remove `preprocess/models.py::{FunctionJob,JobVariableSelection}`; re-express the Dakota sufficiency rule over tabular data; jobs→table adapter moves to flaskapi (this port DELETES itis-sumo code)|V20dm
+T25dp|.|`itis_sumo.api`: remaining 6 workflows (UQ-w-uncertainty incl. the ~120-line erfinv/histogram block, correlation, Sobol, grid, MOGA, cv-accuracy-metrics) + E1 `export_model`/`evaluate_stored_model` facade|V22rs,R1-R4
+T26eq|.|POST-PORT: extract the fitted-model handle (`fit()` → methods → `save()`/`load()`); carries the fitted preprocessing config ⇒ closes the E1 gap (model store persists archive+metadata+training copy but ⊥ preprocessor config, so a reloaded model cannot inverse-transform to original units)|V27fq,V10jk
+T27fr|.|POST-PORT: split `domain` vs `distribution` config + consumer migration; absorb the mmux_vite `jgo/fullstack-logscale` work|V26dd
+T28gs|.|POST-PORT `?`: decide whether `distribution` gets an auto-generated default — explicit discussion required, ⊥ silently defaulted|§C `?`
+T29hw|~|`publish.yml` tag trigger widened to accept PEP 440 prereleases ✓; tagging `v0.1.0a1` BLOCKED on the one-time PyPI Trusted Publisher config (user action), then clean-venv install + `itis-sumo validate` + headless smoke|T1pw
 
 ## §B
 id|date|cause|fix
@@ -99,3 +143,4 @@ B7pv|2026-08-18|prek passed deleted Python paths from the workflow diff to Ruff,
 B8lf|2026-08-18|the develop merge retained executable mode on changed `funs_evaluate.py`, so prek Ruff raised EXE002 for a Python file without a shebang|clear executable bit; existing V17ab catches changed-file Ruff violations
 
 B9dw|2026-08-18|after rewriting develop history, GitHub push events reported the unreachable pre-rewrite `before` SHA and detect_changes aborted with `bad object`|fall back to `git diff-tree` when the event base commit is unavailable; no code invariant added because this is CI history topology
+B10cs|2026-08-18|`itis_sumo.api.evaluate_along_axes(at={...})` raised `SumoEngineError: 'x1'` for a PARTIAL held-value mapping — `create_samples_along_axes` reads `[cut_values[var] for var in input_vars]`, so an incomplete dict is a `KeyError`, not a documented default. Never surfaced in flaskapi because its frontend always sends every slider|`_map_held_values` completes the mapping from the sample means (the same value the no-`at` path uses) before translating; covered by `tests/test_api_workflows.py::TestAlongAxes::test_honours_the_values_the_caller_holds_fixed`. ⊥ new §V invariant: V23er already requires taxonomy errors, and the real lesson is that a caller-facing default must be materialised by the API layer rather than assumed by an internal helper

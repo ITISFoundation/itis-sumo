@@ -54,6 +54,8 @@ nav:
       - Preprocess data: how-to/preprocess.md
   - Reference:
       - Overview: reference/index.md
+      - Glossary: reference/glossary.md
+      - Consumer API: reference/api.md
       - Dakota engine core: reference/core.md
       - Config (NIDR composers): reference/config.md
       - Sampling: reference/sampling.md

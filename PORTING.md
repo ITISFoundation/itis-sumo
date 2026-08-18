@@ -61,11 +61,12 @@ Deliberately dropped composers (dead / web- or S4L-specific / superseded):
 - The Flask web layer: `app.py`, all `blueprints/` routes, `utils/json_serializer.py`,
   `utils/local_job_store.py`, `utils/logger.py`, `utils/webserver_config.py`.
 
-### E1 export/import — IMPLEMENTED on branch `feat/sumo-model-export-import` (not merged into main)
-- **Where:** worktree `.claude/worktrees/feat+sumo-model-export-import` (branch
-  `feat/sumo-model-export-import`, based on main `955ec99`). The implementation
-  is **committed** on that branch as `cad02c5` ("feat: add SuMo model
-  export/import (E1)") — it has NOT been merged into `main`.
+### E1 export/import — IMPLEMENTED and MERGED into `main`
+- **Where:** originally developed on branch `feat/sumo-model-export-import`
+  (worktree `.claude/worktrees/feat+sumo-model-export-import`, based on main
+  `955ec99`) as `cad02c5` ("feat: add SuMo model export/import (E1)"). That
+  commit reached `main` via PR #1 (2026-08-18) and is now part of the released
+  baseline — the earlier "not merged into main" note is obsolete.
 - **What:** `src/itis_sumo/core/sumo_model_store.py` (148 lines, V12 uuid keying /
   V13 single `ITIS_SUMO_MODELS_DIR` env source / V10 metadata sidecar),
   `evaluate/funs_evaluate.py::export_sumo_model` / `import_sumo_model`,

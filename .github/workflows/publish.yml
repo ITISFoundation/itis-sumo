@@ -3,7 +3,8 @@ name: Publish
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      # Accepts final releases (v1.2.3) and PEP 440 prereleases (v0.1.0a1, v1.0.0rc2).
+      - "v[0-9]+.[0-9]+.[0-9]+*"
 
 jobs:
   build:
