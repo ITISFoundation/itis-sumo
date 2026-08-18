@@ -24,12 +24,16 @@ from itis_sumo.api.errors import SumoInputError
 from itis_sumo.api.types import (
     DEFAULT_SEED,
     AlongAxesResult,
+    CorrelationResult,
     CrossValidationResult,
+    CVAccuracyMetrics,
     DistributionSpec,
     GridResult,
     PreprocessingSpec,
     SobolResult,
 )
+from itis_sumo.data.funs_data_processing import compute_correlation_indices
+from itis_sumo.evaluate.funs_evaluate import compute_cv_accuracy_metrics
 
 
 def cross_validate(
@@ -158,3 +162,45 @@ def evaluate_sobol(
         samples, variables, response, preprocessing=preprocessing, workspace=workspace
     ) as session:
         return session.fit().sobol(distributions=distributions, seed=seed)
+
+
+def compute_correlations(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    response: str,
+) -> CorrelationResult:
+    """Compute response correlations from a caller-owned sample table."""
+    missing = sorted((set(variables) | {response}) - set(samples.columns))
+    if missing:
+        raise SumoInputError(f"Samples do not contain columns: {missing}")
+    try:
+        coefficients = compute_correlation_indices(
+            samples, samples[response].tolist(), list(variables)
+        )
+    except ValueError as exc:
+        raise SumoInputError(str(exc)) from exc
+    return CorrelationResult(response=response, coefficients=coefficients)
+
+
+def evaluate_cv_metrics(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    response: str,
+    *,
+    preprocessing: PreprocessingSpec | None = None,
+    folds: int = 5,
+    seed: int = DEFAULT_SEED,
+    workspace: Path | None = None,
+) -> CVAccuracyMetrics:
+    """Fit cross-validation predictions and return stable accuracy metrics."""
+    result = cross_validate(
+        samples,
+        variables,
+        response,
+        preprocessing=preprocessing,
+        folds=folds,
+        seed=seed,
+        workspace=workspace,
+    )
+    metrics = compute_cv_accuracy_metrics(result.observed, result.predicted)
+    return CVAccuracyMetrics(response=response, seed=result.seed, **metrics)

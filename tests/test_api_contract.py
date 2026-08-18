@@ -56,6 +56,8 @@ class TestPublicSurface:
             "AlongAxesResult",
             "AxisSweep",
             "CrossValidationResult",
+            "CVAccuracyMetrics",
+            "CorrelationResult",
             "DistributionSpec",
             "GridResult",
             "PreprocessingSpec",
@@ -66,10 +68,12 @@ class TestPublicSurface:
             "SumoInputError",
             "SumoResultError",
             "VariableSpec",
+            "compute_correlations",
             "cross_validate",
             "evaluate_along_axes",
             "evaluate_grid",
             "evaluate_sobol",
+            "evaluate_cv_metrics",
         }
 
     @pytest.mark.parametrize("workflow", [cross_validate, evaluate_along_axes])

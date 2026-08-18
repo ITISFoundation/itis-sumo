@@ -24,7 +24,9 @@ from itis_sumo.api.types import (
     DEFAULT_SEED,
     AlongAxesResult,
     AxisSweep,
+    CorrelationResult,
     CrossValidationResult,
+    CVAccuracyMetrics,
     DistributionSpec,
     GridResult,
     PreprocessingSpec,
@@ -33,8 +35,10 @@ from itis_sumo.api.types import (
     VariableSpec,
 )
 from itis_sumo.api.workflows import (
+    compute_correlations,
     cross_validate,
     evaluate_along_axes,
+    evaluate_cv_metrics,
     evaluate_grid,
     evaluate_sobol,
 )
@@ -43,6 +47,8 @@ __all__ = [
     "DEFAULT_SEED",
     "AlongAxesResult",
     "AxisSweep",
+    "CVAccuracyMetrics",
+    "CorrelationResult",
     "CrossValidationResult",
     "DistributionSpec",
     "GridResult",
@@ -54,8 +60,10 @@ __all__ = [
     "SumoInputError",
     "SumoResultError",
     "VariableSpec",
+    "compute_correlations",
     "cross_validate",
     "evaluate_along_axes",
+    "evaluate_cv_metrics",
     "evaluate_grid",
     "evaluate_sobol",
 ]

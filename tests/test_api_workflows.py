@@ -19,8 +19,10 @@ import pytest
 from itis_sumo.api import (
     DistributionSpec,
     SumoInputError,
+    compute_correlations,
     cross_validate,
     evaluate_along_axes,
+    evaluate_cv_metrics,
     evaluate_grid,
     evaluate_sobol,
 )
@@ -175,3 +177,22 @@ class TestSobol:
                 RESPONSE,
                 distributions={"width": DistributionSpec("constant", value=2.0)},
             )
+
+
+class TestDiagnostics:
+    def test_correlations_use_original_column_names(self, samples):
+        result = compute_correlations(samples, VARIABLES, RESPONSE)
+        assert result.response == RESPONSE
+        assert set(result.coefficients) == set(VARIABLES)
+        assert result.coefficients["width"]["pearson"] > 0.9
+
+    def test_correlations_reject_missing_columns(self, samples):
+        with pytest.raises(SumoInputError, match="do not contain"):
+            compute_correlations(samples, ["depth"], RESPONSE)
+
+    def test_cv_metrics_compose_cross_validation(self, samples):
+        result = evaluate_cv_metrics(samples, VARIABLES, RESPONSE, seed=7)
+        assert result.response == RESPONSE
+        assert result.seed == 7
+        assert result.root_mean_squared >= 0.0
+        assert result.mean_abs >= 0.0

@@ -92,6 +92,26 @@ class PreprocessingSpec:
 
 
 @dataclass(frozen=True)
+class CorrelationResult:
+    """Pearson and Spearman sensitivity of a response to each input variable."""
+
+    response: str
+    coefficients: dict[str, dict[str, float]]
+
+
+@dataclass(frozen=True)
+class CVAccuracyMetrics:
+    """Error metrics computed from cross-validation predictions."""
+
+    response: str
+    root_mean_squared: float
+    sum_abs: float
+    mean_abs: float
+    max_abs: float
+    seed: int
+
+
+@dataclass(frozen=True)
 class CrossValidationResult:
     """Held-out predictions for every sample, in the response's original units.
 
