@@ -58,8 +58,8 @@ packages = ["src/itis_sumo"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
-    "ruff>=0.6",
-    "ty>=0.0.58",
+    "ruff>=0.16.3",
+    "ty>=0.0.72",
 ]
 docs = [
     "mkdocs>=1.6",

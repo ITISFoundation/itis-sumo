@@ -17,3 +17,6 @@ updates:
       python-dependencies:
         patterns:
           - "*"
+    # Temporary: remove once the dependency is up to date and verified.
+    ignore:
+      - dependency-name: "itis-dakota"
