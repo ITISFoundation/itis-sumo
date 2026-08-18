@@ -32,9 +32,7 @@ from itis_sumo.data.funs_data_processing import (
     get_results,
     load_data,
     process_input_file,
-    sanitize_varname,
     sanitize_varnames,
-    sanitize_varnames_dict,
 )
 
 _logger = logging.getLogger(__name__)
@@ -199,12 +197,14 @@ def propagate_manual_uq_with_uncertainty(
     """
     from scipy.special import erfinv
 
-    input_vars = sanitize_varnames(input_vars)
-    output_response = sanitize_varnames(output_response)
-    distributions = {
-        sanitize_varname(k): sanitize_varnames_dict(v) for k, v in distributions.items()
-    }
-
+    # NOTE: input_vars/output_response/distributions must stay in the caller's
+    # original (unsanitized) form here -- preprocessor.input_variables and
+    # preprocessor.output_variables are keyed by original names (the
+    # preprocessor is fit before any sanitization happens), and
+    # preprocessor.transform() looks samples up by those same original column
+    # names. Sanitizing eagerly breaks both lookups for any var name containing
+    # characters sanitize_varnames rewrites. Dakota-safe names are obtained
+    # correctly below via preprocessor.input_variables[var].mapped_name.
     samples = create_manual_uq_samples(input_vars, distributions, num_samples, seed)
     df_samples = pd.DataFrame(samples)
     SAMPLES_FILE = run_dir / "manual_uq_samples.csv"
@@ -1038,11 +1038,14 @@ def evaluate_sobol_indices(
     from scipy.stats import norm, sobol_indices, uniform
     from scipy.stats.qmc import Sobol
 
-    input_vars = sanitize_varnames(input_vars)
-    response_var = sanitize_varnames(response_var)
-    distributions = {
-        sanitize_varname(k): sanitize_varnames_dict(v) for k, v in distributions.items()
-    }
+    # NOTE: input_vars/distributions must stay in the caller's original
+    # (unsanitized) form here -- preprocessor.input_variables is keyed by
+    # original names and preprocessor.transform() looks samples up by those
+    # same original column names (see propagate_manual_uq_with_uncertainty
+    # above for the same reasoning). response_var is already the mapped
+    # Dakota-safe name by the time it reaches this function.
+    # df_varying[input_vars] needs list, not tuple, indexing
+    input_vars = list(input_vars)
 
     # --- 1. Separate constant vs. varying input variables ---
     constant_vars: dict[str, float] = {}

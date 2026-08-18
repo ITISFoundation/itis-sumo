@@ -452,11 +452,11 @@ def create_manual_uq_samples(
     """
     Generate samples for manual UQ propagation based on user-specified distributions.
     Returns a list of dictionaries, each representing a sample.
+
+    input_vars/distributions must stay in the caller's original (unsanitized)
+    form -- the returned samples become DataFrame columns that downstream get
+    matched against a preprocessor fit on original names.
     """
-    input_vars = sanitize_varnames(input_vars)
-    distributions = {
-        sanitize_varname(k): sanitize_varnames_dict(v) for k, v in distributions.items()
-    }
 
     from scipy.stats import norm, uniform
 
