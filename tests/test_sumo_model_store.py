@@ -39,6 +39,8 @@ from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
 SEED = 42
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(autouse=True)
 def _isolated_models_dir(tmp_path, monkeypatch):

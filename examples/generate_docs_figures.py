@@ -61,7 +61,9 @@ def fig_gp_fit_uncertainty(run_dir: Path) -> None:
         alpha=0.2,
         label="95% prediction interval (±1.96 σ̂)",
     )
-    ax.scatter(x_train, y_train, color="#e91e63", zorder=5, s=40, label="training points (n=9)")
+    ax.scatter(
+        x_train, y_train, color="#e91e63", zorder=5, s=40, label="training points (n=9)"
+    )
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_title("GP surrogate: mean prediction and uncertainty band")
@@ -81,7 +83,9 @@ def fig_lhs_vs_random() -> None:
 
     fig, axes = plt.subplots(1, 2, figsize=(8.5, 4.2), sharex=True, sharey=True)
     for ax, pts, title in zip(
-        axes, [rand_pts, lhs_pts], ["Plain uniform random (n=25)", "Latin Hypercube, maximin (n=25)"]
+        axes,
+        [rand_pts, lhs_pts],
+        ["Plain uniform random (n=25)", "Latin Hypercube, maximin (n=25)"],
     ):
         ax.scatter(pts[:, 0], pts[:, 1], color="#3f51b5", s=35)
         for edge in np.linspace(0, 1, n + 1):
@@ -92,7 +96,10 @@ def fig_lhs_vs_random() -> None:
         ax.set_ylim(0, 1)
         ax.set_xlabel("x1")
     axes[0].set_ylabel("x2")
-    fig.suptitle("Design-of-experiments: LHS stratifies every marginal, random sampling doesn't", fontsize=10)
+    fig.suptitle(
+        "Design-of-experiments: LHS stratifies every marginal, random sampling doesn't",
+        fontsize=10,
+    )
     fig.tight_layout()
     fig.savefig(OUT_DIR / "lhs_vs_random.png", dpi=150)
     plt.close(fig)
@@ -103,7 +110,11 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
     """Sobol' first-order and total-order indices for the Ishigami function, GP-surrogate-based."""
 
     def ishigami(x: np.ndarray) -> np.ndarray:
-        return np.sin(x[:, 0]) + 7.0 * np.sin(x[:, 1]) ** 2 + 0.1 * x[:, 2] ** 4 * np.sin(x[:, 0])
+        return (
+            np.sin(x[:, 0])
+            + 7.0 * np.sin(x[:, 1]) ** 2
+            + 0.1 * x[:, 2] ** 4 * np.sin(x[:, 0])
+        )
 
     rng = np.random.default_rng(SEED)
     x_train = rng.uniform(-np.pi, np.pi, size=(300, 3))
@@ -113,7 +124,9 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
     preprocessor = DataPreprocessor()
     preprocessor.setup_variables(["x1", "x2", "x3"], ["y"])
     preprocessor.fit(train_raw)
-    train_file = _write_processed(preprocessor.transform(train_raw), run_dir / "sobol_train_processed.txt")
+    train_file = _write_processed(
+        preprocessor.transform(train_raw), run_dir / "sobol_train_processed.txt"
+    )
 
     distributions = {
         "x1": {"distribution": "uniform", "min": -np.pi, "max": np.pi},
@@ -121,7 +134,13 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
         "x3": {"distribution": "uniform", "min": -np.pi, "max": np.pi},
     }
     sobol = evaluate_sobol_indices(
-        run_dir, train_file, ["x1", "x2", "x3"], "y1", distributions, preprocessor, seed=SEED
+        run_dir,
+        train_file,
+        ["x1", "x2", "x3"],
+        "y1",
+        distributions,
+        preprocessor,
+        seed=SEED,
     )["sobol"]
 
     variables = ["x1", "x2", "x3"]
@@ -134,14 +153,40 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
     width = 0.2
 
     fig, ax = plt.subplots(figsize=(7, 4.2))
-    ax.bar(x_pos - 1.5 * width, main, width, label="first-order (GP surrogate)", color="#3f51b5")
-    ax.bar(x_pos - 0.5 * width, ref_main, width, label="first-order (analytical)", color="#9fa8da")
-    ax.bar(x_pos + 0.5 * width, total, width, label="total-order (GP surrogate)", color="#e91e63")
-    ax.bar(x_pos + 1.5 * width, ref_total, width, label="total-order (analytical)", color="#f48fb1")
+    ax.bar(
+        x_pos - 1.5 * width,
+        main,
+        width,
+        label="first-order (GP surrogate)",
+        color="#3f51b5",
+    )
+    ax.bar(
+        x_pos - 0.5 * width,
+        ref_main,
+        width,
+        label="first-order (analytical)",
+        color="#9fa8da",
+    )
+    ax.bar(
+        x_pos + 0.5 * width,
+        total,
+        width,
+        label="total-order (GP surrogate)",
+        color="#e91e63",
+    )
+    ax.bar(
+        x_pos + 1.5 * width,
+        ref_total,
+        width,
+        label="total-order (analytical)",
+        color="#f48fb1",
+    )
     ax.set_xticks(x_pos)
     ax.set_xticklabels(variables)
     ax.set_ylabel("Sobol' index")
-    ax.set_title("Ishigami function: Sobol' indices, GP surrogate vs. analytical reference")
+    ax.set_title(
+        "Ishigami function: Sobol' indices, GP surrogate vs. analytical reference"
+    )
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(OUT_DIR / "sobol_ishigami.png", dpi=150)
