@@ -13,6 +13,8 @@ import pytest
 
 from itis_sumo.evaluate.funs_evaluate import SOBOL_BASE_SAMPLES
 
+pytestmark = pytest.mark.analytical
+
 # ---------------------------------------------------------------------------
 # Pure-function helpers (no Dakota/surrogate needed)
 # ---------------------------------------------------------------------------
@@ -23,7 +25,11 @@ def _ishigami(x: np.ndarray) -> np.ndarray:
 
     Uniform inputs on [-π, π] for all three variables.
     """
-    return np.sin(x[:, 0]) + 7.0 * np.sin(x[:, 1]) ** 2 + 0.1 * x[:, 2] ** 4 * np.sin(x[:, 0])
+    return (
+        np.sin(x[:, 0])
+        + 7.0 * np.sin(x[:, 1]) ** 2
+        + 0.1 * x[:, 2] ** 4 * np.sin(x[:, 0])
+    )
 
 
 class TestSobolSampling:
@@ -33,7 +39,13 @@ class TestSobolSampling:
         """num_samples is rounded up to the next power of 2."""
 
         # 100 -> 128, 1 -> 2, 17 -> 32
-        for requested, expected_n in [(100, 128), (1, 2), (17, 32), (64, 64), (256, 256)]:
+        for requested, expected_n in [
+            (100, 128),
+            (1, 2),
+            (17, 32),
+            (64, 64),
+            (256, 256),
+        ]:
             assert 2 ** math.ceil(math.log2(max(requested, 2))) == expected_n
 
     def test_sobol_base_samples_is_1024(self):
@@ -52,7 +64,9 @@ class TestSobolSampling:
         }
         # Verify constant detection
         constant_vars = {
-            k: v["value"] for k, v in distributions.items() if v["distribution"] == "constant"
+            k: v["value"]
+            for k, v in distributions.items()
+            if v["distribution"] == "constant"
         }
         varying_vars = [k for k in distributions if k not in constant_vars]
         assert constant_vars == {"x2": 1.0}
@@ -115,7 +129,9 @@ class TestSobolIshigamiAnalytical:
         S_ij = np.full((d, d), np.nan)
         for ii in range(d):
             for jj in range(ii + 1, d):
-                other_sum = float(np.sum(higher_order) - higher_order[ii] - higher_order[jj])
+                other_sum = float(
+                    np.sum(higher_order) - higher_order[ii] - higher_order[jj]
+                )
                 s_ij = (float(higher_order[ii] + higher_order[jj]) - other_sum) / 2.0
                 S_ij[ii, jj] = s_ij
                 S_ij[jj, ii] = s_ij

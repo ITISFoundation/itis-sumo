@@ -86,7 +86,9 @@ def _manual_uq_propagate(
     through the Flask route.
     """
     samples = create_manual_uq_samples(input_vars, distributions, num_samples, seed)
-    eval_file = _write_processed(pd.DataFrame(samples), run_dir / "uq_samples_processed.txt")
+    eval_file = _write_processed(
+        pd.DataFrame(samples), run_dir / "uq_samples_processed.txt"
+    )
 
     results = evaluate_sumo(run_dir, train_file, eval_file, input_vars, output_var)
     pred = np.array(results[f"{output_var}_hat"])
@@ -197,7 +199,9 @@ class TestSurrogateAccuracy:
         )
         x_eval = np.array([-1.5, -0.5, 0.5, 1.5])
         y_eval = np.array([1.5, -0.5, 0.5, -1.5])
-        eval_file = _write_processed(pd.DataFrame({"x": x_eval, "y": y_eval}), run_dir / "eval.txt")
+        eval_file = _write_processed(
+            pd.DataFrame({"x": x_eval, "y": y_eval}), run_dir / "eval.txt"
+        )
 
         result = evaluate_sumo(run_dir, train_file, eval_file, ["x", "y"], "z")
         expected = (1 - x_eval) ** 2 + 100 * (y_eval - x_eval**2) ** 2
@@ -266,7 +270,9 @@ class TestAxisSweep:
             run_dir / "train_processed.txt",
         )
 
-        results = evaluate_sumo_along_axes(run_dir, train_file, ["x", "y"], "z", NSAMPLESPERVAR=11)
+        results = evaluate_sumo_along_axes(
+            run_dir, train_file, ["x", "y"], "z", NSAMPLESPERVAR=11
+        )
 
         slope_x = np.polyfit(results["x"]["x"], results["x"]["y_hat"], 1)[0]
         slope_y = np.polyfit(results["y"]["x"], results["y"]["y_hat"], 1)[0]
@@ -419,7 +425,12 @@ class TestGridEvaluation:
         x_train, y_train, z_train = xx.ravel(), yy.ravel(), zz.ravel()
         train_file = _write_processed(
             pd.DataFrame(
-                {"x": x_train, "y": y_train, "z": z_train, "w": x_train + y_train + z_train}
+                {
+                    "x": x_train,
+                    "y": y_train,
+                    "z": z_train,
+                    "w": x_train + y_train + z_train,
+                }
             ),
             run_dir / "train_processed.txt",
         )
@@ -679,9 +690,12 @@ class TestUqPropagation:
         responses, not a test artifact, so this test asserts *that* behavior directly:
         predictive std stays small even while prediction error is large.
         """
-        x_train = np.linspace(-4, 4, 5)  # deliberately too sparse to resolve one sine period
+        x_train = np.linspace(
+            -4, 4, 5
+        )  # deliberately too sparse to resolve one sine period
         train_file = _write_processed(
-            pd.DataFrame({"x": x_train, "y": np.sin(x_train)}), run_dir / "train_processed.txt"
+            pd.DataFrame({"x": x_train, "y": np.sin(x_train)}),
+            run_dir / "train_processed.txt",
         )
         x_eval = np.linspace(-3.5, 3.5, 9)
         eval_file = _write_processed(pd.DataFrame({"x": x_eval}), run_dir / "eval.txt")
@@ -690,8 +704,12 @@ class TestUqPropagation:
         pred, std = np.array(result["y_hat"]), np.array(result["y_std_hat"])
         expected = np.sin(x_eval)
 
-        assert _rmse(expected, pred) > 0.2  # the fit is genuinely bad under this undersampling
-        assert std.max() < 0.01  # yet the surrogate reports almost no uncertainty about it
+        assert (
+            _rmse(expected, pred) > 0.2
+        )  # the fit is genuinely bad under this undersampling
+        assert (
+            std.max() < 0.01
+        )  # yet the surrogate reports almost no uncertainty about it
 
     def test_mixed_distributions_uq_propagation_matches_analytical(self, run_dir):
         """F7: f(x,y) = x+y, x ~ N(0,1), y ~ U(-1,1), independent =>
