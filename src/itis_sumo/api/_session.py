@@ -31,12 +31,14 @@ from itis_sumo.api.types import (
     AlongAxesResult,
     AxisSweep,
     CrossValidationResult,
+    GridResult,
     PreprocessingSpec,
     VariableSpec,
 )
 from itis_sumo.evaluate.funs_evaluate import (
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
+    evaluate_sumo_on_grid,
 )
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
@@ -261,7 +263,6 @@ class SumoSession:
             response,
             cut_values=self._map_held_values(at),
             NSAMPLESPERVAR=points_per_variable,
-            has_eval_id_column=False,
         )
         if not results:
             raise SumoResultError(
@@ -290,6 +291,78 @@ class SumoSession:
             sweeps=sweeps,
             effective_config=self.effective_config,
         )
+
+    def grid(
+        self,
+        *,
+        grid_variables: Sequence[str],
+        at: Mapping[str, float] | None,
+        points_per_variable: int,
+    ) -> GridResult:
+        """Evaluate a one-, two-, or higher-dimensional grid."""
+        grid_variables = tuple(grid_variables)
+        unknown = sorted(set(grid_variables) - set(self._variables))
+        if not grid_variables:
+            raise SumoInputError("At least one grid variable is required")
+        if unknown:
+            raise SumoInputError(
+                f"Grid variables {unknown} are not variables of this model"
+            )
+        if points_per_variable < 2:
+            raise SumoInputError("A grid needs at least 2 points per variable")
+
+        results = self._run_engine(
+            "evaluating the surrogate on a grid",
+            evaluate_sumo_on_grid,
+            self._run_dir,
+            self._training_file,
+            [self._mapped_name(variable) for variable in grid_variables],
+            self._mapped_variables,
+            self._mapped_response,
+            cut_values=self._map_held_values(at),
+            NSAMPLESPERVAR=points_per_variable,
+        )
+        if self._mapped_response not in results:
+            raise SumoResultError(
+                f"No grid predictions were produced for '{self._response}'"
+            )
+
+        original_names = self._preprocessor.get_inverse_mapping()
+        converted: dict[str, list[float] | list[list[float]]] = {}
+        for mapped_name, values in results.items():
+            original_name = original_names.get(mapped_name, mapped_name)
+            if mapped_name == self._mapped_response:
+                converted[original_name] = self._inverse_nested_values(
+                    mapped_name, values
+                )
+            else:
+                converted[original_name] = self._inverse_nested_values(
+                    mapped_name, values
+                )
+        return GridResult(
+            response=self._response,
+            grid_variables=grid_variables,
+            data=converted,
+            effective_config=self.effective_config,
+        )
+
+    def _mapped_name(self, variable: str) -> str:
+        assert self._preprocessor is not None
+        return self._preprocessor.input_variables[variable].mapped_name
+
+    def _inverse_nested_values(
+        self, mapped_name: str, values: object
+    ) -> list[float] | list[list[float]]:
+        if (
+            not isinstance(values, list)
+            or not values
+            or not isinstance(values[0], list)
+        ):
+            return self._to_original_units(mapped_name, values)  # type: ignore[arg-type]
+        return [
+            self._to_original_units(mapped_name, row)  # type: ignore[arg-type]
+            for row in values
+        ]
 
     # -------------------------------------------------------------- internals
 

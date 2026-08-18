@@ -25,6 +25,7 @@ from itis_sumo.api.types import (
     DEFAULT_SEED,
     AlongAxesResult,
     CrossValidationResult,
+    GridResult,
     PreprocessingSpec,
 )
 
@@ -116,3 +117,25 @@ def evaluate_along_axes(
         workspace=workspace,
     ) as session:
         return session.fit().along_axes(at=at, points_per_variable=points_per_variable)
+
+
+def evaluate_grid(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    response: str,
+    *,
+    grid_variables: Sequence[str],
+    at: Mapping[str, float] | None = None,
+    points_per_variable: int = 21,
+    preprocessing: PreprocessingSpec | None = None,
+    workspace: Path | None = None,
+) -> GridResult:
+    """Evaluate a surrogate across a grid of selected variables."""
+    with SumoSession(
+        samples, variables, response, preprocessing=preprocessing, workspace=workspace
+    ) as session:
+        return session.fit().grid(
+            grid_variables=grid_variables,
+            at=at,
+            points_per_variable=points_per_variable,
+        )

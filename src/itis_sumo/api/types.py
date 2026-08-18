@@ -80,6 +80,16 @@ class AxisSweep:
 
 
 @dataclass(frozen=True)
+class GridResult:
+    """Predictions on a grid, keyed by the original variable names."""
+
+    response: str
+    grid_variables: tuple[str, ...]
+    data: dict[str, list[float] | list[list[float]]]
+    effective_config: dict[str, VariableSpec]
+
+
+@dataclass(frozen=True)
 class AlongAxesResult:
     """One :class:`AxisSweep` per variable, keyed by the variable's name."""
 

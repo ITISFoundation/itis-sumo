@@ -16,7 +16,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.api import cross_validate, evaluate_along_axes
+from itis_sumo.api import (
+    cross_validate,
+    evaluate_along_axes,
+    evaluate_grid,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -126,3 +130,21 @@ class TestWorkingFiles:
         )
         produced = list(tmp_path.rglob("processed_samples.dat"))
         assert produced, "workspace should retain the training file"
+
+
+class TestGrid:
+    def test_grid_preserves_original_names_and_units(self, samples):
+        result = evaluate_grid(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            grid_variables=["width", "height"],
+            points_per_variable=5,
+        )
+        assert result.response == RESPONSE
+        assert result.grid_variables == ("width", "height")
+        assert "stress" in result.data
+        assert min(result.data["width"]) >= WIDTH_RANGE[0] - 0.01
+        assert max(result.data["height"]) <= HEIGHT_RANGE[1] + 0.01
+        assert len(result.data["stress"]) == 5
+        assert len(result.data["stress"][0]) == 5

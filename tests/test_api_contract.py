@@ -22,6 +22,7 @@ from itis_sumo.api import (
     AlongAxesResult,
     AxisSweep,
     CrossValidationResult,
+    GridResult,
     PreprocessingSpec,
     SumoEngineError,
     SumoError,
@@ -29,6 +30,7 @@ from itis_sumo.api import (
     VariableSpec,
     cross_validate,
     evaluate_along_axes,
+    evaluate_grid,
 )
 from itis_sumo.api._session import SumoSession
 
@@ -54,6 +56,7 @@ class TestPublicSurface:
             "AlongAxesResult",
             "AxisSweep",
             "CrossValidationResult",
+            "GridResult",
             "PreprocessingSpec",
             "Scale",
             "SumoEngineError",
@@ -63,6 +66,7 @@ class TestPublicSurface:
             "VariableSpec",
             "cross_validate",
             "evaluate_along_axes",
+            "evaluate_grid",
         }
 
     @pytest.mark.parametrize("workflow", [cross_validate, evaluate_along_axes])
@@ -284,3 +288,29 @@ class TestEffectiveConfiguration:
     def test_defaults_are_reported_even_when_nothing_was_supplied(self):
         session = SumoSession(make_samples(), VARIABLES, RESPONSE)
         assert session.effective_config["width"].scale == "linear"
+
+
+class TestGridContract:
+    def test_grid_rejects_unknown_grid_variables(self):
+        with pytest.raises(SumoInputError, match="not variables"):
+            evaluate_grid(make_samples(), VARIABLES, RESPONSE, grid_variables=["depth"])
+
+    def test_grid_rejects_too_few_points(self):
+        with pytest.raises(SumoInputError, match="at least 2"):
+            evaluate_grid(
+                make_samples(),
+                VARIABLES,
+                RESPONSE,
+                grid_variables=["width"],
+                points_per_variable=1,
+            )
+
+    def test_grid_result_is_typed_and_serializable(self):
+        result = GridResult(
+            response=RESPONSE,
+            grid_variables=("width", "height"),
+            data={"width": [1.0], "stress": [[2.0]]},
+            effective_config={"width": VariableSpec()},
+        )
+        payload = json.loads(json.dumps(dataclasses.asdict(result)))
+        assert payload["grid_variables"] == ["width", "height"]
