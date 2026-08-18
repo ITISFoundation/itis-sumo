@@ -11,8 +11,8 @@ from itis_sumo.data.funs_data_processing import (
     is_dominated,
     load_data,
 )
-from itis_sumo.sampling.lhs import _lhscentered, _lhsclassic, _lhsmaximin, lhs
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
+from itis_sumo.sampling.lhs import _lhscentered, _lhsclassic, _lhsmaximin, lhs
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +164,10 @@ class TestAxisSweepInvariants:
 
     def test_sweep_monotonicity(self, tmp_path):
         """Within each sweep segment, the swept variable increases monotonically."""
-        data = pd.DataFrame({"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)})
+        data = pd.DataFrame(
+            {"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)}
+        )
+
         NSP = 15
         path = create_samples_along_axes(tmp_path, data, ["x1", "x2"], NSP)
         result = load_data(path)
@@ -177,7 +180,10 @@ class TestAxisSweepInvariants:
 
     def test_non_sweep_constancy(self, tmp_path):
         """Within each sweep segment, non-sweep variables equal the cut value."""
-        data = pd.DataFrame({"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)})
+        data = pd.DataFrame(
+            {"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)}
+        )
+
         NSP = 10
         path = create_samples_along_axes(tmp_path, data, ["x1", "x2"], NSP)
         result = load_data(path)
@@ -192,7 +198,10 @@ class TestAxisSweepInvariants:
 
     def test_uniform_spacing(self, tmp_path):
         """Consecutive differences within each sweep segment are equal."""
-        data = pd.DataFrame({"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)})
+        data = pd.DataFrame(
+            {"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)}
+        )
+
         NSP = 12
         path = create_samples_along_axes(tmp_path, data, ["x1", "x2"], NSP)
         result = load_data(path)
@@ -257,7 +266,10 @@ class TestDataPreprocessorRoundtrip:
             input_normalizations={"length": "z_score"},
             output_normalizations={"stress": "min_max"},
         )
-        pp.setup_sign_switching(input_sign_switches=["width"], output_sign_switches=["stress"])
+        pp.setup_sign_switching(
+            input_sign_switches=["width"], output_sign_switches=["stress"]
+        )
+
         pp.fit(df)
         transformed = pp.transform(df)
         restored = pp.inverse_transform(transformed)
@@ -401,7 +413,10 @@ class TestParetoDominance:
 
     def test_non_dominated_output_no_dominated_pairs(self):
         """No two points in the non-dominated set should dominate each other."""
-        df = pd.DataFrame({"x": [1.0, 2.0, 3.0, 0.5, 1.5], "y": [3.0, 2.0, 1.0, 0.5, 2.5]})
+        df = pd.DataFrame(
+            {"x": [1.0, 2.0, 3.0, 0.5, 1.5], "y": [3.0, 2.0, 1.0, 0.5, 2.5]}
+        )
+
         indices = get_non_dominated_indices(df, ["x", "y"], ["min", "min"])
         nd_points = df.loc[indices, ["x", "y"]].values
         for i, p in enumerate(nd_points):

@@ -12,6 +12,8 @@ from itis_sumo.preprocess import (
     setup_preprocessor_from_config,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def _sample_jobs():
     return [
@@ -44,7 +46,9 @@ def _sample_jobs():
 
 
 class TestDataPreprocessorIntegration:
-    def test_create_training_file_with_preprocessor_writes_expected_files(self, tmp_path):
+    def test_create_training_file_with_preprocessor_writes_expected_files(
+        self, tmp_path
+    ):
         preprocessor = DataPreprocessor()
         preprocessor.setup_variables(["x"], ["y"])
         training_file, fitted_preprocessor = create_training_file_with_preprocessor(
@@ -60,7 +64,9 @@ class TestDataPreprocessorIntegration:
         assert (tmp_path / "run" / "preprocessor_config.json").exists()
         assert fitted_preprocessor.get_variable_mapping() == {"x": "x1", "y": "y1"}
 
-    def test_create_training_file_with_preprocessor_requires_minimum_samples(self, tmp_path):
+    def test_create_training_file_with_preprocessor_requires_minimum_samples(
+        self, tmp_path
+    ):
         preprocessor = DataPreprocessor()
         preprocessor.setup_variables(["x"], ["y"])
 
@@ -88,14 +94,18 @@ class TestDataPreprocessorIntegration:
         assert preprocessor.input_variables["x"].normalize is True
         assert preprocessor.output_variables["other"].switch_sign is True
 
-    def test_load_and_inverse_transform_results_supports_multiple_shapes(self, tmp_path):
+    def test_load_and_inverse_transform_results_supports_multiple_shapes(
+        self, tmp_path
+    ):
         config_path = tmp_path / "config.json"
         preprocessor = DataPreprocessor()
         preprocessor.setup_variables(["x"], ["y"])
         preprocessor.fit(pd.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]}))
         preprocessor.save_config(config_path)
 
-        assert load_and_inverse_transform_results({"x1": [1.0], "y1": [3.0]}, config_path) == {
+        assert load_and_inverse_transform_results(
+            {"x1": [1.0], "y1": [3.0]}, config_path
+        ) == {
             "x": [1.0],
             "y": [3.0],
         }
