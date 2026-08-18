@@ -12,7 +12,7 @@ def test_v18_workflow_changes_run_validation_matrix():
     assert workflow.count("needs.detect_changes.outputs.ci == 'true'") == 4
 
 
-def test_setup_uv_uses_published_tag():
+def test_v19_setup_uv_uses_published_tag():
     setup_uv_references = [
         line.strip()
         for workflow_path in WORKFLOWS_DIR.glob("*.yml")
@@ -21,4 +21,4 @@ def test_setup_uv_uses_published_tag():
     ]
 
     assert setup_uv_references
-    assert all(reference.endswith("@v9.0.0") for reference in setup_uv_references)
+    assert all(reference.endswith("@v10.0.1") for reference in setup_uv_references)
