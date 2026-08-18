@@ -17,9 +17,12 @@ import pandas as pd
 import pytest
 
 from itis_sumo.api import (
+    DistributionSpec,
+    SumoInputError,
     cross_validate,
     evaluate_along_axes,
     evaluate_grid,
+    evaluate_sobol,
 )
 
 pytestmark = pytest.mark.integration
@@ -148,3 +151,27 @@ class TestGrid:
         assert max(result.data["height"]) <= HEIGHT_RANGE[1] + 0.01
         assert len(result.data["stress"]) == 5
         assert len(result.data["stress"][0]) == 5
+
+
+class TestSobol:
+    def test_returns_seeded_indices_for_explicit_distributions(self, samples):
+        distributions = {
+            "width": DistributionSpec("uniform", minimum=1.0, maximum=5.0),
+            "height": DistributionSpec("uniform", minimum=100.0, maximum=500.0),
+        }
+        result = evaluate_sobol(
+            samples, VARIABLES, RESPONSE, distributions=distributions, seed=7
+        )
+        assert result.response == RESPONSE
+        assert result.seed == 7
+        assert set(result.indices) == set(VARIABLES)
+        assert set(result.second_order) <= set(VARIABLES)
+
+    def test_requires_a_distribution_for_each_variable(self, samples):
+        with pytest.raises(SumoInputError, match="cover variables exactly"):
+            evaluate_sobol(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions={"width": DistributionSpec("constant", value=2.0)},
+            )

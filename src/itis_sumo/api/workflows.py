@@ -25,8 +25,10 @@ from itis_sumo.api.types import (
     DEFAULT_SEED,
     AlongAxesResult,
     CrossValidationResult,
+    DistributionSpec,
     GridResult,
     PreprocessingSpec,
+    SobolResult,
 )
 
 
@@ -139,3 +141,20 @@ def evaluate_grid(
             at=at,
             points_per_variable=points_per_variable,
         )
+
+
+def evaluate_sobol(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    response: str,
+    *,
+    distributions: Mapping[str, DistributionSpec],
+    preprocessing: PreprocessingSpec | None = None,
+    seed: int = DEFAULT_SEED,
+    workspace: Path | None = None,
+) -> SobolResult:
+    """Compute Sobol sensitivity indices from explicit distributions."""
+    with SumoSession(
+        samples, variables, response, preprocessing=preprocessing, workspace=workspace
+    ) as session:
+        return session.fit().sobol(distributions=distributions, seed=seed)

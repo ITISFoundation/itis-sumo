@@ -25,15 +25,18 @@ from itis_sumo.api.types import (
     AlongAxesResult,
     AxisSweep,
     CrossValidationResult,
+    DistributionSpec,
     GridResult,
     PreprocessingSpec,
     Scale,
+    SobolResult,
     VariableSpec,
 )
 from itis_sumo.api.workflows import (
     cross_validate,
     evaluate_along_axes,
     evaluate_grid,
+    evaluate_sobol,
 )
 
 __all__ = [
@@ -41,9 +44,11 @@ __all__ = [
     "AlongAxesResult",
     "AxisSweep",
     "CrossValidationResult",
+    "DistributionSpec",
     "GridResult",
     "PreprocessingSpec",
     "Scale",
+    "SobolResult",
     "SumoEngineError",
     "SumoError",
     "SumoInputError",
@@ -52,4 +57,5 @@ __all__ = [
     "cross_validate",
     "evaluate_along_axes",
     "evaluate_grid",
+    "evaluate_sobol",
 ]

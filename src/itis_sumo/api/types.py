@@ -22,6 +22,50 @@ from typing import Literal
 DEFAULT_SEED = 42
 
 Scale = Literal["linear", "log"]
+DistributionKind = Literal["constant", "uniform", "normal"]
+
+
+@dataclass(frozen=True)
+class DistributionSpec:
+    """A real-world uncertainty distribution for one variable.
+
+    This is deliberately not a domain object. A domain says where exploration is
+    allowed; this says what shape real-world uncertainty has. The two are split
+    fully in the fitted-model transformation (SPEC T27fr).
+    """
+
+    distribution: DistributionKind
+    value: float | None = None
+    mean: float | None = None
+    std: float | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+
+    def as_engine_dict(self) -> dict[str, float | str]:
+        """Translate stable public names to the current Dakota adapter shape."""
+        values: dict[str, float | str] = {"distribution": self.distribution}
+        if self.value is not None:
+            values["value"] = self.value
+        if self.mean is not None:
+            values["mean"] = self.mean
+        if self.std is not None:
+            values["std"] = self.std
+        if self.minimum is not None:
+            values["min"] = self.minimum
+        if self.maximum is not None:
+            values["max"] = self.maximum
+        return values
+
+
+@dataclass(frozen=True)
+class SobolResult:
+    """First-, total-, and second-order sensitivity indices."""
+
+    response: str
+    indices: dict[str, dict[str, float]]
+    second_order: dict[str, dict[str, float]]
+    seed: int
+    distributions: dict[str, DistributionSpec]
 
 
 @dataclass(frozen=True)

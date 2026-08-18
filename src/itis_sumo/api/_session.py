@@ -31,11 +31,14 @@ from itis_sumo.api.types import (
     AlongAxesResult,
     AxisSweep,
     CrossValidationResult,
+    DistributionSpec,
     GridResult,
     PreprocessingSpec,
+    SobolResult,
     VariableSpec,
 )
 from itis_sumo.evaluate.funs_evaluate import (
+    evaluate_sobol_indices,
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
@@ -344,6 +347,46 @@ class SumoSession:
             grid_variables=grid_variables,
             data=converted,
             effective_config=self.effective_config,
+        )
+
+    def sobol(
+        self,
+        *,
+        distributions: Mapping[str, DistributionSpec],
+        seed: int,
+    ) -> SobolResult:
+        """Compute sensitivity indices from explicitly supplied uncertainty."""
+        missing = sorted(set(self._variables) - set(distributions))
+        unknown = sorted(set(distributions) - set(self._variables))
+        if missing or unknown:
+            raise SumoInputError(
+                f"Distributions must cover variables exactly; missing={missing}, "
+                f"unknown={unknown}"
+            )
+        engine_distributions = {
+            variable: spec.as_engine_dict() for variable, spec in distributions.items()
+        }
+        results = self._run_engine(
+            "computing Sobol indices",
+            evaluate_sobol_indices,
+            self._run_dir,
+            self._training_file,
+            self._variables,
+            self._mapped_response,
+            engine_distributions,
+            self._preprocessor,
+            seed=seed,
+        )
+        if "sobol" not in results:
+            raise SumoResultError(
+                f"No Sobol indices were produced for '{self._response}'"
+            )
+        return SobolResult(
+            response=self._response,
+            indices=results["sobol"],
+            second_order=results["sobolSecondOrder"],
+            seed=seed,
+            distributions=dict(distributions),
         )
 
     def _mapped_name(self, variable: str) -> str:
