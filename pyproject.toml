@@ -24,7 +24,7 @@ dependencies = [
     # Parity with mmux/vite flaskapi (itis-dakota==1.5.9, Dakota 6.20). Stay
     # here until the 6.23+ `Interface::interface_cache()` regression on
     # interface-less surrogate confs is resolved (see SPEC §T T16mo ladder).
-    "itis-dakota==6.24.7",
+    "itis-dakota==1.5.9",
     "numpy>=2.0",
     "pandas>=2.2",
     "pydantic>=2.0",

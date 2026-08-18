@@ -440,29 +440,17 @@ wheels = [
 
 [[package]]
 name = "itis-dakota"
-version = "6.24.7"
+version = "1.5.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/1b/0bf1d3c1f5e83946596995a6b9071e5cf9f11384786317043a26a1644174/itis_dakota-6.24.7-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:edbe7d6bc7c2ab422df730e770b8d3328ba6913775f5294a1141f133296e034a", size = 59166496, upload-time = "2026-08-11T21:06:25.365Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/49/824cf5f8f6911025402d1963dfad8fd5d1cd4e578dcb57780b6555f4aee3/itis_dakota-6.24.7-cp311-cp311-macosx_15_0_x86_64.whl", hash = "sha256:9a56e5e1cba6f1ba838c186f9c8dd502755cfe016433973f9bb8eb39c3b51988", size = 65737602, upload-time = "2026-08-11T21:06:31.247Z" },
-    { url = "https://files.pythonhosted.org/packages/ca/b2/83b40adf939564968231935f59cd7b6fe74d6737a5d5b36147c76ccbc611/itis_dakota-6.24.7-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:323b21abc6b2c9a2efd2787951274cf671a50a462b6e7ff5042b60b855975ec6", size = 67518343, upload-time = "2026-08-11T21:06:36.753Z" },
-    { url = "https://files.pythonhosted.org/packages/1c/c3/c7befac8127b9b899f43257717fd760e5d3d4411b7bbcabd3687c60fdeff/itis_dakota-6.24.7-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:e1f7f929c3ee99a9eb5a7612efe3229d299bc9cc25e53ad054095aa64ce927c9", size = 72183297, upload-time = "2026-08-11T21:18:56.92Z" },
-    { url = "https://files.pythonhosted.org/packages/a8/3a/5bab9f6315f6936fc01c34d5b00ef428ee61d18c1279183139134fb6fc9a/itis_dakota-6.24.7-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:4a2a19c7c8c561c2bb9a8f37f3ac87bf1472f4452ecefe7d58bba09ea76e95c4", size = 59164513, upload-time = "2026-08-11T21:19:02.969Z" },
-    { url = "https://files.pythonhosted.org/packages/68/19/6a10eae26c0a3eb28e71ee6a17bea899fd64a8cb4377444ab0feb32e9991/itis_dakota-6.24.7-cp312-cp312-macosx_15_0_x86_64.whl", hash = "sha256:f16358d5aec9451c4b2585890f3277d5dc07748d09cffdccdb705d764191a638", size = 65735630, upload-time = "2026-08-11T21:19:09.694Z" },
-    { url = "https://files.pythonhosted.org/packages/29/e8/a76562b1f8854335d49ff6be7a9489f58b2f5d1b07cba9df23bb9efa47c0/itis_dakota-6.24.7-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:fc38f392faca5efd0a2c25d8495d801c2381b04d7b3dc58284197372b35cff39", size = 67781300, upload-time = "2026-08-11T21:19:17.422Z" },
-    { url = "https://files.pythonhosted.org/packages/6b/76/d05abbdf9b1dd0629ef625de1da429c4affcbd2ba8d20e0e71084e869fb3/itis_dakota-6.24.7-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:3493cd374e2fefaf8b2ba691d6484cb6cb35e2a2b19b867c3384f9b6d928edbc", size = 72460282, upload-time = "2026-08-11T21:19:25.508Z" },
-    { url = "https://files.pythonhosted.org/packages/c4/b3/f33ba12215935c95d5f3ab1836cefbfbea1bee195b17d520a76ec720ddbb/itis_dakota-6.24.7-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:0ebeccee782dc5d2e065c2d7932e2fb023d91a9c740ab4da23c4ddd25a95b2b8", size = 59163698, upload-time = "2026-08-11T21:19:32.846Z" },
-    { url = "https://files.pythonhosted.org/packages/a1/e3/28d81977737dcfd026b75d0c94023e660c1342977b0a19d938bcedef29ec/itis_dakota-6.24.7-cp313-cp313-macosx_15_0_x86_64.whl", hash = "sha256:f14e621fca1626eef6e2a09ac3d8d567c397af68e96c5f19dbb59252c11b1b81", size = 65736139, upload-time = "2026-08-11T21:19:40.019Z" },
-    { url = "https://files.pythonhosted.org/packages/91/2d/c423ccbfa24c36903392da6792033df5c29accac3065b08a7c61385cddce/itis_dakota-6.24.7-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:44a50b7b4a4bc3310d87403caf001775f9db2dd2ff8afc535d3595d583fd42cd", size = 67736226, upload-time = "2026-08-11T21:19:47.271Z" },
-    { url = "https://files.pythonhosted.org/packages/6a/5a/dff08421fb84738a4b61060c5aa87250c1c1406299bb6e95533e1454b49b/itis_dakota-6.24.7-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:86dea299e34d5b03191dd6ced84b4a428f8441d67349213244be8e7b15ef3c7e", size = 72378040, upload-time = "2026-08-11T21:19:54.439Z" },
-    { url = "https://files.pythonhosted.org/packages/a2/58/b042367484ca8a3e3d0cbfe88e3b2c4159efcaa14ce94bb784e31fedb076/itis_dakota-6.24.7-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:1efb0ea2bf02e388cfd02824494f63c9902701af15c68852ab4218e6b86dd4ae", size = 59163555, upload-time = "2026-08-11T21:20:00.014Z" },
-    { url = "https://files.pythonhosted.org/packages/49/86/1290ffc53bbeca7637e8b235f58805e053b90953f72df28475cd6fbcf500/itis_dakota-6.24.7-cp314-cp314-macosx_15_0_x86_64.whl", hash = "sha256:2e0d0e2414ff7f39d311b7a4e3934c83b33e58ae658d120137275f5707f57df6", size = 65736487, upload-time = "2026-08-11T21:20:06.395Z" },
-    { url = "https://files.pythonhosted.org/packages/6d/fb/63faa38f2376ad41508f242315aead517bc002efd8af4f05a5abbf127213/itis_dakota-6.24.7-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:c7873eb20056cae23feb279e41a8f7923ccebe262d4c0a664a11b2df4006bcd5", size = 67875621, upload-time = "2026-08-11T21:20:13.125Z" },
-    { url = "https://files.pythonhosted.org/packages/5e/c2/470900dce57f7c7c29f0ce6b9c8668a6b353331caa1b71d82169a45d6393/itis_dakota-6.24.7-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:07b7cf1f057cfce813038c971dd236121245ff257cb4da1d94ea2ab862106a73", size = 72515134, upload-time = "2026-08-11T21:20:21.298Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/66/beea03e3b6d6f37c1c0f5dde6b49f0d513c309e15ca878d4810cb906c4b0/itis_dakota-1.5.9-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:e0af82d158b90394ca1b45e141922fae26e0b91ce38df2dbf39832a81d9809e2", size = 35193123, upload-time = "2025-04-22T14:08:02.013Z" },
+    { url = "https://files.pythonhosted.org/packages/82/b3/f60fbd820fdf32e0a6a0b6eb00e34e8ce4e4e1a9f0f0078dab87b9bcd86c/itis_dakota-1.5.9-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:cbf8cd8efc2a0212a1169729aba6b0a89044d01c7f115b9be61e26d6231c89f0", size = 37741088, upload-time = "2025-04-22T14:08:05.539Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/f4/3d4377561eeae08d1f0e762822f4596dd060d5a26256b73804207c42e8ec/itis_dakota-1.5.9-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:d1d28dbc6d8c8fbbb36e1aeb7c8bdfbe4ee68f915616567faa77162c4a75db52", size = 35193749, upload-time = "2025-04-22T14:08:08.664Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/a9/4aae65a51a09a725944cbaeb95db6c6eff9b90bcae0fb2b050e45a4e8820/itis_dakota-1.5.9-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:b82c0df3c6db6bcf8454821940891f5ff0ca82e81ba62f85e669e709a9d35072", size = 37741822, upload-time = "2025-04-22T14:08:12.066Z" },
 ]
 
 [[package]]
@@ -494,7 +482,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "itis-dakota", specifier = "==6.24.7" },
+    { name = "itis-dakota", specifier = "==1.5.9" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -1559,7 +1547,7 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
@@ -1638,7 +1626,7 @@ resolution-markers = [
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/25/c2700dfaf6442b4effaa91af24ebce5dc9d31bb4a69706313aae70d72cd0/scipy-1.18.0.tar.gz", hash = "sha256:67b2ad2ad54c72ca6d04975a9b2df8c3638c34ddd5b28738e94fc2b57929d378", size = 30774447, upload-time = "2026-06-19T15:01:43.456Z" }
 wheels = [
