@@ -35,7 +35,7 @@ jobs:
             head_sha="${{ github.sha }}"
           fi
 
-          if [[ "$base_sha" =~ ^0+$ ]]; then
+          if [[ "$base_sha" =~ ^0+$ ]] || ! git cat-file -e "$base_sha^{commit}" 2>/dev/null; then
             changed_files="$(git diff-tree --no-commit-id --name-only --diff-filter=d -r "$head_sha")"
           else
             changed_files="$(git diff --name-only --diff-filter=d "$base_sha" "$head_sha")"
@@ -94,7 +94,7 @@ jobs:
             head_sha="${{ github.sha }}"
           fi
 
-          if [[ "$base_sha" =~ ^0+$ ]]; then
+          if [[ "$base_sha" =~ ^0+$ ]] || ! git cat-file -e "$base_sha^{commit}" 2>/dev/null; then
             changed_py_files="$(git diff-tree --no-commit-id --name-only --diff-filter=d -r "$head_sha" | grep -E '\.py$' || true)"
           else
             changed_py_files="$(git diff --name-only --diff-filter=d "$base_sha" "$head_sha" | grep -E '\.py$' || true)"
