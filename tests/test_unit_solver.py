@@ -375,6 +375,7 @@ class TestCrossValidationConfigGeneration:
     def test_create_sumo_manual_crossvalidation_splits_training_and_validation(
         self, tmp_path
     ):
+
         build_file = self._make_build_file(tmp_path)
         fold_dir = tmp_path / "fold_0"
         fold_dir.mkdir()
@@ -619,6 +620,7 @@ class TestGetNonDominatedIndices:
         result = get_non_dominated_indices(
             df, ["f1", "f2"], ["min", "min"], sort_by_column="f1"
         )
+
         assert list(result) == [0, 1]
 
     def test_mismatched_modes_raises(self):
