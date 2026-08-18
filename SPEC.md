@@ -97,3 +97,5 @@ B6nr|2026-08-18|the workflow regression test hard-coded a Dependabot-managed act
 B7pv|2026-08-18|prek passed deleted Python paths from the workflow diff to Ruff, causing E902 after removing a test file|exclude deleted paths with `--diff-filter=d` before xargs
 
 B8lf|2026-08-18|the develop merge retained executable mode on changed `funs_evaluate.py`, so prek Ruff raised EXE002 for a Python file without a shebang|clear executable bit; existing V17ab catches changed-file Ruff violations
+
+B9dw|2026-08-18|after rewriting develop history, GitHub push events reported the unreachable pre-rewrite `before` SHA and detect_changes aborted with `bad object`|fall back to `git diff-tree` when the event base commit is unavailable; no code invariant added because this is CI history topology
