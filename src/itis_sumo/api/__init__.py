@@ -27,11 +27,15 @@ from itis_sumo.api.types import (
     CorrelationResult,
     CrossValidationResult,
     CVAccuracyMetrics,
+    Direction,
     DistributionSpec,
+    DomainSpec,
     GridResult,
+    ParetoFrontResult,
     PreprocessingSpec,
     Scale,
     SobolResult,
+    UncertaintyResult,
     VariableSpec,
 )
 from itis_sumo.api.workflows import (
@@ -41,6 +45,8 @@ from itis_sumo.api.workflows import (
     evaluate_cv_metrics,
     evaluate_grid,
     evaluate_sobol,
+    evaluate_uncertainty,
+    optimize,
 )
 
 __all__ = [
@@ -50,8 +56,11 @@ __all__ = [
     "CVAccuracyMetrics",
     "CorrelationResult",
     "CrossValidationResult",
+    "Direction",
     "DistributionSpec",
+    "DomainSpec",
     "GridResult",
+    "ParetoFrontResult",
     "PreprocessingSpec",
     "Scale",
     "SobolResult",
@@ -59,6 +68,7 @@ __all__ = [
     "SumoError",
     "SumoInputError",
     "SumoResultError",
+    "UncertaintyResult",
     "VariableSpec",
     "compute_correlations",
     "cross_validate",
@@ -66,4 +76,6 @@ __all__ = [
     "evaluate_cv_metrics",
     "evaluate_grid",
     "evaluate_sobol",
+    "evaluate_uncertainty",
+    "optimize",
 ]

@@ -57,6 +57,58 @@ class DistributionSpec:
         return values
 
 
+Direction = Literal["minimize", "maximize"]
+
+
+@dataclass(frozen=True)
+class DomainSpec:
+    """Where a variable is allowed to be explored (not what its uncertainty is).
+
+    Optimization walks a domain looking for the best point; it does not need,
+    and MOGA specifically cannot use, a real-world uncertainty shape (SPEC
+    T27fr keeps this split explicit rather than overloading DistributionSpec).
+    """
+
+    minimum: float
+    maximum: float
+
+    def as_engine_dict(self) -> dict[str, float | str]:
+        return {"distribution": "uniform", "min": self.minimum, "max": self.maximum}
+
+
+@dataclass(frozen=True)
+class ParetoFrontResult:
+    """Pareto-optimal points from a multi-objective optimization."""
+
+    objectives: dict[str, Direction]
+    variables: tuple[str, ...]
+    data: dict[str, list[float]]
+
+
+@dataclass(frozen=True)
+class UncertaintyResult:
+    """Histogram and summary statistics from propagating explicit uncertainty
+    through a surrogate's own predictive uncertainty."""
+
+    response: str
+    distributions: dict[str, DistributionSpec]
+    seed: int
+    bins_start: float
+    bins_end: float
+    bin_means: list[float]
+    bin_stds: list[float]
+    q1: float
+    median: float
+    q3: float
+    whisker_min: float
+    whisker_max: float
+    outliers: list[float]
+    mean: float
+    std: float
+    minimum: float
+    maximum: float
+
+
 @dataclass(frozen=True)
 class SobolResult:
     """First-, total-, and second-order sensitivity indices."""

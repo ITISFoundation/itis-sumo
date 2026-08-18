@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -10,6 +11,7 @@ from itis_sumo.evaluate.funs_evaluate import (
     _parse_crossvalidation_outputlogs,
     evaluate_sumo_crossvalidation,
     retrieve_csv_result,
+    summarize_uncertainty_samples,
 )
 from itis_sumo.utils.helpers import create_run_dir
 
@@ -48,7 +50,9 @@ def test_parse_crossvalidation_outputlogs_empty_string():
     assert result == {}
 
 
-def test_evaluate_sumo_crossvalidation_parses_captured_dakota_stdout(tmp_path, monkeypatch):
+def test_evaluate_sumo_crossvalidation_parses_captured_dakota_stdout(
+    tmp_path, monkeypatch
+):
     """Regression test for B22 (V37): evaluate_sumo_crossvalidation must return the
     metrics parsed from the stdout `DakotaObject.run` actually captures to
     `dakota_stdout.txt`, not the metrics from a hardcoded empty string.
@@ -89,7 +93,9 @@ def test_evaluate_sumo_crossvalidation_parses_captured_dakota_stdout(tmp_path, m
     }
 
 
-def test_evaluate_sumo_crossvalidation_no_stdout_file_returns_empty(tmp_path, monkeypatch):
+def test_evaluate_sumo_crossvalidation_no_stdout_file_returns_empty(
+    tmp_path, monkeypatch
+):
     """If DakotaObject.run doesn't produce a stdout file, parsing degrades to {}
     rather than raising (mirrors the `stdout_file.is_file()` guard)."""
     training_file = tmp_path / "df_processed_jobs.dat"
@@ -109,7 +115,9 @@ def test_retrieve_csv_result_single_match(tmp_path):
     df = pd.DataFrame({"x": [1, 2, 3], "y": [10, 20, 30], "out": [100, 200, 300]})
     df.to_csv(csv_file, index=False)
 
-    result = retrieve_csv_result(str(csv_file), inputs={"x": 2, "y": 20}, outputs=["out"])
+    result = retrieve_csv_result(
+        str(csv_file), inputs={"x": 2, "y": 20}, outputs=["out"]
+    )
     assert result == {"out": 200}
 
 
@@ -145,3 +153,24 @@ def test_create_run_dir_creates_unique_directory(tmp_path):
     assert Path(dir2).is_dir()
     assert dir1 != dir2
     assert str(dir1).startswith(str(tmp_path / "runs"))
+
+
+class TestSummarizeUncertaintySamples:
+    def test_reports_mean_std_and_range_from_flattened_pool(self):
+        rng = np.random.default_rng(0)
+        values = rng.normal(loc=10.0, scale=2.0, size=(50, 500))
+
+        summary = summarize_uncertainty_samples(values)
+
+        assert summary["mean"] == pytest.approx(10.0, abs=0.2)
+        assert summary["std"] == pytest.approx(2.0, abs=0.2)
+        assert summary["bins_start"] < summary["q1"] < summary["median"] < summary["q3"]
+        assert len(summary["bin_means"]) == len(summary["bin_stds"])
+
+    def test_flags_far_outliers_beyond_the_whiskers(self):
+        values = np.full((10, 100), 5.0)
+        values[0, 0] = 500.0
+
+        summary = summarize_uncertainty_samples(values)
+
+        assert 500.0 in summary["outliers"] or summary["max"] == pytest.approx(500.0)

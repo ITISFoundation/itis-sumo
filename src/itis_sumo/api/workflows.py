@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from itis_sumo.api._session import SumoSession
+from itis_sumo.api._session import SumoSession, optimize_pareto_front
 from itis_sumo.api.errors import SumoInputError
 from itis_sumo.api.types import (
     DEFAULT_SEED,
@@ -27,10 +27,14 @@ from itis_sumo.api.types import (
     CorrelationResult,
     CrossValidationResult,
     CVAccuracyMetrics,
+    Direction,
     DistributionSpec,
+    DomainSpec,
     GridResult,
+    ParetoFrontResult,
     PreprocessingSpec,
     SobolResult,
+    UncertaintyResult,
 )
 from itis_sumo.data.funs_data_processing import compute_correlation_indices
 from itis_sumo.evaluate.funs_evaluate import compute_cv_accuracy_metrics
@@ -204,3 +208,58 @@ def evaluate_cv_metrics(
     )
     metrics = compute_cv_accuracy_metrics(result.observed, result.predicted)
     return CVAccuracyMetrics(response=response, seed=result.seed, **metrics)
+
+
+def evaluate_uncertainty(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    response: str,
+    *,
+    distributions: Mapping[str, DistributionSpec],
+    num_samples: int = 1000,
+    n_histograms: int = 100,
+    seed: int = DEFAULT_SEED,
+    preprocessing: PreprocessingSpec | None = None,
+    workspace: Path | None = None,
+) -> UncertaintyResult:
+    """Propagate explicit per-variable uncertainty through the surrogate.
+
+    Draws ``num_samples`` from ``distributions``, evaluates the surrogate once,
+    then repeats ``n_histograms`` times injecting the surrogate's own predictive
+    uncertainty, returning a histogram + boxplot summary in the response's
+    original units.
+    """
+    with SumoSession(
+        samples, variables, response, preprocessing=preprocessing, workspace=workspace
+    ) as session:
+        return session.fit().uncertainty(
+            distributions=distributions,
+            num_samples=num_samples,
+            n_histograms=n_histograms,
+            seed=seed,
+        )
+
+
+def optimize(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    objectives: Mapping[str, Direction],
+    *,
+    domains: Mapping[str, DomainSpec],
+    max_evaluations: int = 1000,
+    workspace: Path | None = None,
+) -> ParetoFrontResult:
+    """Find the Pareto-optimal trade-off front across one or more objectives.
+
+    Unlike the other workflows, this fits one surrogate per objective over a
+    domain (where exploration is allowed), not a real-world uncertainty
+    distribution -- MOGA cannot use anything but a uniform domain (SPEC T27fr).
+    """
+    return optimize_pareto_front(
+        samples,
+        variables,
+        objectives,
+        domains=domains,
+        max_evaluations=max_evaluations,
+        workspace=workspace,
+    )

@@ -18,6 +18,7 @@ import pytest
 
 from itis_sumo.api import (
     DistributionSpec,
+    DomainSpec,
     SumoInputError,
     compute_correlations,
     cross_validate,
@@ -25,6 +26,8 @@ from itis_sumo.api import (
     evaluate_cv_metrics,
     evaluate_grid,
     evaluate_sobol,
+    evaluate_uncertainty,
+    optimize,
 )
 
 pytestmark = pytest.mark.integration
@@ -196,3 +199,64 @@ class TestDiagnostics:
         assert result.seed == 7
         assert result.root_mean_squared >= 0.0
         assert result.mean_abs >= 0.0
+
+
+class TestUncertainty:
+    def test_propagates_uncertainty_in_original_units(self, samples):
+        distributions = {
+            "width": DistributionSpec("uniform", minimum=1.0, maximum=5.0),
+            "height": DistributionSpec("uniform", minimum=100.0, maximum=500.0),
+        }
+        result = evaluate_uncertainty(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=distributions,
+            num_samples=50,
+            n_histograms=10,
+            seed=7,
+        )
+        assert result.response == RESPONSE
+        assert result.seed == 7
+        assert result.bins_start < result.bins_end
+        assert result.q1 <= result.median <= result.q3
+        assert result.mean > 0.0
+        assert len(result.bin_means) == len(result.bin_stds)
+
+    def test_requires_a_distribution_for_each_variable(self, samples):
+        with pytest.raises(SumoInputError, match="cover variables exactly"):
+            evaluate_uncertainty(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions={"width": DistributionSpec("constant", value=2.0)},
+            )
+
+
+class TestOptimize:
+    def test_finds_a_pareto_front_over_the_domain(self, samples):
+        domains = {
+            "width": DomainSpec(minimum=WIDTH_RANGE[0], maximum=WIDTH_RANGE[1]),
+            "height": DomainSpec(minimum=HEIGHT_RANGE[0], maximum=HEIGHT_RANGE[1]),
+        }
+        result = optimize(
+            samples,
+            VARIABLES,
+            {RESPONSE: "minimize"},
+            domains=domains,
+            max_evaluations=200,
+        )
+        assert result.objectives == {RESPONSE: "minimize"}
+        assert set(result.data) >= {RESPONSE, "width", "height"}
+        assert min(result.data["width"]) >= WIDTH_RANGE[0] - 0.5
+        assert max(result.data["width"]) <= WIDTH_RANGE[1] + 0.5
+
+    def test_requires_a_domain_for_each_variable(self, samples):
+        with pytest.raises(SumoInputError, match="cover variables exactly"):
+            optimize(
+                samples,
+                VARIABLES,
+                {RESPONSE: "minimize"},
+                domains={"width": DomainSpec(minimum=1.0, maximum=5.0)},
+                max_evaluations=200,
+            )

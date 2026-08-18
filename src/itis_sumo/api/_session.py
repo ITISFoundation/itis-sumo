@@ -31,10 +31,14 @@ from itis_sumo.api.types import (
     AlongAxesResult,
     AxisSweep,
     CrossValidationResult,
+    Direction,
     DistributionSpec,
+    DomainSpec,
     GridResult,
+    ParetoFrontResult,
     PreprocessingSpec,
     SobolResult,
+    UncertaintyResult,
     VariableSpec,
 )
 from itis_sumo.evaluate.funs_evaluate import (
@@ -42,6 +46,9 @@ from itis_sumo.evaluate.funs_evaluate import (
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
+    perform_moga_optimization,
+    propagate_manual_uq_with_uncertainty,
+    summarize_uncertainty_samples,
 )
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
@@ -56,10 +63,22 @@ _logger = logging.getLogger(__name__)
 _STDERR_TAIL_LINES = 40
 
 
+def _stderr_tail(run_dir: Path | None) -> str:
+    if run_dir is None:
+        return ""
+    logs = sorted(
+        run_dir.rglob("dakota_stderr.txt"), key=lambda path: path.stat().st_mtime
+    )
+    if not logs:
+        return ""
+    lines = logs[-1].read_text(errors="replace").splitlines()
+    return "\n".join(lines[-_STDERR_TAIL_LINES:])
+
+
 def _validate_samples(
     samples: pd.DataFrame,
     variables: Sequence[str],
-    response: str,
+    responses: Sequence[str],
     spec: PreprocessingSpec,
 ) -> pd.DataFrame:
     """Reduce the caller's table to the columns in play, or explain why we can't.
@@ -75,18 +94,20 @@ def _validate_samples(
         )
     if not variables:
         raise SumoInputError("At least one variable is required")
-    if not response:
-        raise SumoInputError("A response is required")
+    if not responses:
+        raise SumoInputError("At least one response is required")
 
     duplicates = sorted({v for v in variables if list(variables).count(v) > 1})
     if duplicates:
         raise SumoInputError(f"Variables listed more than once: {duplicates}")
-    if response in variables:
-        raise SumoInputError(
-            f"'{response}' is listed as both a variable and the response"
-        )
+    response_duplicates = sorted({r for r in responses if list(responses).count(r) > 1})
+    if response_duplicates:
+        raise SumoInputError(f"Responses listed more than once: {response_duplicates}")
+    overlap = sorted(set(variables) & set(responses))
+    if overlap:
+        raise SumoInputError(f"{overlap} listed as both a variable and a response")
 
-    columns = [*variables, response]
+    columns = [*variables, *responses]
     missing = [column for column in columns if column not in samples.columns]
     if missing:
         raise SumoInputError(
@@ -159,7 +180,7 @@ class SumoSession:
         self._response = response
         self._spec = preprocessing or PreprocessingSpec()
         self._samples = _validate_samples(
-            samples, self._variables, self._response, self._spec
+            samples, self._variables, [self._response], self._spec
         )
         self._workspace = workspace
         self._run_dir: Path | None = None
@@ -389,6 +410,60 @@ class SumoSession:
             distributions=dict(distributions),
         )
 
+    def uncertainty(
+        self,
+        *,
+        distributions: Mapping[str, DistributionSpec],
+        num_samples: int,
+        n_histograms: int,
+        seed: int,
+    ) -> UncertaintyResult:
+        """Propagate explicit uncertainty through the surrogate's own predictive
+        uncertainty and summarise the result as a histogram + boxplot."""
+        missing = sorted(set(self._variables) - set(distributions))
+        unknown = sorted(set(distributions) - set(self._variables))
+        if missing or unknown:
+            raise SumoInputError(
+                f"Distributions must cover variables exactly; missing={missing}, "
+                f"unknown={unknown}"
+            )
+        engine_distributions = {
+            variable: spec.as_engine_dict() for variable, spec in distributions.items()
+        }
+        samples = self._run_engine(
+            "propagating uncertainty",
+            propagate_manual_uq_with_uncertainty,
+            self._run_dir,
+            self._training_file,
+            self._variables,
+            self._response,
+            engine_distributions,
+            self._preprocessor,
+            num_samples,
+            n_histograms=n_histograms,
+            seed=seed,
+        )
+        summary = summarize_uncertainty_samples(samples)
+        return UncertaintyResult(
+            response=self._response,
+            distributions=dict(distributions),
+            seed=seed,
+            bins_start=summary["bins_start"],
+            bins_end=summary["bins_end"],
+            bin_means=summary["bin_means"],
+            bin_stds=summary["bin_stds"],
+            q1=summary["q1"],
+            median=summary["median"],
+            q3=summary["q3"],
+            whisker_min=summary["whisker_min"],
+            whisker_max=summary["whisker_max"],
+            outliers=summary["outliers"],
+            mean=summary["mean"],
+            std=summary["std"],
+            minimum=summary["min"],
+            maximum=summary["max"],
+        )
+
     def _mapped_name(self, variable: str) -> str:
         assert self._preprocessor is not None
         return self._preprocessor.input_variables[variable].mapped_name
@@ -483,13 +558,98 @@ class SumoSession:
             ) from exc
 
     def _stderr_tail(self) -> str:
-        if self._run_dir is None:
-            return ""
-        logs = sorted(
-            self._run_dir.rglob("dakota_stderr.txt"),
-            key=lambda path: path.stat().st_mtime,
+        return _stderr_tail(self._run_dir)
+
+
+def optimize_pareto_front(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    objectives: Mapping[str, Direction],
+    *,
+    domains: Mapping[str, DomainSpec],
+    max_evaluations: int,
+    workspace: Path | None,
+) -> ParetoFrontResult:
+    """Fit a surrogate per objective and find its Pareto-optimal trade-off front."""
+    variables = tuple(variables)
+    missing_domains = sorted(set(variables) - set(domains))
+    unknown_domains = sorted(set(domains) - set(variables))
+    if missing_domains or unknown_domains:
+        raise SumoInputError(
+            f"Domains must cover variables exactly; missing={missing_domains}, "
+            f"unknown={unknown_domains}"
         )
-        if not logs:
-            return ""
-        lines = logs[-1].read_text(errors="replace").splitlines()
-        return "\n".join(lines[-_STDERR_TAIL_LINES:])
+
+    validated = _validate_samples(
+        samples, variables, list(objectives), PreprocessingSpec()
+    )
+
+    run_dir = (
+        create_run_dir(Path(workspace), "sumo")
+        if workspace is not None
+        else Path(tempfile.mkdtemp(prefix="itis-sumo-"))
+    )
+    try:
+        preprocessor = DataPreprocessor()
+        preprocessor.setup_variables(
+            input_vars=list(variables), output_vars=list(objectives)
+        )
+        maximize = [
+            response
+            for response, direction in objectives.items()
+            if direction == "maximize"
+        ]
+        if maximize:
+            preprocessor.setup_sign_switching(output_sign_switches=maximize)
+        transformed = preprocessor.fit_transform(validated)
+        training_file = run_dir / "processed_samples.dat"
+        transformed.to_csv(training_file, sep=" ", index=False)
+
+        mapped_variables = [
+            preprocessor.input_variables[variable].mapped_name for variable in variables
+        ]
+        mapped_objectives = [
+            preprocessor.output_variables[response].mapped_name
+            for response in objectives
+        ]
+        mapped_domains = {
+            preprocessor.input_variables[variable].mapped_name: spec.as_engine_dict()
+            for variable, spec in domains.items()
+        }
+
+        try:
+            results = perform_moga_optimization(
+                run_dir,
+                training_file,
+                mapped_variables,
+                mapped_domains,
+                mapped_objectives,
+                moga_kwargs={"max_function_evaluations": max_evaluations},
+            )
+        except Exception as exc:
+            raise SumoEngineError(
+                f"Dakota failed while optimizing the Pareto front: {exc}",
+                run_dir=run_dir,
+                stderr_tail=_stderr_tail(run_dir),
+            ) from exc
+
+        if not results:
+            raise SumoResultError("No Pareto front points were produced")
+
+        original = preprocessor.inverse_transform(results)
+        original_names = preprocessor.get_inverse_mapping()
+        data = {
+            original_names.get(mapped_name, mapped_name): [float(v) for v in values]
+            for mapped_name, values in original.items()
+        }
+        if workspace is None:
+            shutil.rmtree(run_dir, ignore_errors=True)
+        return ParetoFrontResult(
+            objectives=dict(objectives), variables=variables, data=data
+        )
+    except SumoError:
+        if workspace is None:
+            _logger.warning(
+                "itis-sumo run failed; run directory preserved at %s", run_dir
+            )
+        raise
