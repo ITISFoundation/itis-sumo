@@ -95,3 +95,5 @@ B4kt|2026-08-18|CI workflow-only changes were absent from `detect_changes`, so a
 B6nr|2026-08-18|the workflow regression test hard-coded a Dependabot-managed action version and failed on a valid setup-uv bump; CI already validates the workflow itself|remove tests/test_ci_workflow.py and rely on CI validation
 
 B7pv|2026-08-18|prek passed deleted Python paths from the workflow diff to Ruff, causing E902 after removing a test file|exclude deleted paths with `--diff-filter=d` before xargs
+
+B8lf|2026-08-18|the develop merge retained executable mode on changed `funs_evaluate.py`, so prek Ruff raised EXE002 for a Python file without a shebang|clear executable bit; existing V17ab catches changed-file Ruff violations
