@@ -27,3 +27,6 @@ runs/
 
 # Engine fork: nested git repo, versioned separately
 itis-dakota/
+
+# hatch-vcs generated version file
+src/itis_sumo/_version.py

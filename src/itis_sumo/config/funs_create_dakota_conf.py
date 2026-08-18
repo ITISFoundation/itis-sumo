@@ -105,6 +105,16 @@ def add_responses(descriptors: list[str]) -> str:
         """
 
 
+def infer_has_eval_id_column_from_filename(training_samples_file: str) -> bool:
+    """Legacy fallback for `add_surrogate_model`'s `has_eval_id_column`: guess
+    from the `"processed"` filename convention used by `process_input_file`'s
+    default suffix. Callers that know the file's real structure (e.g. because
+    they wrote or staged it themselves) should pass `has_eval_id_column`
+    explicitly instead of relying on this (SPEC V15zx, closes B2's root
+    cause for callers that do)."""
+    return "processed" not in training_samples_file
+
+
 def add_surrogate_model(
     id_model: str = "SURR_MODEL",
     surrogate_type: str = "gaussian_process surfpack",
@@ -114,6 +124,8 @@ def add_surrogate_model(
     training_samples_file: str | None = None,
     id_sampling_method: str | None = None,
     cross_validation_folds: int | None = None,
+    *,
+    has_eval_id_column: bool,
 ) -> str:
     conf = f"""
         model
@@ -157,7 +169,7 @@ def add_surrogate_model(
         conf += f"""
                 import_build_points_file
                     '{training_samples_file}'
-                    custom_annotated header use_variable_labels {"eval_id" if "processed" not in training_samples_file else ""}"""
+                    custom_annotated header use_variable_labels {"eval_id" if has_eval_id_column else ""}"""
 
         ### DONT KNOW HOW TO USE THIS YET
         # if id_truth_model is None:
@@ -204,7 +216,9 @@ def add_sampling_method(
         """
 
     if variance_based_decomp:
-        assert sampling_method == "lhs", "variance_based_decomp only available for LHS sampling"
+        assert sampling_method == "lhs", (
+            "variance_based_decomp only available for LHS sampling"
+        )
 
     if refinement:
         assert sampling_method == "lhs", "Refinement only available for LHS"
@@ -259,7 +273,9 @@ def add_moga_method(
     #####################################################
 ):
     if max_function_evaluations:
-        _logger.warning("Max Function Evaluations for MOGA is deprecated; will be ignored")
+        _logger.warning(
+            "Max Function Evaluations for MOGA is deprecated; will be ignored"
+        )
     return f"""
         method
             id_method = '{id_method}'
@@ -314,12 +330,21 @@ def create_sumo_evaluation_conffile(
     dakota_conf_file: str | Path | None = None,
     sumo_import_name: str | None = None,
     sumo_export_name: str | None = None,
+    export_import_format: str = "text_archive",
+    has_eval_id_column: bool | None = None,
 ) -> str:
     dakota_conf = start_dakota_file()
+    training_samples_file = str(build_file.resolve())
     dakota_conf += add_surrogate_model(
-        training_samples_file=str(build_file.resolve()),
+        training_samples_file=training_samples_file,
         sumo_export_name=sumo_export_name,
         sumo_import_name=sumo_import_name,
+        export_import_format=export_import_format,
+        has_eval_id_column=(
+            has_eval_id_column
+            if has_eval_id_column is not None
+            else infer_has_eval_id_column_from_filename(training_samples_file)
+        ),
     )
     dakota_conf += add_evaluation_method(str(samples_file.resolve()))
     dakota_conf += add_continuous_variables(variables=input_variables)
@@ -341,9 +366,18 @@ def create_uq_propagation_conffile(
     output_responses: list[str],
     n_samples: int = 10000,
     dakota_conf_file: str | Path | None = None,
+    has_eval_id_column: bool | None = None,
 ) -> str:
     dakota_conf = start_dakota_file()
-    dakota_conf += add_surrogate_model(training_samples_file=str(build_file.resolve()))
+    training_samples_file = str(build_file.resolve())
+    dakota_conf += add_surrogate_model(
+        training_samples_file=training_samples_file,
+        has_eval_id_column=(
+            has_eval_id_column
+            if has_eval_id_column is not None
+            else infer_has_eval_id_column_from_filename(training_samples_file)
+        ),
+    )
     dakota_conf += add_sampling_method(num_samples=n_samples)
     ## TODO this is only NORMAL uncertain -- need to generalize if we want to include other types of input distributions
     dakota_conf += f"""
@@ -369,11 +403,18 @@ def create_sumo_crossvalidation_conffile(
     output_responses: list[str],
     dakota_conf_file: str | Path | None = None,
     N_CROSS_VALIDATION=5,
+    has_eval_id_column: bool | None = None,
 ):
     dakota_conf = start_dakota_file()
+    training_samples_file = str(build_file.resolve())
     dakota_conf += add_surrogate_model(
-        training_samples_file=str(build_file.resolve()),
+        training_samples_file=training_samples_file,
         cross_validation_folds=N_CROSS_VALIDATION,
+        has_eval_id_column=(
+            has_eval_id_column
+            if has_eval_id_column is not None
+            else infer_has_eval_id_column_from_filename(training_samples_file)
+        ),
     )
     from itis_sumo.data.funs_data_processing import process_input_file
 
@@ -403,6 +444,7 @@ def create_sumo_manual_crossvalidation_conffile(
     output_response: str,
     validation_indices: list[int],
     dakota_conf_file: str | Path | None = None,
+    has_eval_id_column: bool | None = None,
 ):
     from itis_sumo.data.funs_data_processing import load_data, process_input_file
 
@@ -422,8 +464,14 @@ def create_sumo_manual_crossvalidation_conffile(
             str(fold_run_dir / TRAINING_SAMPLES_FILE.name),  # move to the fold run dir
         )
     )
+    training_samples_file = str(TRAINING_SAMPLES_FILE.resolve())
     dakota_conf += add_surrogate_model(
-        training_samples_file=str(TRAINING_SAMPLES_FILE.resolve()),
+        training_samples_file=training_samples_file,
+        has_eval_id_column=(
+            has_eval_id_column
+            if has_eval_id_column is not None
+            else infer_has_eval_id_column_from_filename(training_samples_file)
+        ),
     )
     JUST_INPUTS_FILE = process_input_file(
         build_file,
@@ -464,14 +512,27 @@ def create_moga_optimization_conffile(
     lower_bounds: list | None = None,
     upper_bounds: list | None = None,
     dakota_conf_file: str | Path | None = None,
+    has_eval_id_column: bool | None = None,
 ):
     dakota_conf = start_dakota_file()
-    dakota_conf += add_surrogate_model(training_samples_file=str(build_file.resolve()))
+    training_samples_file = str(build_file.resolve())
+    dakota_conf += add_surrogate_model(
+        training_samples_file=training_samples_file,
+        has_eval_id_column=(
+            has_eval_id_column
+            if has_eval_id_column is not None
+            else infer_has_eval_id_column_from_filename(training_samples_file)
+        ),
+    )
     dakota_conf += add_moga_method(**moga_kwargs)
     dakota_conf += add_continuous_variables(
         variables=input_variables,
-        lower_bounds=(lower_bounds if lower_bounds else [0.0 for _ in range(len(input_variables))]),
-        upper_bounds=(upper_bounds if upper_bounds else [1.0 for _ in range(len(input_variables))]),
+        lower_bounds=(
+            lower_bounds if lower_bounds else [0.0 for _ in range(len(input_variables))]
+        ),
+        upper_bounds=(
+            upper_bounds if upper_bounds else [1.0 for _ in range(len(input_variables))]
+        ),
     )
     dakota_conf += add_responses(descriptors=output_responses)
     # dakota_conf += add_python_interface("model", batch_mode=batch_mode)
@@ -479,4 +540,3 @@ def create_moga_optimization_conffile(
     if dakota_conf_file:
         write_to_file(dakota_conf, dakota_conf_file)
     return dakota_conf
-

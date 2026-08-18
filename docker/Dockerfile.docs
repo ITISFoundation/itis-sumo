@@ -1,0 +1,13 @@
+# Minimal image for `mkdocs serve` / `mkdocs build --strict`. Docs figures
+# are pre-generated PNGs committed under docs/assets/ (see Makefile's
+# docs-figures / docs-figures-nih-update targets) -- this image only needs
+# the `docs` dependency group, not the full itis_sumo package or Dakota.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir mkdocs>=1.6 mkdocs-material>=9.5
+
+WORKDIR /docs
+
+EXPOSE 8000
+
+CMD ["mkdocs", "serve", "-a", "0.0.0.0:8000"]

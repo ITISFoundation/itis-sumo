@@ -17,8 +17,18 @@ from itis_sumo.data.funs_data_processing import (
     process_input_file,
     sanitize_varnames,
 )
+from itis_sumo.data.funs_dataset_diagnostics import (
+    DatasetDiagnostics,
+    OutlierSummary,
+    VariableDiagnostics,
+    analyze_dataset,
+)
 
 __all__ = [
+    "DatasetDiagnostics",
+    "OutlierSummary",
+    "VariableDiagnostics",
+    "analyze_dataset",
     "compute_correlation_indices",
     "create_grid_samples",
     "create_manual_uq_samples",

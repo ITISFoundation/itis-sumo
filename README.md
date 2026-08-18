@@ -58,6 +58,7 @@ src/itis_sumo/
 
 ## Docs
 
+- Published docs: https://itisfoundation.github.io/itis-sumo/
 - [`SPEC.md`](SPEC.md) — living spec (goals, constraints, invariants, research, tasks)
 - [`PORTING.md`](PORTING.md) — port provenance per source repo/branch/commit
 - [`DAKOTA-STUBS.md`](DAKOTA-STUBS.md) — engine stubs, wheel build, regressions

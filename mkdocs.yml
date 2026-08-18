@@ -1,0 +1,70 @@
+site_name: itis-sumo
+site_description: Headless surrogate-modeling (SuMo) core — build, evaluate, cross-validate, and interrogate surrogate models
+repo_url: https://github.com/ITISFoundation/itis-sumo
+site_url: https://itisfoundation.github.io/itis-sumo/
+edit_uri: ""
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.integrate
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+extra_javascript:
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - Getting started: tutorials/getting-started.md
+      - Worked examples: tutorials/examples.md
+  - How-to guides:
+      - Cross-validate a surrogate: how-to/cross-validate.md
+      - Run a sensitivity analysis: how-to/sensitivity-analysis.md
+      - Find a Pareto front with MOGA: how-to/moga.md
+      - Preprocess data: how-to/preprocess.md
+  - Reference:
+      - Overview: reference/index.md
+      - Dakota engine core: reference/core.md
+      - Config (NIDR composers): reference/config.md
+      - Sampling: reference/sampling.md
+      - Surrogate evaluation & cross-validation: reference/evaluate.md
+      - Sensitivity (Sobol) & UQ propagation: reference/sensitivity-uq.md
+      - MOGA optimization: reference/moga.md
+      - Data preprocessing: reference/preprocess.md
+  - Explanation:
+      - Why surrogate modeling: explanation/surrogate-modeling.md
+      - How Gaussian Processes work: explanation/gaussian-processes.md
+  - About:
+      - Overview: about/index.md
+      - Provenance / Porting: about/porting.md
+      - Spec (living design doc): about/spec.md

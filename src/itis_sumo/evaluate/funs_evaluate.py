@@ -12,13 +12,16 @@ from scipy.stats import ttest_rel
 from sklearn.model_selection import KFold
 
 from itis_sumo.config.funs_create_dakota_conf import (
+    add_surrogate_model,
     create_moga_optimization_conffile,
     create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
     create_sumo_manual_crossvalidation_conffile,
     create_uq_propagation_conffile,
+    infer_has_eval_id_column_from_filename,
 )
 from itis_sumo.core.dakota_object import DakotaObject
+from itis_sumo.core.sumo_model_store import stage_model_for_import, store_exported_model
 from itis_sumo.data.funs_data_processing import (
     create_grid_samples,
     create_samples_along_axes,
@@ -47,7 +50,9 @@ def retrieve_csv_result(
 
     for col in inputs:
         if col not in df.columns:
-            raise ValueError(f"Input {col} not in the csv file. Columns are: {df.columns.values}")
+            raise ValueError(
+                f"Input {col} not in the csv file. Columns are: {df.columns.values}"
+            )
 
     if outputs is not None:
         for col in outputs:
@@ -121,7 +126,9 @@ def evaluate_sumo_along_axes(
     # run dakota
     dakobj = DakotaObject()
     dakobj.run(dakota_conf, run_dir)
-    results = extract_predictions_along_axes(run_dir, response_var, input_vars, NSAMPLESPERVAR)
+    results = extract_predictions_along_axes(
+        run_dir, response_var, input_vars, NSAMPLESPERVAR
+    )
     return results
 
 
@@ -163,7 +170,9 @@ def _parse_crossvalidation_outputlogs(log_output: str, N_CROSS_VALIDATION: int):
     variable_name_pattern = (
         rf"Surrogate quality metrics \({N_CROSS_VALIDATION}-fold CV\) for (\w+):"
     )
-    metrics_pattern = r"\s+(root_mean_squared|sum_abs|mean_abs|max_abs)\s+([\d.e+-]+|nan)"
+    metrics_pattern = (
+        r"\s+(root_mean_squared|sum_abs|mean_abs|max_abs)\s+([\d.e+-]+|nan)"
+    )
 
     # Find all occurrences of variable names in the log
     variables = re.findall(variable_name_pattern, log_output)
@@ -178,7 +187,9 @@ def _parse_crossvalidation_outputlogs(log_output: str, N_CROSS_VALIDATION: int):
     # Loop through the log parts, and extract metrics for each output variable
     for i, variable in enumerate(variables):
         # The log part after each variable name contains the metrics section for that variable
-        metrics_section = log_parts[2 * i + 1]  # The log part immediately after the variable name
+        metrics_section = log_parts[
+            2 * i + 1
+        ]  # The log part immediately after the variable name
 
         ## remove the training error of the next variable
         metrics_section = metrics_section.split("build (training) points")[0]
@@ -218,7 +229,9 @@ def evaluate_sumo_crossvalidation(
     # `dakobj.run` writes captured stdout to "dakota_stdout.txt" in run_dir (see DakotaObject.run)
     stdout_file = run_dir / "dakota_stdout.txt"
     log_output = stdout_file.read_text() if stdout_file.is_file() else ""
-    parsed_error_metrics = _parse_crossvalidation_outputlogs(log_output, N_CROSS_VALIDATION)
+    parsed_error_metrics = _parse_crossvalidation_outputlogs(
+        log_output, N_CROSS_VALIDATION
+    )
 
     return parsed_error_metrics
 
@@ -338,7 +351,9 @@ def evaluate_sumo_manual_crossvalidation(
                 )
             else:
                 var_eval_ids = variances_df["_eval_id"].astype(int).values
-                fold_var = variances_df[output_response + "_variance"].astype(float).values
+                fold_var = (
+                    variances_df[output_response + "_variance"].astype(float).values
+                )
                 for local_eval_id, var in zip(var_eval_ids, fold_var):
                     if not (1 <= local_eval_id <= len(val_idx)):
                         parse_warnings.append(
@@ -428,7 +443,9 @@ def compute_paired_ttest(
     return {"statistic": float(result.statistic), "p_value": float(result.pvalue)}
 
 
-def _convergence_subset_sizes(n_total: int, min_samples: int, max_points: int) -> list[int]:
+def _convergence_subset_sizes(
+    n_total: int, min_samples: int, max_points: int
+) -> list[int]:
     """Evenly-spaced, deduplicated subset sizes from `min_samples` up to `n_total`."""
     if n_total < min_samples:
         return []
@@ -516,7 +533,137 @@ def evaluate_sumo(
     dakobj.run(dakota_conf, run_dir)
 
     results = {
-        response_var + "_hat": get_results(run_dir / "predictions.dat", response_var).tolist()
+        response_var + "_hat": get_results(
+            run_dir / "predictions.dat", response_var
+        ).tolist()
+    }
+    if (run_dir / "variances.dat").is_file():
+        variances = get_results(run_dir / "variances.dat", response_var + "_variance")
+        results[response_var + "_std_hat"] = np.sqrt(variances).tolist()
+
+    return results
+
+
+def export_sumo_model(
+    run_dir: Path,
+    PROCESSED_TRAINING_FILE: Path,
+    PROCESSED_EVALUATION_SAMPLES_FILE: Path,
+    input_vars: list[str],
+    response_var: str,
+    export_format: str = "text_archive",
+) -> tuple[dict[str, list[float]], str]:
+    """Build+evaluate a SuMo surrogate and persist it to the model store (E1, T12).
+
+    Behaves like `evaluate_sumo` but also has Dakota export the trained
+    surrogate (`export_model`), then hands the resulting archive files off to
+    `sumo_model_store` under a freshly minted `sumo_model_id` (V12) -- callers
+    never choose the on-disk key.
+
+    Returns the usual `evaluate_sumo` predictions dict plus that `sumo_model_id`.
+    """
+    input_vars = sanitize_varnames(input_vars)
+    response_var = sanitize_varnames(response_var)
+    export_prefix = (
+        "export"  # internal Dakota-side prefix; the real key is sumo_model_id
+    )
+
+    dakota_conf = create_sumo_evaluation_conffile(
+        build_file=PROCESSED_TRAINING_FILE,
+        samples_file=PROCESSED_EVALUATION_SAMPLES_FILE,
+        input_variables=input_vars,
+        output_responses=[response_var],
+        sumo_export_name=export_prefix,
+        export_import_format=export_format,
+    )
+
+    dakobj = DakotaObject()
+    dakobj.run(dakota_conf, run_dir)
+
+    results = {
+        response_var + "_hat": get_results(
+            run_dir / "predictions.dat", response_var
+        ).tolist()
+    }
+    if (run_dir / "variances.dat").is_file():
+        variances = get_results(run_dir / "variances.dat", response_var + "_variance")
+        results[response_var + "_std_hat"] = np.sqrt(variances).tolist()
+
+    training_samples_file = str(PROCESSED_TRAINING_FILE.resolve())
+    surrogate_conf_block = add_surrogate_model(
+        sumo_export_name=export_prefix,
+        export_import_format=export_format,
+        training_samples_file=training_samples_file,
+        has_eval_id_column=infer_has_eval_id_column_from_filename(
+            training_samples_file
+        ),
+    )
+    sumo_model_id = store_exported_model(
+        run_dir=run_dir,
+        training_file=PROCESSED_TRAINING_FILE,
+        surrogate_conf_block=surrogate_conf_block,
+        input_descriptors=input_vars,
+        output_descriptor=response_var,
+        export_prefix=export_prefix,
+        export_format=export_format,
+    )
+
+    return results, sumo_model_id
+
+
+def import_sumo_model(
+    run_dir: Path,
+    sumo_model_id: str,
+    PROCESSED_EVALUATION_SAMPLES_FILE: Path,
+    input_vars: list[str],
+    response_var: str,
+) -> dict[str, list[float]]:
+    """Evaluate samples through a previously exported SuMo model (E1, T12).
+
+    No re-training / no training file from the caller: stages the stored
+    archive + the stored copy of the original training-data file into
+    `run_dir` (falling back to a synthesized header-only placeholder with a
+    loud warning if that copy is missing -- safe because R9 established the
+    surrogate is fully reconstructed from the archive; the points file's
+    values are never read back, only its descriptors matter), then runs
+    Dakota's `import_model` (V11: same surrogate-model conf block as at
+    export time, bar the export_model -> import_model swap -- the staged
+    file supplies the `import_build_points_file` keyword the block still
+    needs, R2).
+
+    Validates that `input_vars`/`response_var` (order-sensitive) match the
+    model's stored descriptors (V10) before evaluating, since Dakota's
+    archive formats are not proven to self-describe variable names/order (R8).
+    """
+    input_vars = sanitize_varnames(input_vars)
+    response_var = sanitize_varnames(response_var)
+
+    metadata, staged_training_file = stage_model_for_import(sumo_model_id, run_dir)
+    if (
+        input_vars != metadata.input_descriptors
+        or response_var != metadata.output_descriptor
+    ):
+        raise ValueError(
+            f"SuMo model '{sumo_model_id}' was exported with inputs "
+            f"{metadata.input_descriptors} / output '{metadata.output_descriptor}', "
+            f"but import was requested with inputs {input_vars} / output '{response_var}'"
+        )
+
+    dakota_conf = create_sumo_evaluation_conffile(
+        build_file=staged_training_file,
+        samples_file=PROCESSED_EVALUATION_SAMPLES_FILE,
+        input_variables=input_vars,
+        output_responses=[response_var],
+        sumo_import_name=sumo_model_id,
+        export_import_format=metadata.export_format,
+    )
+
+    dakobj = DakotaObject()
+    dakobj.run(dakota_conf, run_dir)
+
+    results = {
+        response_var + "_hat": get_results(
+            run_dir / "predictions.dat", response_var
+        ).tolist()
     }
     if (run_dir / "variances.dat").is_file():
         variances = get_results(run_dir / "variances.dat", response_var + "_variance")
@@ -592,12 +739,16 @@ def evaluate_sumo_on_grid(
     dakobj = DakotaObject()
     dakobj.run(dakota_conf, run_dir)
 
-    results = extract_predictions_gridpoints(run_dir, response_var, input_vars, NSAMPLESPERVAR)
+    results = extract_predictions_gridpoints(
+        run_dir, response_var, input_vars, NSAMPLESPERVAR
+    )
 
     if len(grid_vars) == 2:  ## this is not necessary for 3D
         output = np.array(results[response_var])
         reshape_indices = [
-            NPOINTSPERDIMENSION[i] for i in range(len(input_vars)) if input_vars[i] in grid_vars
+            NPOINTSPERDIMENSION[i]
+            for i in range(len(input_vars))
+            if input_vars[i] in grid_vars
         ]
         if grid_vars[0] in input_vars[:2] and grid_vars[1] in input_vars[:2]:
             ## reshape fills in row order. For some reason, this needs to be done reversed in XY / YX cases
@@ -632,7 +783,9 @@ def perform_moga_optimization(
     distributions = sanitize_varnames(distributions)
 
     # assumes uniform distribution for MOGA - raises Error otherwise
-    lower_bounds, upper_bounds = get_bounds_uniform_distributions(input_vars, distributions)
+    lower_bounds, upper_bounds = get_bounds_uniform_distributions(
+        input_vars, distributions
+    )
 
     # create dakota file
     dakota_conf = create_moga_optimization_conffile(
@@ -766,7 +919,9 @@ def evaluate_sobol_indices(
         if dist_type == "normal":
             ppfs[var] = norm(loc=dist_info["mean"], scale=dist_info["std"])
         elif dist_type == "uniform":
-            ppfs[var] = uniform(loc=dist_info["min"], scale=dist_info["max"] - dist_info["min"])
+            ppfs[var] = uniform(
+                loc=dist_info["min"], scale=dist_info["max"] - dist_info["min"]
+            )
         else:
             raise ValueError(f"Unsupported distribution type: {dist_type}")
 
@@ -795,8 +950,12 @@ def evaluate_sobol_indices(
     U_B = U[:, d_varying:]
 
     # Map through ppf to get real-space A and B
-    A = np.column_stack([ppfs[var].ppf(U_A[:, i]) for i, var in enumerate(varying_vars)])
-    B = np.column_stack([ppfs[var].ppf(U_B[:, i]) for i, var in enumerate(varying_vars)])
+    A = np.column_stack(
+        [ppfs[var].ppf(U_A[:, i]) for i, var in enumerate(varying_vars)]
+    )
+    B = np.column_stack(
+        [ppfs[var].ppf(U_B[:, i]) for i, var in enumerate(varying_vars)]
+    )
 
     # --- 4. Build AB_i matrices: A with column i replaced by B's column i ---
     # (Saltelli 2010 convention: AB_i uses B's values for variable i, A's for the rest)
@@ -828,7 +987,9 @@ def evaluate_sobol_indices(
     PROCESSED_SAMPLES_FILE = run_dir / "sobol_samples_processed.csv"
     df_samples_transformed.to_csv(PROCESSED_SAMPLES_FILE, sep=" ", index=False)
 
-    mapped_input_vars = [preprocessor.input_variables[var].mapped_name for var in input_vars]
+    mapped_input_vars = [
+        preprocessor.input_variables[var].mapped_name for var in input_vars
+    ]
     results = evaluate_sumo(
         run_dir,
         PROCESSED_TRAINING_FILE,
@@ -882,7 +1043,9 @@ def evaluate_sobol_indices(
             first_order_ci = np.array([[0.0, 0.0]])
             total_order_ci = np.array([[0.0, 0.0]])
         else:
-            cov_val = float(np.mean((fA_flat - fA_flat.mean()) * (fAB_flat - fAB_flat.mean())))
+            cov_val = float(
+                np.mean((fA_flat - fA_flat.mean()) * (fAB_flat - fAB_flat.mean()))
+            )
             first_order = np.array([cov_val / var_f])
             total_order = np.array([0.5 * np.mean((fA_flat - fAB_flat) ** 2) / var_f])
 
@@ -902,10 +1065,20 @@ def evaluate_sobol_indices(
                 boot_st[b] = 0.5 * np.mean((fa_b - fab_b) ** 2) / var_b
             alpha = (1 - SOBOL_BOOTSTRAP_CONFIDENCE) / 2
             first_order_ci = np.array(
-                [[np.percentile(boot_s1, 100 * alpha), np.percentile(boot_s1, 100 * (1 - alpha))]]
+                [
+                    [
+                        np.percentile(boot_s1, 100 * alpha),
+                        np.percentile(boot_s1, 100 * (1 - alpha)),
+                    ]
+                ]
             )
             total_order_ci = np.array(
-                [[np.percentile(boot_st, 100 * alpha), np.percentile(boot_st, 100 * (1 - alpha))]]
+                [
+                    [
+                        np.percentile(boot_st, 100 * alpha),
+                        np.percentile(boot_st, 100 * (1 - alpha)),
+                    ]
+                ]
             )
     else:
         si = sobol_indices(func={"f_A": f_A, "f_B": f_B, "f_AB": f_AB}, n=n)
@@ -913,7 +1086,8 @@ def evaluate_sobol_indices(
         first_order = np.atleast_1d(si.first_order)  # shape (d_varying,)
         total_order = np.atleast_1d(si.total_order)  # shape (d_varying,)
         boot = si.bootstrap(
-            confidence_level=SOBOL_BOOTSTRAP_CONFIDENCE, n_resamples=SOBOL_BOOTSTRAP_RESAMPLES
+            confidence_level=SOBOL_BOOTSTRAP_CONFIDENCE,
+            n_resamples=SOBOL_BOOTSTRAP_RESAMPLES,
         )
         first_order_ci = np.column_stack(
             [
@@ -937,7 +1111,9 @@ def evaluate_sobol_indices(
         higher_order = total_order - first_order  # U_k = S_Tk - S_k
         for ii in range(d_varying):
             for jj in range(ii + 1, d_varying):
-                other_sum = float(np.sum(higher_order) - higher_order[ii] - higher_order[jj])
+                other_sum = float(
+                    np.sum(higher_order) - higher_order[ii] - higher_order[jj]
+                )
                 s_ij = (float(higher_order[ii] + higher_order[jj]) - other_sum) / 2.0
                 var_a = varying_vars[ii]
                 var_b = varying_vars[jj]
@@ -992,7 +1168,9 @@ def evaluate_sobol_indices(
     for var_a, inner in sobol_second_order.items():
         for var_b, val in inner.items():
             if not np.isfinite(val):
-                raise ValueError(f"Second-order Sobol' index {var_a}:{var_b} is not finite: {val}")
+                raise ValueError(
+                    f"Second-order Sobol' index {var_a}:{var_b} is not finite: {val}"
+                )
 
     return {"sobol": sobol, "sobolSecondOrder": sobol_second_order}
 
