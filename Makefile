@@ -77,7 +77,7 @@ publish-testpypi-dev:
 	 cp pyproject.toml "$$backup"; \
 	 trap 'status=$$?; cp "$$backup" pyproject.toml; rm -f "$$backup"; exit "$$status"' EXIT; \
 	 set -a; . ./.env; set +a; test -n "$$TESTPYPI_TOKEN" || { echo "Set TESTPYPI_TOKEN in .env"; exit 1; }; \
-	 version=$$(uv run --no-project --with packaging python scripts/dev_version.py --write); \
+		 version=$$(uv run --no-project --with packaging --with tomli python scripts/dev_version.py --write); \
 	 echo "Publishing $$version to TestPyPI"; \
 	 rm -rf dist/; \
 	 uv build; \
