@@ -23,7 +23,12 @@ moga_kwargs = {
     "seed": 42,
 }
 pareto = perform_moga_optimization(
-    run_dir, training_file, ["length", "width"], distributions, ["y1"], moga_kwargs,
+    run_dir,
+    training_file,
+    ["length", "width"],
+    distributions,
+    ["y1"],
+    moga_kwargs,
 )
 # pareto["y1"] — objective values on the front
 # pareto["length"], pareto["width"] — the input points that produced them

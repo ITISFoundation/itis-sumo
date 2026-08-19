@@ -16,9 +16,15 @@ distributions = {
     "width": {"distribution": "uniform", "min": 0.0, "max": 1.0},
 }
 result = evaluate_sobol_indices(
-    run_dir, training_file, ["length", "width"], "y1", distributions, preprocessor, seed=42,
+    run_dir,
+    training_file,
+    ["length", "width"],
+    "y1",
+    distributions,
+    preprocessor,
+    seed=42,
 )
-sobol = result["sobol"]              # {var: {"main", "total", "main_ci_low", ...}}
+sobol = result["sobol"]  # {var: {"main", "total", "main_ci_low", ...}}
 second_order = result["sobolSecondOrder"]  # {varA: {varB: float}}
 
 for var, indices in sobol.items():

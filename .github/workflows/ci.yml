@@ -141,7 +141,12 @@ jobs:
           uv sync --all-extras --dev --python "${{ matrix.python-version }}"
           status=$?
           if [[ $status -ne 0 ]]; then
-            echo "::warning::Skipping Python ${{ matrix.python-version }}: dependencies do not currently resolve"
+            echo "::warning title=Python ${{ matrix.python-version }} not tested::Dependencies do not currently resolve; test steps were skipped."
+            {
+              echo "### Python ${{ matrix.python-version }}: tests skipped"
+              echo
+              echo "Dependencies do not currently resolve for this interpreter, so the test steps were skipped."
+            } >> "$GITHUB_STEP_SUMMARY"
             echo "compatible=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
