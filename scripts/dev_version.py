@@ -7,11 +7,11 @@ import argparse
 import json
 import re
 import subprocess
-import tomllib
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
+import tomllib
 from packaging.version import InvalidVersion, Version
 
 PROJECT_FILE = Path("pyproject.toml")
