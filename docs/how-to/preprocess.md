@@ -11,10 +11,11 @@ from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
 preprocessor = DataPreprocessor()
 preprocessor.setup_variables(
-    input_vars=["length", "width"], output_vars=["stress"],
+    input_vars=["length", "width"],
+    output_vars=["stress"],
 )  # length -> x1, width -> x2, stress -> y1
 
-preprocessor.fit(train_raw)                 # computes normalization stats, if any
+preprocessor.fit(train_raw)  # computes normalization stats, if any
 train_processed = preprocessor.transform(train_raw)
 train_processed.to_csv(training_file, sep=" ", index=False)
 ```
@@ -45,7 +46,7 @@ logged, not an exception).
 ## Bring predictions back to your own scale
 
 ```python
-predictions = {"y1": preds["y1_hat"]}   # mapped-name keys, as returned by evaluate_sumo
+predictions = {"y1": preds["y1_hat"]}  # mapped-name keys, as returned by evaluate_sumo
 original_scale = preprocessor.inverse_transform(predictions)
 # {"stress": [...]}  -- original name, denormalized/sign-restored
 ```
