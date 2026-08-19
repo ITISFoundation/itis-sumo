@@ -159,13 +159,17 @@ jobs:
         if: steps.resolve.outputs.compatible == 'true'
         run: uv run --python "${{ matrix.python-version }}" pytest -m "integration or analytical" --cov=src/itis_sumo --cov-append --cov-report=term-missing --cov-report=xml --cov-fail-under=70
 
-      - name: Upload coverage to Codecov
-        if: steps.resolve.outputs.compatible == 'true' && matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: true
-          disable_search: true
+      # Disabled: tokenless Codecov upload fails with "Token required because
+      # branch is protected" now that a ruleset protects develop/main, and
+      # CODECOV_TOKEN can only be provisioned by an ITISFoundation org admin.
+      # Re-enable once CODECOV_TOKEN is added as a repo secret (see issue).
+      # - name: Upload coverage to Codecov
+      #   if: steps.resolve.outputs.compatible == 'true' && matrix.python-version == '3.11'
+      #   uses: codecov/codecov-action@v5
+      #   with:
+      #     files: ./coverage.xml
+      #     fail_ci_if_error: true
+      #     disable_search: true
 
   docs:
     runs-on: ubuntu-latest
