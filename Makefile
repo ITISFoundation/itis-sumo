@@ -1,4 +1,4 @@
-.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck validate publish-testpypi publish-testpypi-dev clean
+.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck validate publish-testpypi-dev clean
 
 DOCS_PORT := 7777
 
@@ -15,7 +15,6 @@ help:
 	@echo "  format        - run ruff format"
 	@echo "  typecheck     - run ty check"
 	@echo "  validate      - run itis-sumo's Dakota engine probe"
-	@echo "  publish-testpypi - uv build + publish to TestPyPI (reads local .env)"
 	@echo "  publish-testpypi-dev - create and upload next .devN release to TestPyPI"
 	@echo "  clean         - remove build artifacts (site/, dist/, __pycache__)"
 
@@ -79,7 +78,7 @@ publish-testpypi-dev:
 	 rm -rf dist/; \
 	 uv build; \
 	 uvx twine check dist/*; \
-	 UV_PUBLISH_USERNAME=__token__ UV_PUBLISH_TOKEN="$$TESTPYPI_TOKEN" uv publish --index testpypi
+	 UV_PUBLISH_USERNAME=__token__ UV_PUBLISH_PASSWORD="$$TESTPYPI_TOKEN" uv publish --index testpypi
 
 clean:
 	rm -rf site/ dist/

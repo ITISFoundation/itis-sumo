@@ -4,14 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import tomllib
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 
 from packaging.version import InvalidVersion, Version
 
 PROJECT_FILE = Path("pyproject.toml")
+TESTPYPI_JSON_URL = "https://test.pypi.org/pypi/itis-sumo/json"
 VERSION_LINE = re.compile(r'^(version = ")([^"]+)(")$', re.MULTILINE)
 DEV_VERSION = re.compile(r"^(?P<base>.+)\.dev(?P<number>[0-9]+)$")
 
@@ -34,16 +38,39 @@ def existing_dev_versions(base: str) -> list[Version]:
     return versions
 
 
+def published_dev_versions(base: str) -> list[Version]:
+    try:
+        with urlopen(TESTPYPI_JSON_URL, timeout=10) as response:
+            releases = json.load(response).get("releases", {})
+    except HTTPError as error:
+        if error.code == 404:
+            return []
+        raise RuntimeError("Could not query TestPyPI release versions") from error
+    except (URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise RuntimeError("Could not query TestPyPI release versions") from error
+
+    versions: list[Version] = []
+    for release in releases:
+        try:
+            version = Version(release)
+        except InvalidVersion:
+            continue
+        match = DEV_VERSION.fullmatch(str(version))
+        if match and match.group("base") == base:
+            versions.append(version)
+    return versions
+
+
 def next_version() -> str:
     current = current_version()
     match = DEV_VERSION.fullmatch(current)
     base = match.group("base") if match else current
-    candidate = Version(f"{base}.dev1")
-    versions = existing_dev_versions(base)
-    if versions:
-        highest_number = max(int(DEV_VERSION.fullmatch(str(version)).group("number")) for version in versions)
-        candidate = Version(f"{base}.dev{highest_number + 1}")
-    return str(candidate)
+    versions = existing_dev_versions(base) + published_dev_versions(base)
+    highest_number = max(
+        (int(DEV_VERSION.fullmatch(str(version)).group("number")) for version in versions),
+        default=0,
+    )
+    return str(Version(f"{base}.dev{highest_number + 1}"))
 
 
 def write_version(version: str) -> None:

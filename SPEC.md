@@ -38,7 +38,7 @@ Consumer contract (grill 2026-08-18): itis-sumo owns ALL surrogate machinery end
 - release channel policy: feature branches → `.devN` (manual alpha/dev prereleases); `develop` → `aN`; `main` → `bN` until `1.0.0` graduation; version bump ! enforced by a PR-time CI check (target-branch suffix, PEP 440 order, ⊥ reuse/regression); ⊥ bot commit on `develop`/`main` (both branch-protected, no bypass granted); merge-time job ! push `v<version>` tag only (tags fall outside 'require PR' branch protection); `develop` may later rename `staging`
 - real PyPI publish + GitHub Release ! manual `workflow_dispatch` only (for now); CI builds/tests alpha/beta/rc versions; feature `.devN` versions publish locally via `make publish-testpypi-dev` + `.env` token, ⊥ CI/TestPyPI tag cascade
 - license ! itis-sumo currently private/pending quality review; adopt itis-dakota's license (IT'IS Foundation - All Rights Reserved) until an explicit public/OSS decision is made — MIT retracted as premature given itis-dakota (a required dependency) is itself proprietary
-- TestPyPI publish token ! local `.env` (gitignored) `TESTPYPI_TOKEN`; Make injects `UV_PUBLISH_USERNAME=__token__` + `UV_PUBLISH_TOKEN`; ⊥ committed, ⊥ required as a pre-exported shell var
+- TestPyPI publish token ! local `.env` (gitignored) `TESTPYPI_TOKEN`; Make injects `-t TESTPYPI_TOKEN`; ⊥ committed, ⊥ required as a pre-exported shell var
 - feature-branch TestPyPI local path ! `make publish-testpypi-dev` computes/writes next `.devN`, builds/checks/uploads via local `.env` token; ⊥ commit/tag/CI publication
 - E1: artifacts keyed server `sumo_model_id` (uuid); metadata sidecar `{id}.metadata.json`; ⊥ user-supplied path/prefix keys (traversal)
 - py ! 3.11 (match mmux/vite; 1.5.9 ships no cp313 wheel); 3.13 only via T16mo rung 1 (1.5.11 cp313) or rung 2 (6.24)
@@ -102,6 +102,7 @@ V35wk: `workflow_dispatch` publish ! validate input `tag` matches `v[0-9]*.[0-9]
 V36vp: itis-sumo LICENSE ! own IT'IS copyright/author notice; ⊥ copy itis-dakota attribution or Dakota-source LGPL paragraph
 V37bb: `.env` ! gitignored before token-based publish target lands; token never committed
 V38cc: `publish-testpypi-dev` ! clean worktree → compute/write next `.devN` → build/check/upload via `.env`; ⊥ commit/tag/CI publication
+V39qf: dev version selection ! max(existing git-tag `.devN`, published TestPyPI `.devN`) + 1; uv upload auth ! username `__token__` + password token; ⊥ reuse published version or pass username + token together
 
 ## §R
 R1: `export_model`/`import_model` child keywords; formats `text_archive`(.sps)/`binary_archive`(.bsps)/`algebraic_file`(.alg); naming `{prefix}.{resp}.{ext}` | branch R2
@@ -153,10 +154,11 @@ T34aa|✓|`make publish-testpypi-dev` ! source `TESTPYPI_TOKEN` from local `.env
 T35cc|✓|gate `publish`/`release` jobs behind explicit `workflow_dispatch`; `build`+`verify` stay CI-only for release tags; feature `.devN` uploads move to local Make target|V31vp,V32bb
 T36dd|✓|add `.env` to `.gitignore`; make `publish-testpypi` source `.env` without printing token, then build/check/publish|V37bb
 T37ef|✓|validate manual publish tag + artifact version before PyPI upload|V35wk
-T38dd|✓|make `publish-testpypi-dev` auto-compute/write `.devN`, build/check/upload directly to TestPyPI; CI verifies alpha/beta/rc before real PyPI; no dev tag cascade|V38cc
+T38dd|✓|make `publish-testpypi-dev` auto-compute/write `.devN`, build/check/upload directly to TestPyPI; CI verifies alpha/beta/rc before real PyPI; no dev tag cascade|V38cc,V39qf
 
 ## §B
 id|date|cause|fix
+B10rf|2026-08-19|local TestPyPI publish passed username + token to uv, which rejects that combination; dev counter scanned git tags only, so a previously uploaded `.dev1` was selected again|use `__token__` + password token and include TestPyPI JSON releases in next-version calculation|V39qf
 B1|2026-08-07|itis-dakota 6.23+ `Interface::interface_cache()` throws `IndexError: map::at` on interface-less surrogate confs (`study()` ctor, before `execute()`) — pure data-fit surrogates never instantiate an interface → static map missing entry (R5)|pin `==1.5.9` (Dakota 6.20, no cache) for flaskapi parity; ladder T16mo; upstream get-or-create fix
 B2|2026-08-07|E1 import round-trip: `add_surrogate_model` (`config/funs_create_dakota_conf.py`) decided whether the training file has a leading `eval_id` column purely from whether the substring `"processed"` appears in the training filename, not an explicit flag — staging the re-import training file as `{id}.training.dat` (T12ze) desynced Dakota's `use_variable_labels` column expectation from the actual CSV, surfacing as `Cannot reorder variables ... not a permutation of expected variable labels`|immediate: `sumo_model_store.py::_training_file_name` names both the stored and staged file `{id}.processed_training.dat`, preserving the substring; root-cause: `add_surrogate_model` heuristic replaced by explicit `has_eval_id_column` param, T17bq/V15zx (now ✓)
 B3|2026-08-18|CI `prek` job fails on PRs that touch unformatted `.py` files — ruff I001 (unsorted imports) + EXE002 (executable bit, no shebang) + ruff format violations in `funs_evaluate.py`, `funs_create_dakota_conf.py`, `test_property_invariants.py`, `generate_docs_figures.py`, `test_metamodeling_analytical.py`, `test_unit_solver.py` — pre-commit config dropped but ruff formatting not enforced repo-wide first|fix: `ruff check --fix` + `ruff format` all touched files + `chmod -x` executable bits; preventive: §V17ab invariant — ∀ `.py` file must pass `ruff check` + `ruff format --check`
