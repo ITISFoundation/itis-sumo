@@ -11,6 +11,9 @@ wheels/
 
 # Test cache
 .pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
 
 # Dakota run outputs
 runs/

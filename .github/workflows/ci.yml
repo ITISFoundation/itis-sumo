@@ -149,7 +149,7 @@ jobs:
 
       - name: Run unit tests
         if: steps.resolve.outputs.compatible == 'true'
-        run: uv run --python "${{ matrix.python-version }}" pytest -m "not integration and not analytical" --cov=src/itis_sumo --cov-report=term-missing --cov-report=xml
+        run: uv run --python "${{ matrix.python-version }}" pytest -m "not integration and not analytical" --cov=src/itis_sumo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
       - name: Upload coverage to Codecov
         if: steps.resolve.outputs.compatible == 'true' && matrix.python-version == '3.11'
