@@ -91,7 +91,9 @@ def get_dakota_version() -> str | None:
 def create_run_dir(script_dir: Path, dir_name: str = "sampling"):
     """Create a unique timestamped run directory under ``script_dir/runs``."""
     main_runs_dir = script_dir / "runs"
-    current_time = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d.%H%M%S%d")
+    current_time = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y%m%d.%H%M%S%d"
+    )
     uid = uuid.uuid4().hex
     temp_dir = main_runs_dir / f"dakota_{current_time}_{uid}_{dir_name}"
     os.makedirs(temp_dir, exist_ok=True)
