@@ -11,7 +11,10 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    import tomli as tomllib
 from packaging.version import InvalidVersion, Version
 
 PROJECT_FILE = Path("pyproject.toml")
