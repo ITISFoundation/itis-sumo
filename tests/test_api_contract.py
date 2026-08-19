@@ -108,6 +108,7 @@ class TestPublicSurface:
             }
             & parameters
         )
+
     @pytest.mark.parametrize("workflow", [cross_validate, evaluate_along_axes])
     def test_hides_dakota_file_plumbing(self, workflow):
         """SPEC §G: callers pass data and configuration, not file paths."""

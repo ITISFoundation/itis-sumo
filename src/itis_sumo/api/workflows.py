@@ -295,8 +295,7 @@ def generate_lhs_samples(
     design = _lhs(len(names), n_samples, seed=seed)
     return pd.DataFrame(
         {
-            name: design[:, i]
-            * (domains[name].maximum - domains[name].minimum)
+            name: design[:, i] * (domains[name].maximum - domains[name].minimum)
             + domains[name].minimum
             for i, name in enumerate(names)
         }
