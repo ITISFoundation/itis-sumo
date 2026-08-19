@@ -22,7 +22,9 @@ class TestComputeCorrelationIndices:
         x1 = rng.uniform(-1, 1, size=200)
         output = 3.0 * x1 + 2.0  # perfectly linear, positive correlation
 
-        correlations = compute_correlation_indices({"x1": x1.tolist()}, output.tolist(), ["x1"])
+        correlations = compute_correlation_indices(
+            {"x1": x1.tolist()}, output.tolist(), ["x1"]
+        )
 
         assert correlations["x1"]["pearson"] == pytest.approx(1.0, abs=1e-6)
         assert correlations["x1"]["spearman"] == pytest.approx(1.0, abs=1e-6)
@@ -33,7 +35,9 @@ class TestComputeCorrelationIndices:
         x1 = rng.uniform(-1, 1, size=200)
         output = -5.0 * x1 + 1.0
 
-        correlations = compute_correlation_indices({"x1": x1.tolist()}, output.tolist(), ["x1"])
+        correlations = compute_correlation_indices(
+            {"x1": x1.tolist()}, output.tolist(), ["x1"]
+        )
 
         assert correlations["x1"]["pearson"] == pytest.approx(-1.0, abs=1e-6)
         assert correlations["x1"]["spearman"] == pytest.approx(-1.0, abs=1e-6)
@@ -45,7 +49,9 @@ class TestComputeCorrelationIndices:
         x1 = rng.uniform(-1, 1, size=n)
         output = rng.uniform(-1, 1, size=n)  # independent of x1
 
-        correlations = compute_correlation_indices({"x1": x1.tolist()}, output.tolist(), ["x1"])
+        correlations = compute_correlation_indices(
+            {"x1": x1.tolist()}, output.tolist(), ["x1"]
+        )
 
         assert abs(correlations["x1"]["pearson"]) < 0.05
         assert abs(correlations["x1"]["spearman"]) < 0.05
@@ -90,7 +96,9 @@ class TestComputeCorrelationIndices:
     def test_missing_variable_raises(self):
         """Requesting a variable absent from input_samples raises ValueError."""
         with pytest.raises(ValueError, match="not found in input samples"):
-            compute_correlation_indices({"x1": [1.0, 2.0, 3.0]}, [1.0, 2.0, 3.0], ["x2"])
+            compute_correlation_indices(
+                {"x1": [1.0, 2.0, 3.0]}, [1.0, 2.0, 3.0], ["x2"]
+            )
 
     def test_mismatched_lengths_raises(self):
         """Input/output sample length mismatch raises ValueError."""
