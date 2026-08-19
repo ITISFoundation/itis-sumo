@@ -87,7 +87,7 @@ jobs:
                   "run",
                   "publish.yml",
                   "--ref",
-                  tag,
+                  branch,
                   "--field",
                   f"tag={tag}",
                   "--field",
