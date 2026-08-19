@@ -1,21 +1,25 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-dynamic = ["version"]
-description = "MetaModeling (Surrogate Model) core: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
+version = "0.1.0"
+description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "MIT" }
+# Tightened to itis-dakota==1.5.9's actual wheel matrix (PyPI ships cp310-
+# cp312 only, no cp313) -- the previous "<3.14" upper bound let uv/pip
+# attempt (and fail) to resolve itis-dakota on 3.13. Re-widen once T16mo
+# bumps the engine past 1.5.9 (rung 1: 1.5.11 adds cp313 wheels).
+requires-python = ">=3.10,<3.13"
+license = { file = "LICENSE" }
 authors = [
-    { name = "Javier Garcia Ordonez", email = "ordonez@zmt.swiss" },
+    { name = "Javier Garcia Ordonez", email = "ordonez@itis.swiss" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering",
@@ -25,11 +29,11 @@ dependencies = [
     # here until the 6.23+ `Interface::interface_cache()` regression on
     # interface-less surrogate confs is resolved (see SPEC §T T16mo ladder).
     "itis-dakota==1.5.9",
-    "numpy>=2.0",
-    "pandas>=2.2",
-    "pydantic>=2.0",
-    "scikit-learn>=1.6",
-    "scipy>=1.15",
+    "numpy>=2.0,<3.0",
+    "pandas>=2.2,<3.0",
+    "pydantic>=2.0,<3.0",
+    "scikit-learn>=1.6,<2.0",
+    "scipy>=1.15,<2.0",
 ]
 
 [project.urls]
@@ -41,18 +45,7 @@ Documentation = "https://itisfoundation.github.io/itis-sumo/"
 [project.scripts]
 itis-sumo = "itis_sumo.cli:main"
 
-[tool.hatch.version]
-source = "vcs"
-fallback-version = "0.1.0"
 
-[tool.hatch.build.hooks.vcs]
-version-file = "src/itis_sumo/_version.py"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/itis_sumo"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/itis_sumo/py.typed" = "itis_sumo/py.typed"
 
 [dependency-groups]
 dev = [
@@ -62,10 +55,16 @@ dev = [
     "ty>=0.0.72",
 ]
 docs = [
-    "mkdocs>=1.6",
+    "mkdocs>=1.6,<2.0",
     "mkdocs-material>=9.5",
-    "matplotlib>=3.8",
+    "matplotlib>=3.8,<4.0",
 ]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
