@@ -45,6 +45,21 @@ uv run python examples/headless_smoke.py   # surrogate -> CV -> Sobol
 
 ## Development
 
+### Code quality
+
+`ruff` (lint + format) and `ty` (type checking) run both at commit time and in
+CI. Install the local git hook once:
+
+```sh
+uvx prek install
+```
+
+Or run all hooks on demand without installing them:
+
+```sh
+make prek
+```
+
 ### Version channels and releases
 
 Package versions are single-sourced in `pyproject.toml`. Use these channels:
