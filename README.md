@@ -12,7 +12,7 @@ pure computation on top of the Dakota wheel.
 ## Engine
 
 - Runtime engine = the **PyPI wheel `itis-dakota==1.5.9`** (Dakota 6.20), pinned for
-  exact parity with the mmux/vite flaskapi engine, on **Python 3.11**.
+  exact parity with the mmux/vite flaskapi engine, on **Python 3.10-3.13** (3.10-3.12 currently install; 3.13 is exercised as a compatibility warning until itis-dakota publishes cp313 wheels).
 - The in-repo `itis-dakota/` checkout is the IT'IS Dakota fork, kept **for reference
   only** — this package consumes the pre-built wheels published to PyPI and
   **does not build the fork**.
@@ -37,7 +37,7 @@ deliberately not ported, and what remains as porting candidates — is in
 ## Install & verify
 
 ```sh
-uv sync                          # Python 3.11, resolves itis-dakota==1.5.9
+uv sync                          # Python 3.10-3.12 currently resolve itis-dakota==1.5.9
 uv run itis-sumo validate        # engine probe (expect: Version 1.5.9)
 uv run pytest                    # 123 tests, standalone
 uv run python examples/headless_smoke.py   # surrogate -> CV -> Sobol

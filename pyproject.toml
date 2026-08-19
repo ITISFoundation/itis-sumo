@@ -7,7 +7,7 @@ name = "itis-sumo"
 version = "0.1.0"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.14"
 license = { file = "LICENSE" }
 authors = [
     { name = "Javier Garcia Ordonez", email = "ordonez@itis.swiss" },
