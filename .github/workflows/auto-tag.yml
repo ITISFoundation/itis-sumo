@@ -1,0 +1,71 @@
+name: Tag prerelease
+
+# A merged develop/main commit supplies its own version. This workflow only
+# validates the channel and creates the matching git tag; it never commits.
+on:
+  push:
+    branches: [develop, main]
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "**/*.md"
+
+concurrency:
+  group: auto-tag-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag-merged-version:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Validate merged version and create tag
+        env:
+          GH_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          uv run --no-project --with packaging python - "$GH_REF_NAME" <<'PY'
+          import subprocess
+          import sys
+          import tomllib
+          from packaging.version import Version
+
+          branch = sys.argv[1]
+          with open("pyproject.toml", "rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+          candidate = Version(version)
+          expected = "a" if branch == "develop" else "b"
+          if candidate.pre is None or candidate.pre[0] != expected:
+              raise SystemExit(f"{branch} requires {expected} prerelease, found {version}")
+
+          tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).splitlines()
+          tagged_versions = []
+          for tag in tags:
+              try:
+                  tagged_versions.append((Version(tag.removeprefix("v")), tag))
+              except Exception:
+                  continue
+          higher = [(parsed, tag) for parsed, tag in tagged_versions if parsed >= candidate]
+          if higher:
+              details = ", ".join(f"{tag} ({parsed})" for parsed, tag in higher)
+              raise SystemExit(f"version {version} is not newer than existing tag(s): {details}")
+
+          tag = f"v{version}"
+          if subprocess.run(["git", "show-ref", "--tags", "--verify", f"refs/tags/{tag}"], capture_output=True).returncode == 0:
+              raise SystemExit(f"tag collision: {tag}")
+          subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
+          subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+          subprocess.run(["git", "tag", tag], check=True)
+          subprocess.run(["git", "push", "origin", tag], check=True)
+          print(f"created {tag}")
+          PY
