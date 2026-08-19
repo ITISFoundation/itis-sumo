@@ -60,7 +60,9 @@ def test_dak_exec_static_runs_study_and_captures_output(tmp_path, monkeypatch):
 def test_dakota_object_run_writes_stdout_and_stderr_files(tmp_path):
     dakobj_instance = DakotaObject()
     with patch.object(
-        dakobj_instance, "future_exec", return_value=("stdout content", "stderr content")
+        dakobj_instance,
+        "future_exec",
+        return_value=("stdout content", "stderr content"),
     ):
         dakobj_instance.run("dummy conf", tmp_path)
 
@@ -103,7 +105,9 @@ def _fake_study_constructor_failure(callback, input_string):
 
 def test_dak_exec_static_success_returns_captured_stdout(monkeypatch, tmp_path, capfd):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(dakobj.dakenv, "study", lambda callback, input_string: _FakeStudySuccess())
+    monkeypatch.setattr(
+        dakobj.dakenv, "study", lambda callback, input_string: _FakeStudySuccess()
+    )
 
     # Run via future_exec (ProcessPoolExecutor), matching production's call path.
     # pytest's own fd-level capture must be disabled around this call: it would
@@ -115,9 +119,13 @@ def test_dak_exec_static_success_returns_captured_stdout(monkeypatch, tmp_path, 
     assert stderr == ""
 
 
-def test_dak_exec_static_failure_raises_with_captured_diagnostics(monkeypatch, tmp_path, capfd):
+def test_dak_exec_static_failure_raises_with_captured_diagnostics(
+    monkeypatch, tmp_path, capfd
+):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(dakobj.dakenv, "study", lambda callback, input_string: _FakeStudyFailure())
+    monkeypatch.setattr(
+        dakobj.dakenv, "study", lambda callback, input_string: _FakeStudyFailure()
+    )
 
     with capfd.disabled(), pytest.raises(RuntimeError) as exc_info:
         dakobj.DakotaObject().future_exec(conf="dummy conf")

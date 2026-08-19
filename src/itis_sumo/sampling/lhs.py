@@ -210,7 +210,9 @@ def _lhsmu(n, k, corr=None, seed=None):
         if corr.shape[0] != corr.shape[1]:
             raise ValueError("Correlation matrix must be square")
         if corr.shape[0] != n:
-            raise ValueError("Correlation matrix dimensions must match number of variables")
+            raise ValueError(
+                "Correlation matrix dimensions must match number of variables"
+            )
 
         norm_u = stats.norm().ppf(rdpoints)
         L = linalg.cholesky(corr, lower=True)

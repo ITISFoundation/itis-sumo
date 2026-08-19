@@ -9,7 +9,10 @@ def test_capture_to_file_captures_real_fd_stdout_and_stderr(tmp_path):
     stdout_path = tmp_path / "stdout"
     stderr_path = tmp_path / "stderr"
 
-    with capture_to_file(stdout=str(stdout_path), stderr=str(stderr_path)) as (stdout, stderr):
+    with capture_to_file(stdout=str(stdout_path), stderr=str(stderr_path)) as (
+        stdout,
+        stderr,
+    ):
         assert stdout == str(stdout_path)
         assert stderr == str(stderr_path)
         # write directly to the real OS-level stdout/stderr fds (bypasses sys.stdout,

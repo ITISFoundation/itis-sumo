@@ -38,7 +38,9 @@ class TestDataPreprocessor:
 
         transformed = preprocessor.transform(dataframe)
         restored_from_dataframe = preprocessor.inverse_transform(transformed)
-        restored_from_dict = preprocessor.inverse_transform({"x1": [1.0, 2.0], "y1": [5.0, 7.0]})
+        restored_from_dict = preprocessor.inverse_transform(
+            {"x1": [1.0, 2.0], "y1": [5.0, 7.0]}
+        )
         restored_from_array = preprocessor.inverse_transform(transformed.to_numpy())
 
         expected = {"input": [1.0, 2.0], "output": [5.0, 7.0]}
@@ -50,9 +52,13 @@ class TestDataPreprocessor:
         preprocessor = DataPreprocessor()
         preprocessor.setup_variables(["a", "b", "c"], ["out_1", "out_2"])
         preprocessor.setup_normalization(input_normalizations={"b": "z_score"})
-        preprocessor.fit(pd.DataFrame({"a": [1], "b": [2], "c": [3], "out_1": [4], "out_2": [5]}))
+        preprocessor.fit(
+            pd.DataFrame({"a": [1], "b": [2], "c": [3], "out_1": [4], "out_2": [5]})
+        )
 
-        preprocessor.filter_variables(include_inputs=["b", "c"], include_outputs=["out_2"])
+        preprocessor.filter_variables(
+            include_inputs=["b", "c"], include_outputs=["out_2"]
+        )
         summary = preprocessor.get_summary()
 
         assert preprocessor.get_variable_mapping() == {
