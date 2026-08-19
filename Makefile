@@ -72,13 +72,17 @@ validate:
 publish-testpypi-dev:
 	@test -f .env || { echo "Create .env with TESTPYPI_TOKEN=pypi-..."; exit 1; }
 	@test -z "$$(git status --porcelain)" || { echo "Commit or stash changes before publishing"; exit 1; }
-	@set -a; . ./.env; set +a; test -n "$$TESTPYPI_TOKEN" || { echo "Set TESTPYPI_TOKEN in .env"; exit 1; }; \
+	@set -e; \
+	 backup=$$(mktemp); \
+	 cp pyproject.toml "$$backup"; \
+	 trap 'status=$$?; cp "$$backup" pyproject.toml; rm -f "$$backup"; exit "$$status"' EXIT; \
+	 set -a; . ./.env; set +a; test -n "$$TESTPYPI_TOKEN" || { echo "Set TESTPYPI_TOKEN in .env"; exit 1; }; \
 	 version=$$(uv run --no-project --with packaging python scripts/dev_version.py --write); \
 	 echo "Publishing $$version to TestPyPI"; \
 	 rm -rf dist/; \
 	 uv build; \
 	 uvx twine check dist/*; \
-	 UV_PUBLISH_USERNAME=__token__ UV_PUBLISH_PASSWORD="$$TESTPYPI_TOKEN" uv publish --index testpypi
+	 uv publish --index testpypi -t $$TESTPYPI_TOKEN
 
 clean:
 	rm -rf site/ dist/

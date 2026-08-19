@@ -79,12 +79,7 @@ For a feature-branch development release, commit your code changes and run:
 make publish-testpypi-dev
 ```
 
-This computes and writes the next `.devN` version, builds the package, checks its
-metadata, and uploads directly to TestPyPI using `TESTPYPI_TOKEN` from the
-local `.env`. It refuses a dirty worktree. This path intentionally does not create
-commits or tags and does not run CI, so broken development versions can be
-published quickly. Alpha, beta, and release-candidate versions remain gated by
-CI before real-PyPI publication.
+This temporarily writes the next `.devN` version for the build, checks the package, uploads directly to TestPyPI using `TESTPYPI_TOKEN` from the local `.env`, and restores `pyproject.toml` afterward, including when the command fails. It refuses a dirty worktree. This path intentionally does not create commits or tags and does not run CI, so broken development versions can be published quickly. Alpha, beta, and release-candidate versions remain gated by CI before real-PyPI publication.
 
 ## Package layout
 

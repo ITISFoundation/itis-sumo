@@ -102,7 +102,7 @@ V35wk: `workflow_dispatch` publish ! validate input `tag` matches `v[0-9]*.[0-9]
 V36vp: itis-sumo LICENSE ! own IT'IS copyright/author notice; ⊥ copy itis-dakota attribution or Dakota-source LGPL paragraph
 V37bb: `.env` ! gitignored before token-based publish target lands; token never committed
 V38cc: `publish-testpypi-dev` ! clean worktree → compute/write next `.devN` → build/check/upload via `.env`; ⊥ commit/tag/CI publication
-V39qf: dev version selection ! max(existing git-tag `.devN`, published TestPyPI `.devN`) + 1; uv upload auth ! username `__token__` + password token; ⊥ reuse published version or pass username + token together
+V39qf: dev version selection ! max(existing git-tag `.devN`, published TestPyPI `.devN`) + 1; uv upload auth ! username `__token__` + password token; dev target ! restore original `pyproject.toml` on exit; ⊥ reuse published version, pass username + token together, or leave `.devN` in project metadata
 
 ## §R
 R1: `export_model`/`import_model` child keywords; formats `text_archive`(.sps)/`binary_archive`(.bsps)/`algebraic_file`(.alg); naming `{prefix}.{resp}.{ext}` | branch R2
@@ -154,7 +154,7 @@ T34aa|✓|`make publish-testpypi-dev` ! source `TESTPYPI_TOKEN` from local `.env
 T35cc|✓|gate `publish`/`release` jobs behind explicit `workflow_dispatch`; `build`+`verify` stay CI-only for release tags; feature `.devN` uploads move to local Make target|V31vp,V32bb
 T36dd|✓|add `.env` to `.gitignore`; make `publish-testpypi` source `.env` without printing token, then build/check/publish|V37bb
 T37ef|✓|validate manual publish tag + artifact version before PyPI upload|V35wk
-T38dd|✓|make `publish-testpypi-dev` auto-compute/write `.devN`, build/check/upload directly to TestPyPI; CI verifies alpha/beta/rc before real PyPI; no dev tag cascade|V38cc,V39qf
+T38dd|✓|make `publish-testpypi-dev` auto-compute/write `.devN`, build/check/upload directly to TestPyPI, then restore project version; CI verifies alpha/beta/rc before real PyPI; no dev tag cascade|V38cc,V39qf
 
 ## §B
 id|date|cause|fix
