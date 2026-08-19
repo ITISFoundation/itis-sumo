@@ -17,6 +17,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -298,6 +299,7 @@ class SumoSession:
                 f"No axis sweeps were produced for response '{self._response}'"
             )
 
+        assert self._preprocessor is not None
         original_names = self._preprocessor.get_inverse_mapping()
         sweeps: dict[str, AxisSweep] = {}
         for mapped_variable, axis in results.items():
@@ -356,6 +358,7 @@ class SumoSession:
                 f"No grid predictions were produced for '{self._response}'"
             )
 
+        assert self._preprocessor is not None
         original_names = self._preprocessor.get_inverse_mapping()
         converted: dict[str, list[float] | list[list[float]]] = {}
         for mapped_name, values in results.items():
@@ -481,9 +484,9 @@ class SumoSession:
             or not values
             or not isinstance(values[0], list)
         ):
-            return self._to_original_units(mapped_name, values)  # type: ignore[arg-type]
+            return self._to_original_units(mapped_name, cast("Sequence[float]", values))
         return [
-            self._to_original_units(mapped_name, row)  # type: ignore[arg-type]
+            self._to_original_units(mapped_name, cast("Sequence[float]", row))
             for row in values
         ]
 

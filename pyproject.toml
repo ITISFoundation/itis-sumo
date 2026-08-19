@@ -54,7 +54,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.16.3",
     "ty>=0.0.72",
-    "tomli>=2.0; python_version < '3.11'",
+    "tomli>=2.0",
 ]
 docs = [
     "mkdocs>=1.6,<2.0",
@@ -67,6 +67,11 @@ name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 explicit = true
+
+[tool.ty.src]
+# examples/ needs the `docs` dependency group (matplotlib) which isn't part of
+# `--all-extras --dev`; it's exercised separately via `make docs-figures`.
+exclude = ["examples"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

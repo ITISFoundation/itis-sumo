@@ -178,7 +178,7 @@ class TestSampleValidation:
 
     def test_rejects_non_tabular_input(self):
         with pytest.raises(SumoInputError, match="DataFrame"):
-            cross_validate([{"width": 1.0}], VARIABLES, RESPONSE)
+            cross_validate([{"width": 1.0}], VARIABLES, RESPONSE)  # ty: ignore[invalid-argument-type]
 
     def test_rejects_unknown_columns(self):
         with pytest.raises(SumoInputError, match="not present"):
@@ -267,7 +267,7 @@ class TestResultShape:
     def test_results_are_immutable(self):
         sweep = AxisSweep(variable="width", x=[1.0], predicted=[2.0])
         with pytest.raises(dataclasses.FrozenInstanceError):
-            sweep.variable = "height"
+            sweep.variable = "height"  # ty: ignore[invalid-assignment]
 
 
 class TestWorkingFileLifetime:
@@ -276,6 +276,7 @@ class TestWorkingFileLifetime:
     def test_run_directory_is_discarded_when_nothing_goes_wrong(self):
         with SumoSession(make_samples(), VARIABLES, RESPONSE) as session:
             run_dir = session._run_dir
+            assert run_dir is not None
             assert run_dir.is_dir()
         assert not run_dir.exists()
 
@@ -286,6 +287,7 @@ class TestWorkingFileLifetime:
                 raise RuntimeError("engine exploded")
         except RuntimeError:
             pass
+        assert run_dir is not None
         assert run_dir.is_dir()
 
     def test_workspace_keeps_its_files(self, tmp_path):
@@ -293,6 +295,7 @@ class TestWorkingFileLifetime:
             make_samples(), VARIABLES, RESPONSE, workspace=tmp_path
         ) as session:
             run_dir = session._run_dir
+        assert run_dir is not None
         assert run_dir.is_dir()
         assert tmp_path in run_dir.parents
 

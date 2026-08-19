@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 try:
-    import tomllib
+    import tomllib  # ty: ignore[unresolved-import]
 except ModuleNotFoundError:  # Python < 3.11
     import tomli as tomllib
 from packaging.version import InvalidVersion, Version
@@ -69,13 +69,13 @@ def next_version() -> str:
     match = DEV_VERSION.fullmatch(current)
     base = match.group("base") if match else current
     versions = existing_dev_versions(base) + published_dev_versions(base)
-    highest_number = max(
-        (
-            int(DEV_VERSION.fullmatch(str(version)).group("number"))
-            for version in versions
-        ),
-        default=0,
-    )
+
+    def _dev_number(version: Version) -> int:
+        number_match = DEV_VERSION.fullmatch(str(version))
+        assert number_match is not None
+        return int(number_match.group("number"))
+
+    highest_number = max((_dev_number(version) for version in versions), default=0)
     return str(Version(f"{base}.dev{highest_number + 1}"))
 
 

@@ -172,7 +172,7 @@ def propagate_manual_uq_with_uncertainty(
     PROCESSED_TRAINING_FILE: Path,
     input_vars: list[str],
     output_response: str,
-    distributions: dict[str, dict[str, float]],
+    distributions: dict[str, dict[str, float | str]],
     preprocessor,
     num_samples: int,
     n_histograms: int = 100,
@@ -917,7 +917,7 @@ def perform_moga_optimization(
     run_dir: Path,
     PROCESSED_TRAINING_FILE: Path,
     input_vars: list[str],
-    distributions: dict[str, dict[str, float]],
+    distributions: dict[str, dict[str, float | str]],
     output_responses: list[str],
     moga_kwargs: dict,
 ) -> dict[str, list[float | int]]:

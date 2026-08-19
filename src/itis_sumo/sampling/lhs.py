@@ -183,7 +183,7 @@ def _lhsmu(n, k, corr=None, seed=None):
     rdpoints = seed.uniform(size=(n_candidates, n))
 
     dist = spatial.distance.cdist(rdpoints, rdpoints, metric="euclidean")
-    D_ij = ma.masked_array(dist, mask=np.identity(n_candidates))
+    D_ij = ma.masked_array(dist, mask=np.identity(n_candidates, dtype=bool))
 
     index_rm = np.zeros(n_candidates - k, dtype=int)
     i = 0

@@ -2,12 +2,14 @@ import io
 import json
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from types import TracebackType
 
 from packaging.version import Version
 
 _spec = spec_from_file_location(
     "dev_version", Path(__file__).parents[1] / "scripts/dev_version.py"
 )
+assert _spec is not None
 dev_version = module_from_spec(_spec)
 assert _spec.loader is not None
 _spec.loader.exec_module(dev_version)
@@ -17,7 +19,12 @@ class JsonResponse(io.BytesIO):
     def __enter__(self):
         return self
 
-    def __exit__(self, *_):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
 
