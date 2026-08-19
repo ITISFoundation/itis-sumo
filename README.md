@@ -58,9 +58,11 @@ existing git tags under PEP 440 ordering. After a non-docs merge to `develop` or
 `main`, CI creates the matching `v<version>` tag without committing back to the
 protected branch. Docs-only changes do not create tags.
 
-A matching tag automatically builds, tests, and publishes to TestPyPI. Real PyPI
+CI builds and tests alpha, beta, and release-candidate versions. Real PyPI
 publishing and GitHub Releases remain manual: use the `Publish` workflow's
-`workflow_dispatch` input with the existing tag after TestPyPI validation.
+`workflow_dispatch` input with the existing tag after validation. Feature-branch
+`.devN` versions use the fast local TestPyPI target below; they do not need tags
+or CI.
 
 ### Manual TestPyPI publishing
 
@@ -70,15 +72,6 @@ Create a local, gitignored `.env` file containing:
 TESTPYPI_TOKEN=pypi-your-testpypi-token
 ```
 
-For a local token-based upload, run:
-
-```sh
-make publish-testpypi
-```
-
-The target builds the wheel and source distribution, checks their metadata, and
-publishes them to TestPyPI. Never commit `.env` or expose its token in shell
-transcripts.
 
 For a feature-branch development release, commit your code changes and run:
 

@@ -69,14 +69,6 @@ typecheck:
 validate:
 	uv run itis-sumo validate
 
-publish-testpypi:
-	@test -f .env || { echo "Create .env with TESTPYPI_TOKEN=pypi-..."; exit 1; }
-	@set -a; . ./.env; set +a; test -n "$$TESTPYPI_TOKEN" || { echo "Set TESTPYPI_TOKEN in .env"; exit 1; }; \
-	 rm -rf dist/; \
-	 uv build; \
-	 uvx twine check dist/*; \
-	 uv publish --index testpypi
-
 
 publish-testpypi-dev:
 	@test -f .env || { echo "Create .env with TESTPYPI_TOKEN=pypi-..."; exit 1; }
@@ -87,7 +79,7 @@ publish-testpypi-dev:
 	 rm -rf dist/; \
 	 uv build; \
 	 uvx twine check dist/*; \
-	 uv publish --index testpypi
+	 UV_PUBLISH_USERNAME=__token__ UV_PUBLISH_TOKEN="$$TESTPYPI_TOKEN" uv publish --index testpypi
 
 clean:
 	rm -rf site/ dist/

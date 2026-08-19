@@ -38,7 +38,7 @@ Consumer contract (grill 2026-08-18): itis-sumo owns ALL surrogate machinery end
 - release channel policy: feature branches → `.devN` (manual alpha/dev prereleases); `develop` → `aN`; `main` → `bN` until `1.0.0` graduation; version bump ! enforced by a PR-time CI check (target-branch suffix, PEP 440 order, ⊥ reuse/regression); ⊥ bot commit on `develop`/`main` (both branch-protected, no bypass granted); merge-time job ! push `v<version>` tag only (tags fall outside 'require PR' branch protection); `develop` may later rename `staging`
 - real PyPI publish + GitHub Release ! manual `workflow_dispatch` only (for now); CI builds/tests alpha/beta/rc versions; feature `.devN` versions publish locally via `make publish-testpypi-dev` + `.env` token, ⊥ CI/TestPyPI tag cascade
 - license ! itis-sumo currently private/pending quality review; adopt itis-dakota's license (IT'IS Foundation - All Rights Reserved) until an explicit public/OSS decision is made — MIT retracted as premature given itis-dakota (a required dependency) is itself proprietary
-- TestPyPI publish token ! local `.env` (gitignored), sourced by `make publish-testpypi`; ⊥ committed, ⊥ required as a pre-exported shell var
+- TestPyPI publish token ! local `.env` (gitignored) `TESTPYPI_TOKEN`; Make injects `UV_PUBLISH_USERNAME=__token__` + `UV_PUBLISH_TOKEN`; ⊥ committed, ⊥ required as a pre-exported shell var
 - feature-branch TestPyPI local path ! `make publish-testpypi-dev` computes/writes next `.devN`, builds/checks/uploads via local `.env` token; ⊥ commit/tag/CI publication
 - E1: artifacts keyed server `sumo_model_id` (uuid); metadata sidecar `{id}.metadata.json`; ⊥ user-supplied path/prefix keys (traversal)
 - py ! 3.11 (match mmux/vite; 1.5.9 ships no cp313 wheel); 3.13 only via T16mo rung 1 (1.5.11 cp313) or rung 2 (6.24)
@@ -95,7 +95,7 @@ V28tz: CI ! block a PR into `develop`/`main` whose `pyproject.toml` version lack
 V29yn: tag-on-merge job (develop/main) ! push only a `v<version>` tag, ⊥ version-bump commit; skip docs-only diff; existing-tag collision ! hard failure, ⊥ force-overwrite
 V30wk: itis-sumo LICENSE + `pyproject.toml` license/classifiers ! match itis-dakota's (all-rights-reserved) until an explicit public/OSS decision is made; ⊥ an OSI classifier claiming otherwise
 V31vp: any CI job that installs a built artifact and runs pytest against it ! checkout source first (`tests/` isn't shipped in the wheel) — ⊥ silently "pass" via pytest's 0-collected exit code
-V32bb: PyPI publish + GitHub Release jobs (`publish`/`release` in `publish.yml`) ! gated behind explicit `workflow_dispatch`; ⊥ automatic cascade from a tag push. TestPyPI (`testpypi` job) stays automatic on any matching tag push
+V32bb: PyPI publish + GitHub Release jobs (`publish`/`release` in `publish.yml`) ! gated behind explicit `workflow_dispatch`; ⊥ automatic cascade from a tag push. Feature `.devN` TestPyPI upload ! local Make target + `.env` token; ⊥ CI publication
 V33tz: version check/tag job ! compare candidate version against highest existing tag via PEP 440 ordering; ⊥ emit version sorting lower than prior release channel/version
 V34yn: merge-time tag job ! re-check live `origin` tags; existing `v<version>` collision → hard failure; ⊥ force-overwrite
 V35wk: `workflow_dispatch` publish ! validate input `tag` matches `v[0-9]*.[0-9]*.[0-9]*` and built artifact version equals tag version before real PyPI upload
@@ -149,8 +149,8 @@ T30qa|✓|release/CI workflow refresh: build→TestPyPI automatic on tag push (�
 T31xx|✓|CI: PR-time check job (feature branch→`.devN`, target `develop`→`aN`, target `main`→`bN`) blocking merge if `pyproject.toml` version missing, regresses, or duplicates PEP 440 order vs existing tags|V28tz,V33tz
 T32yy|✓|replace `auto-tag.yml`'s commit-based bump w/ tag-only-at-merge (read already-bumped version from merged commit, re-check live tags, push `v<version>`, ⊥ commit) — removes need for branch-protection bypass|V29yn,V34yn
 T33zz|✓|swap itis-sumo LICENSE + `pyproject.toml` `license`/classifiers to match itis-dakota (IT'IS Foundation - All Rights Reserved); drop MIT classifier|V30wk
-T34aa|✓|`make publish-testpypi` ! source `TESTPYPI_TOKEN` from local `.env` (gitignored) instead of requiring a pre-exported shell var|§C
-T35cc|✓|gate `publish`/`release` jobs behind explicit `workflow_dispatch`; `build`+`testpypi` stay automatic on tag push; fixed `testpypi` job missing checkout (0 tests collected, exit 5) before it ever reached the publish step|V31vp,V32bb
+T34aa|✓|`make publish-testpypi-dev` ! source `TESTPYPI_TOKEN` from local `.env` (gitignored) instead of requiring a pre-exported shell var|§C
+T35cc|✓|gate `publish`/`release` jobs behind explicit `workflow_dispatch`; `build`+`verify` stay CI-only for release tags; feature `.devN` uploads move to local Make target|V31vp,V32bb
 T36dd|✓|add `.env` to `.gitignore`; make `publish-testpypi` source `.env` without printing token, then build/check/publish|V37bb
 T37ef|✓|validate manual publish tag + artifact version before PyPI upload|V35wk
 T38dd|✓|make `publish-testpypi-dev` auto-compute/write `.devN`, build/check/upload directly to TestPyPI; CI verifies alpha/beta/rc before real PyPI; no dev tag cascade|V38cc
