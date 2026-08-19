@@ -5,7 +5,9 @@ from pathlib import Path
 
 from packaging.version import Version
 
-_spec = spec_from_file_location("dev_version", Path(__file__).parents[1] / "scripts/dev_version.py")
+_spec = spec_from_file_location(
+    "dev_version", Path(__file__).parents[1] / "scripts/dev_version.py"
+)
 dev_version = module_from_spec(_spec)
 assert _spec.loader is not None
 _spec.loader.exec_module(dev_version)

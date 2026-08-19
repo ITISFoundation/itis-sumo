@@ -47,7 +47,9 @@ def _dak_exec_static(conf: str) -> tuple[str | None, str | None]:
         stderrstr = errf.read()
     del study
     if exec_error is not None:
-        diagnostics = "\n".join(s.strip() for s in (stdoutstr, stderrstr) if s and s.strip())
+        diagnostics = "\n".join(
+            s.strip() for s in (stdoutstr, stderrstr) if s and s.strip()
+        )
         message = f"Dakota execution failed: {exec_error}"
         if diagnostics:
             message = f"{message}\n--- Dakota stdout/stderr ---\n{diagnostics}"

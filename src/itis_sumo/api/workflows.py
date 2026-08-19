@@ -337,7 +337,9 @@ def generate_grid_samples(
             grid_vars=names,
             input_vars=names,
             mins=[domains[name].minimum for name in names],
-            cut_values=[(domains[name].minimum + domains[name].maximum) / 2 for name in names],
+            cut_values=[
+                (domains[name].minimum + domains[name].maximum) / 2 for name in names
+            ],
             maxs=[domains[name].maximum for name in names],
             n_points_per_dimension=[points_per_variable[name] for name in names],
         )

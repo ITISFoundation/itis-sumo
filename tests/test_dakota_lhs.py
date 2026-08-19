@@ -8,7 +8,17 @@ from itis_sumo.sampling.lhs import lhs
 
 @pytest.mark.parametrize(
     "method",
-    ["center", "c", "maximin", "m", "centermaximin", "cm", "correlation", "corr", "lhsmu"],
+    [
+        "center",
+        "c",
+        "maximin",
+        "m",
+        "centermaximin",
+        "cm",
+        "correlation",
+        "corr",
+        "lhsmu",
+    ],
 )
 def test_lhs_valid_methods_produce_correct_shape_and_bounds(method):
     n, k = 3, 10

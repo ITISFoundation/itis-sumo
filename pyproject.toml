@@ -7,7 +7,11 @@ name = "itis-sumo"
 version = "0.1.0"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+# Tightened to itis-dakota==1.5.9's actual wheel matrix (PyPI ships cp310-
+# cp312 only, no cp313) -- the previous "<3.14" upper bound let uv/pip
+# attempt (and fail) to resolve itis-dakota on 3.13. Re-widen once T16mo
+# bumps the engine past 1.5.9 (rung 1: 1.5.11 adds cp313 wheels).
+requires-python = ">=3.10,<3.13"
 license = { file = "LICENSE" }
 authors = [
     { name = "Javier Garcia Ordonez", email = "ordonez@itis.swiss" },

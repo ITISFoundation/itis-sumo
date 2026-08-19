@@ -16,7 +16,11 @@ from itis_sumo.evaluate.funs_evaluate import (
 )
 
 cv = evaluate_sumo_manual_crossvalidation(
-    run_dir, training_file, ["x1", "x2"], "y1", N_CROSS_VALIDATION=5,
+    run_dir,
+    training_file,
+    ["x1", "x2"],
+    "y1",
+    N_CROSS_VALIDATION=5,
 )
 # cv["y1"] is the held-out actual values, cv["y1_hat"] the CV predictions
 # (both length-N, NaN at any fold Dakota couldn't complete)

@@ -67,7 +67,10 @@ def next_version() -> str:
     base = match.group("base") if match else current
     versions = existing_dev_versions(base) + published_dev_versions(base)
     highest_number = max(
-        (int(DEV_VERSION.fullmatch(str(version)).group("number")) for version in versions),
+        (
+            int(DEV_VERSION.fullmatch(str(version)).group("number"))
+            for version in versions
+        ),
         default=0,
     )
     return str(Version(f"{base}.dev{highest_number + 1}"))
@@ -83,7 +86,9 @@ def write_version(version: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write", action="store_true", help="write the next version to pyproject.toml")
+    parser.add_argument(
+        "--write", action="store_true", help="write the next version to pyproject.toml"
+    )
     args = parser.parse_args()
     version = next_version()
     if args.write:

@@ -12,8 +12,8 @@ and inverse transforms.
 from itis_sumo.api import cross_validate
 
 result = cross_validate(samples, variables=["width", "height"], response="stress")
-result.predicted      # one value per sample, in the units of `stress`
-result.warnings       # anything that went wrong but did not stop the run
+result.predicted  # one value per sample, in the units of `stress`
+result.warnings  # anything that went wrong but did not stop the run
 ```
 
 The vocabulary is the one defined in the [Glossary](glossary.md): a **sample** is a row,
