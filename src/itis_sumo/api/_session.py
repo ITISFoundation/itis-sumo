@@ -12,14 +12,19 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sys
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
-from typing import Self
 
 import numpy as np
 import pandas as pd
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 from itis_sumo.api.errors import (
     SumoEngineError,
