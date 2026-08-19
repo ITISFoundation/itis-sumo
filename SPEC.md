@@ -34,7 +34,7 @@ Consumer contract (grill 2026-08-18): itis-sumo owns ALL surrogate machinery end
 - recycle itis_dakota_projects: `validate_dakota_installation()`, `get_dakota_version()`, `validate` CLI, config sanity-guard; ⊥ subprocess `DakotaProject`/factory/generator/parser/activity-logger
 - deps ! itis-dakota==1.5.9 (Dakota 6.20, parity w/ mmux/vite; stay until T16mo resolves the 6.23+ `interface_cache` regression — R5), numpy, pandas, scipy; scikit-learn ⊥ KFold only
 - py.typed; `src/` layout; docs MkDocs + headless notebook; tests standalone ⊥ flask/osparc
-- versioning single-source; uv + pip-compile pins; Conventional Commits
+- versioning single-source in `[project].version`; uv/uv_build + pip-compile pins; Conventional Commits
 - E1: artifacts keyed server `sumo_model_id` (uuid); metadata sidecar `{id}.metadata.json`; ⊥ user-supplied path/prefix keys (traversal)
 - py ! 3.11 (match mmux/vite; 1.5.9 ships no cp313 wheel); 3.13 only via T16mo rung 1 (1.5.11 cp313) or rung 2 (6.24)
 - cross-repo call surface ! narrow, versioned, "deep" entrypoints — one stitched public function per feature (e.g. `analyze_dataset()`), ⊥ flaskapi orchestrating several itis-sumo internals itself; version-pinning itis-sumo is fine (same pattern as the itis-dakota engine pin, T16mo) — the coupling risk is a *wide* call surface, not the pin
@@ -128,7 +128,8 @@ T25dp|.|`itis_sumo.api`: remaining 6 workflows (UQ-w-uncertainty incl. the ~120-
 T26eq|.|POST-PORT: extract the fitted-model handle (`fit()` → methods → `save()`/`load()`); carries the fitted preprocessing config ⇒ closes the E1 gap (model store persists archive+metadata+training copy but ⊥ preprocessor config, so a reloaded model cannot inverse-transform to original units)|V27fq,V10jk
 T27fr|.|POST-PORT: split `domain` vs `distribution` config + consumer migration; absorb the mmux_vite `jgo/fullstack-logscale` work|V26dd
 T28gs|.|POST-PORT `?`: decide whether `distribution` gets an auto-generated default — explicit discussion required, ⊥ silently defaulted|§C `?`
-T29hw|~|`publish.yml` tag trigger widened to accept PEP 440 prereleases ✓; tagging `v0.1.0a1` BLOCKED on the one-time PyPI Trusted Publisher config (user action), then clean-venv install + `itis-sumo validate` + headless smoke|T1pw
+T29hw|~|`publish.yml` tag trigger accepts `v`-prefixed PEP 440 prereleases ✓; tagging `v0.1.0a1` BLOCKED on the one-time PyPI Trusted Publisher config (user action), then clean-venv install + `itis-sumo validate` + headless smoke|T1pw
+T30qa|.|release/CI workflow refresh: adopt auto-tag on `main` push, add build→artifact-install test→TestPyPI→PyPI staging, keep git-cliff release notes, add dependency-review + concurrency; skip weekly cron/healthchecks for now|§C,V17rt
 
 ## §B
 id|date|cause|fix

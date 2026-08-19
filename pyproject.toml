@@ -1,11 +1,11 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-dynamic = ["version"]
-description = "MetaModeling (Surrogate Model) core: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
+version = "0.1.0a1"
+description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -25,11 +25,11 @@ dependencies = [
     # here until the 6.23+ `Interface::interface_cache()` regression on
     # interface-less surrogate confs is resolved (see SPEC §T T16mo ladder).
     "itis-dakota==1.5.9",
-    "numpy>=2.0",
-    "pandas>=2.2",
-    "pydantic>=2.0",
-    "scikit-learn>=1.6",
-    "scipy>=1.15",
+    "numpy>=2.0,<3.0",
+    "pandas>=2.2,<3.0",
+    "pydantic>=2.0,<3.0",
+    "scikit-learn>=1.6,<2.0",
+    "scipy>=1.15,<2.0",
 ]
 
 [project.urls]
@@ -41,18 +41,7 @@ Documentation = "https://itisfoundation.github.io/itis-sumo/"
 [project.scripts]
 itis-sumo = "itis_sumo.cli:main"
 
-[tool.hatch.version]
-source = "vcs"
-fallback-version = "0.1.0"
 
-[tool.hatch.build.hooks.vcs]
-version-file = "src/itis_sumo/_version.py"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/itis_sumo"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/itis_sumo/py.typed" = "itis_sumo/py.typed"
 
 [dependency-groups]
 dev = [
@@ -62,9 +51,9 @@ dev = [
     "ty>=0.0.72",
 ]
 docs = [
-    "mkdocs>=1.6",
+    "mkdocs>=1.6,<2.0",
     "mkdocs-material>=9.5",
-    "matplotlib>=3.8",
+    "matplotlib>=3.8,<4.0",
 ]
 
 [tool.pytest.ini_options]
