@@ -27,7 +27,12 @@ def make_training_data(n: int = N_TRAINING_SAMPLES) -> pd.DataFrame:
     rng = np.random.default_rng(SEED)
     length = rng.uniform(0.0, 1.0, size=n)
     width = rng.uniform(0.0, 1.0, size=n)
-    stress = 3.0 * length + 2.0 * width**2 + 0.5 * np.sin(10.0 * length) + rng.normal(0, 0.05, n)
+    stress = (
+        3.0 * length
+        + 2.0 * width**2
+        + 0.5 * np.sin(10.0 * length)
+        + rng.normal(0, 0.05, n)
+    )
     return pd.DataFrame({"length": length, "width": width, "stress": stress})
 
 
@@ -46,9 +51,7 @@ def main() -> int:
 
     # --- 1. Surrogate evaluation on a grid ---
     grid = np.meshgrid(np.linspace(0.0, 1.0, 5), np.linspace(0.0, 1.0, 5))
-    grid_raw = pd.DataFrame(
-        {"length": grid[0].ravel(), "width": grid[1].ravel()}
-    )
+    grid_raw = pd.DataFrame({"length": grid[0].ravel(), "width": grid[1].ravel()})
     grid_processed = preprocessor.transform(grid_raw)
     eval_samples_file = run_dir / "eval_samples.dat"
     grid_processed.to_csv(eval_samples_file, sep=" ", index=False)
@@ -62,8 +65,10 @@ def main() -> int:
     )
     y_hat = np.asarray(preds["y1_hat"])
     assert len(y_hat) == len(grid_raw), "grid evaluation count mismatch"
-    print(f"[1/3] surrogate grid evaluation OK ({len(y_hat)} points, "
-          f"pred range [{y_hat.min():.3f}, {y_hat.max():.3f}])")
+    print(
+        f"[1/3] surrogate grid evaluation OK ({len(y_hat)} points, "
+        f"pred range [{y_hat.min():.3f}, {y_hat.max():.3f}])"
+    )
 
     # --- 2. Cross-validation quality metrics ---
     cv_metrics = evaluate_sumo_crossvalidation(

@@ -28,8 +28,8 @@ from itis_sumo.evaluate.funs_evaluate import evaluate_sumo
 
 # x_train: 9 points, y_train = sin(x_train), written as a Dakota training file
 result = evaluate_sumo(run_dir, train_file, eval_file, ["x"], "y")
-y_hat = result["y_hat"]        # posterior mean, μ(x)
-y_std = result["y_std_hat"]    # posterior std, σ(x) — V8df in SPEC.md
+y_hat = result["y_hat"]  # posterior mean, μ(x)
+y_std = result["y_std_hat"]  # posterior std, σ(x) — V8df in SPEC.md
 ```
 
 ![GP surrogate mean prediction and 95% uncertainty band on sin(x), fit from 9 training points](../assets/examples/gp_fit_uncertainty.png)
@@ -53,8 +53,12 @@ argues that training-point placement matters as much as training-point count.
 ```python
 from itis_sumo.sampling.lhs import lhs
 
-lhs_pts = lhs(2, 25, method="maximin", seed=42)   # stratified: one draw per 1/25 bin, per axis
-rand_pts = rng.uniform(0.0, 1.0, size=(25, 2))     # i.i.d. uniform — no stratification guarantee
+lhs_pts = lhs(
+    2, 25, method="maximin", seed=42
+)  # stratified: one draw per 1/25 bin, per axis
+rand_pts = rng.uniform(
+    0.0, 1.0, size=(25, 2)
+)  # i.i.d. uniform — no stratification guarantee
 ```
 
 ![Scatter comparison: 25 plain-random points show visible clustering and gaps; 25 Latin Hypercube points spread evenly across both marginals](../assets/examples/lhs_vs_random.png)

@@ -24,6 +24,7 @@ from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.core.sumo_model_store import stage_model_for_import, store_exported_model
 from itis_sumo.data.funs_data_processing import (
     create_grid_samples,
+    create_manual_uq_samples,
     create_samples_along_axes,
     extract_predictions_along_axes,
     extract_predictions_gridpoints,
@@ -31,9 +32,7 @@ from itis_sumo.data.funs_data_processing import (
     get_results,
     load_data,
     process_input_file,
-    sanitize_varname,
     sanitize_varnames,
-    sanitize_varnames_dict,
 )
 
 _logger = logging.getLogger(__name__)
@@ -81,6 +80,7 @@ def evaluate_sumo_along_axes(
     sumo_import_name: str | None = None,
     sumo_export_name: str | None = None,
     NSAMPLESPERVAR: int = 21,
+    has_eval_id_column: bool | None = None,
     xscale: Literal["linear", "log"] = "linear",
     yscale: Literal["linear", "log"] = "linear",
     label_converter: Callable | None = None,
@@ -121,6 +121,7 @@ def evaluate_sumo_along_axes(
         samples_file=PROCESSED_SWEEP_INPUT_FILE,
         input_variables=input_vars,
         output_responses=[response_var],
+        has_eval_id_column=has_eval_id_column,
     )
 
     # run dakota
@@ -164,6 +165,147 @@ def propagate_uq(
     dakobj.run(dakota_conf, run_dir)
     x = get_results(run_dir / "predictions.dat", output_response)
     return x.tolist()
+
+
+def propagate_manual_uq_with_uncertainty(
+    run_dir: Path,
+    PROCESSED_TRAINING_FILE: Path,
+    input_vars: list[str],
+    output_response: str,
+    distributions: dict[str, dict[str, float]],
+    preprocessor,
+    num_samples: int,
+    n_histograms: int = 100,
+    seed: int = 42,
+) -> np.ndarray:
+    """Propagate explicit per-variable uncertainty through a surrogate's own
+    predictive uncertainty.
+
+    Draws ``num_samples`` per-variable samples from ``distributions`` (uniform /
+    normal / constant, in the caller's original units), evaluates the surrogate
+    once, then injects the surrogate's predictive std via the erfinv trick
+    (``sqrt(2) * erfinv(U) ~ N(0, 1)`` for ``U ~ Uniform(-1, 1)``), repeated
+    ``n_histograms`` times to characterise realisation-to-realisation spread.
+
+    This mirrors the historical ``/manual_uq_propagation_with_uncertainty``
+    Flask route rather than ``propagate_uq`` (Dakota-native, normal-only, no
+    predictive-uncertainty injection) -- see test_metamodeling_analytical.py.
+
+    Returns:
+        A ``(n_histograms, num_samples)`` array of propagated output samples,
+        already inverse-transformed to the caller's original units.
+    """
+    from scipy.special import erfinv
+
+    # NOTE: input_vars/output_response/distributions must stay in the caller's
+    # original (unsanitized) form here -- preprocessor.input_variables and
+    # preprocessor.output_variables are keyed by original names (the
+    # preprocessor is fit before any sanitization happens), and
+    # preprocessor.transform() looks samples up by those same original column
+    # names. Sanitizing eagerly breaks both lookups for any var name containing
+    # characters sanitize_varnames rewrites. Dakota-safe names are obtained
+    # correctly below via preprocessor.input_variables[var].mapped_name.
+    samples = create_manual_uq_samples(input_vars, distributions, num_samples, seed)
+    df_samples = pd.DataFrame(samples)
+    SAMPLES_FILE = run_dir / "manual_uq_samples.csv"
+    df_samples.to_csv(SAMPLES_FILE, index=False)
+
+    df_samples_transformed = preprocessor.transform(df_samples)
+    PROCESSED_SAMPLES_FILE = run_dir / "manual_uq_samples_processed.csv"
+    df_samples_transformed.to_csv(PROCESSED_SAMPLES_FILE, sep=" ", index=False)
+
+    mapped_input_vars = [
+        preprocessor.input_variables[var].mapped_name for var in input_vars
+    ]
+    mapped_response = preprocessor.output_variables[output_response].mapped_name
+    results = evaluate_sumo(
+        run_dir,
+        PROCESSED_TRAINING_FILE,
+        PROCESSED_SAMPLES_FILE,
+        mapped_input_vars,
+        mapped_response,
+    )
+
+    prediction_key = mapped_response + "_hat"
+    uncertainty_key = mapped_response + "_std_hat"
+    if prediction_key not in results or uncertainty_key not in results:
+        raise ValueError(
+            f"Cannot propagate uncertainty without '{prediction_key}' and "
+            f"'{uncertainty_key}' predictions. Available keys: {list(results.keys())}."
+        )
+
+    prediction = np.asarray(results[prediction_key])
+    uncertainty = np.asarray(results[uncertainty_key])
+
+    rng = np.random.default_rng(seed)
+    all_results_transformed = np.empty((n_histograms, num_samples), dtype=float)
+    for i in range(n_histograms):
+        r = np.sqrt(2) * erfinv(rng.uniform(-1 + 1e-10, 1 - 1e-10, size=num_samples))
+        all_results_transformed[i, :] = prediction + r * uncertainty
+
+    all_samples_dict = {mapped_response: all_results_transformed.flatten().tolist()}
+    all_samples_original = preprocessor.inverse_transform(all_samples_dict)
+    return np.asarray(all_samples_original[output_response]).reshape(
+        n_histograms, num_samples
+    )
+
+
+def summarize_uncertainty_samples(
+    values: np.ndarray, num_bins: int | None = None
+) -> dict:
+    """Compute histogram + boxplot summary statistics from propagated UQ samples.
+
+    ``values`` is ``(n_histograms, num_samples)``: histogram bin heights are
+    averaged (with their std) across histogram realisations, while boxplot and
+    summary statistics are computed on the flattened pool of all samples.
+    """
+    all_values_flat = values.flatten()
+    if num_bins is None:
+        num_bins = min(50, max(10, values.shape[1] // 10))
+
+    hist_min = float(np.percentile(all_values_flat, 1))
+    hist_max = float(np.percentile(all_values_flat, 99))
+    if hist_min == hist_max:
+        hist_range = max(1e-10, abs(hist_min) * 1e-6)
+        hist_min -= hist_range
+        hist_max += hist_range
+
+    bin_edges = np.linspace(hist_min, hist_max, num_bins + 1)
+    histograms = np.array(
+        [
+            np.histogram(values[i, :], bins=bin_edges, density=True)[0]
+            for i in range(values.shape[0])
+        ]
+    )
+    bin_means = np.mean(histograms, axis=0)
+    bin_stds = np.std(histograms, axis=0)
+
+    q1 = float(np.percentile(all_values_flat, 25))
+    median = float(np.percentile(all_values_flat, 50))
+    q3 = float(np.percentile(all_values_flat, 75))
+    iqr = q3 - q1
+    whisker_min = max(hist_min, q1 - 1.5 * iqr)
+    whisker_max = min(hist_max, q3 + 1.5 * iqr)
+    outliers = all_values_flat[
+        (all_values_flat < whisker_min) | (all_values_flat > whisker_max)
+    ]
+
+    return {
+        "bins_start": hist_min,
+        "bins_end": hist_max,
+        "bin_means": bin_means.tolist(),
+        "bin_stds": bin_stds.tolist(),
+        "q1": q1,
+        "median": median,
+        "q3": q3,
+        "whisker_min": whisker_min,
+        "whisker_max": whisker_max,
+        "outliers": outliers.tolist(),
+        "mean": float(np.mean(all_values_flat)),
+        "std": float(np.std(all_values_flat)),
+        "min": float(np.min(all_values_flat)),
+        "max": float(np.max(all_values_flat)),
+    }
 
 
 def _parse_crossvalidation_outputlogs(log_output: str, N_CROSS_VALIDATION: int):
@@ -242,6 +384,8 @@ def evaluate_sumo_manual_crossvalidation(
     input_vars: list[str],
     output_response: str,
     N_CROSS_VALIDATION: int = 5,
+    seed: int = 42,
+    has_eval_id_column: bool | None = None,
 ):
     input_vars = sanitize_varnames(input_vars)
     output_response = sanitize_varnames(output_response)
@@ -251,7 +395,7 @@ def evaluate_sumo_manual_crossvalidation(
     indices = np.arange(n_samples)
     all_predictions = np.full(n_samples, np.nan)
     all_stds = np.full(n_samples, np.nan)
-    kf = KFold(n_splits=N_CROSS_VALIDATION, shuffle=True, random_state=42)
+    kf = KFold(n_splits=N_CROSS_VALIDATION, shuffle=True, random_state=seed)
     parse_warnings: list[str] = []
 
     for fold, (_, val_idx) in enumerate(kf.split(indices)):
@@ -266,6 +410,7 @@ def evaluate_sumo_manual_crossvalidation(
             output_response,
             validation_indices=val_idx.tolist(),
             dakota_conf_file=fold_run_dir / "dakota_config.in",
+            has_eval_id_column=has_eval_id_column,
         )
         # V43 (root SPEC §T33 / B23): a Dakota fold run is non-deterministic in practice
         # (near-degenerate surrogate training can make Dakota abort a fold and never write
@@ -893,11 +1038,14 @@ def evaluate_sobol_indices(
     from scipy.stats import norm, sobol_indices, uniform
     from scipy.stats.qmc import Sobol
 
-    input_vars = sanitize_varnames(input_vars)
-    response_var = sanitize_varnames(response_var)
-    distributions = {
-        sanitize_varname(k): sanitize_varnames_dict(v) for k, v in distributions.items()
-    }
+    # NOTE: input_vars/distributions must stay in the caller's original
+    # (unsanitized) form here -- preprocessor.input_variables is keyed by
+    # original names and preprocessor.transform() looks samples up by those
+    # same original column names (see propagate_manual_uq_with_uncertainty
+    # above for the same reasoning). response_var is already the mapped
+    # Dakota-safe name by the time it reaches this function.
+    # df_varying[input_vars] needs list, not tuple, indexing
+    input_vars = list(input_vars)
 
     # --- 1. Separate constant vs. varying input variables ---
     constant_vars: dict[str, float] = {}
