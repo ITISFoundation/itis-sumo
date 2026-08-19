@@ -1,4 +1,4 @@
-.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck validate clean
+.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck validate publish-testpypi publish-testpypi-dev clean
 
 DOCS_PORT := 7777
 
@@ -15,6 +15,8 @@ help:
 	@echo "  format        - run ruff format"
 	@echo "  typecheck     - run ty check"
 	@echo "  validate      - run itis-sumo's Dakota engine probe"
+	@echo "  publish-testpypi - uv build + publish to TestPyPI (reads local .env)"
+	@echo "  publish-testpypi-dev - create and upload next .devN release to TestPyPI"
 	@echo "  clean         - remove build artifacts (site/, dist/, __pycache__)"
 
 sync:
@@ -66,6 +68,26 @@ typecheck:
 
 validate:
 	uv run itis-sumo validate
+
+publish-testpypi:
+	@test -f .env || { echo "Create .env with TESTPYPI_TOKEN=pypi-..."; exit 1; }
+	@set -a; . ./.env; set +a; test -n "$$TESTPYPI_TOKEN" || { echo "Set TESTPYPI_TOKEN in .env"; exit 1; }; \
+	 rm -rf dist/; \
+	 uv build; \
+	 uvx twine check dist/*; \
+	 uv publish --index testpypi
+
+
+publish-testpypi-dev:
+	@test -f .env || { echo "Create .env with TESTPYPI_TOKEN=pypi-..."; exit 1; }
+	@test -z "$$(git status --porcelain)" || { echo "Commit or stash changes before publishing"; exit 1; }
+	@set -a; . ./.env; set +a; test -n "$$TESTPYPI_TOKEN" || { echo "Set TESTPYPI_TOKEN in .env"; exit 1; }; \
+	 version=$$(uv run --no-project --with packaging python scripts/dev_version.py --write); \
+	 echo "Publishing $$version to TestPyPI"; \
+	 rm -rf dist/; \
+	 uv build; \
+	 uvx twine check dist/*; \
+	 uv publish --index testpypi
 
 clean:
 	rm -rf site/ dist/

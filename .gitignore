@@ -11,19 +11,21 @@ wheels/
 
 # Test cache
 .pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
-htmlcov/
-
-# Machine-local editor settings
-.vscode/
-
-# MkDocs build output
-site/
 
 # Dakota run outputs
 runs/
 
 # Engine fork: nested git repo, versioned separately
 itis-dakota/
+
+# Project House dev-folder link
+.vscode/
+
+# MkDocs build output
+site/
+
+# Confidential NIH SPARC in-silico report — never commit
+NIHinSilico*.pdf
+
+# private environment variables
+.env

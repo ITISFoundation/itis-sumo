@@ -43,6 +43,56 @@ uv run pytest                    # 123 tests, standalone
 uv run python examples/headless_smoke.py   # surrogate -> CV -> Sobol
 ```
 
+## Development
+
+### Version channels and releases
+
+Package versions are single-sourced in `pyproject.toml`. Use these channels:
+
+- Feature branches: manual `.devN` development versions.
+- `develop`: alpha versions (`aN`).
+- `main`: beta versions (`bN`) until the project graduates to `1.0.0`.
+
+PR CI checks that a proposed version matches its target branch and is newer than
+existing git tags under PEP 440 ordering. After a non-docs merge to `develop` or
+`main`, CI creates the matching `v<version>` tag without committing back to the
+protected branch. Docs-only changes do not create tags.
+
+A matching tag automatically builds, tests, and publishes to TestPyPI. Real PyPI
+publishing and GitHub Releases remain manual: use the `Publish` workflow's
+`workflow_dispatch` input with the existing tag after TestPyPI validation.
+
+### Manual TestPyPI publishing
+
+Create a local, gitignored `.env` file containing:
+
+```text
+TESTPYPI_TOKEN=pypi-your-testpypi-token
+```
+
+For a local token-based upload, run:
+
+```sh
+make publish-testpypi
+```
+
+The target builds the wheel and source distribution, checks their metadata, and
+publishes them to TestPyPI. Never commit `.env` or expose its token in shell
+transcripts.
+
+For a feature-branch development release, commit your code changes and run:
+
+```sh
+make publish-testpypi-dev
+```
+
+This computes and writes the next `.devN` version, builds the package, checks its
+metadata, and uploads directly to TestPyPI using `TESTPYPI_TOKEN` from the
+local `.env`. It refuses a dirty worktree. This path intentionally does not create
+commits or tags and does not run CI, so broken development versions can be
+published quickly. Alpha, beta, and release-candidate versions remain gated by
+CI before real-PyPI publication.
+
 ## Package layout
 
 ```

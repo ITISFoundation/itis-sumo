@@ -35,6 +35,11 @@ Consumer contract (grill 2026-08-18): itis-sumo owns ALL surrogate machinery end
 - deps ! itis-dakota==1.5.9 (Dakota 6.20, parity w/ mmux/vite; stay until T16mo resolves the 6.23+ `interface_cache` regression — R5), numpy, pandas, scipy; scikit-learn ⊥ KFold only
 - py.typed; `src/` layout; docs MkDocs + headless notebook; tests standalone ⊥ flask/osparc
 - versioning single-source in `[project].version`; uv/uv_build + pip-compile pins; Conventional Commits
+- release channel policy: feature branches → `.devN` (manual alpha/dev prereleases); `develop` → `aN`; `main` → `bN` until `1.0.0` graduation; version bump ! enforced by a PR-time CI check (target-branch suffix, PEP 440 order, ⊥ reuse/regression); ⊥ bot commit on `develop`/`main` (both branch-protected, no bypass granted); merge-time job ! push `v<version>` tag only (tags fall outside 'require PR' branch protection); `develop` may later rename `staging`
+- real PyPI publish + GitHub Release ! manual `workflow_dispatch` only (for now); CI builds/tests alpha/beta/rc versions; feature `.devN` versions publish locally via `make publish-testpypi-dev` + `.env` token, ⊥ CI/TestPyPI tag cascade
+- license ! itis-sumo currently private/pending quality review; adopt itis-dakota's license (IT'IS Foundation - All Rights Reserved) until an explicit public/OSS decision is made — MIT retracted as premature given itis-dakota (a required dependency) is itself proprietary
+- TestPyPI publish token ! local `.env` (gitignored), sourced by `make publish-testpypi`; ⊥ committed, ⊥ required as a pre-exported shell var
+- feature-branch TestPyPI local path ! `make publish-testpypi-dev` computes/writes next `.devN`, builds/checks/uploads via local `.env` token; ⊥ commit/tag/CI publication
 - E1: artifacts keyed server `sumo_model_id` (uuid); metadata sidecar `{id}.metadata.json`; ⊥ user-supplied path/prefix keys (traversal)
 - py ! 3.11 (match mmux/vite; 1.5.9 ships no cp313 wheel); 3.13 only via T16mo rung 1 (1.5.11 cp313) or rung 2 (6.24)
 - cross-repo call surface ! narrow, versioned, "deep" entrypoints — one stitched public function per feature (e.g. `analyze_dataset()`), ⊥ flaskapi orchestrating several itis-sumo internals itself; version-pinning itis-sumo is fine (same pattern as the itis-dakota engine pin, T16mo) — the coupling risk is a *wide* call surface, not the pin
@@ -86,6 +91,17 @@ V24af: run dir ! discarded on success, PRESERVED on failure w/ its path + stderr
 V25sd: ∀ stochastic entrypoint ! default `seed=42`, overridable, effective seed echoed in the result
 V26dd: `domain` and `distribution` ! remain distinct config objects; ⊥ derive a box from a distribution's `mean ± 3σ`
 V27fq: one-shot entrypoints ! implemented internally as fit-then-query; ⊥ monolithic procedure that would need rewriting to expose a handle
+V28tz: CI ! block a PR into `develop`/`main` whose `pyproject.toml` version lacks target branch's required prerelease suffix (`aN` develop, `bN` main) or regresses/duplicates PEP 440 ordering vs existing tags
+V29yn: tag-on-merge job (develop/main) ! push only a `v<version>` tag, ⊥ version-bump commit; skip docs-only diff; existing-tag collision ! hard failure, ⊥ force-overwrite
+V30wk: itis-sumo LICENSE + `pyproject.toml` license/classifiers ! match itis-dakota's (all-rights-reserved) until an explicit public/OSS decision is made; ⊥ an OSI classifier claiming otherwise
+V31vp: any CI job that installs a built artifact and runs pytest against it ! checkout source first (`tests/` isn't shipped in the wheel) — ⊥ silently "pass" via pytest's 0-collected exit code
+V32bb: PyPI publish + GitHub Release jobs (`publish`/`release` in `publish.yml`) ! gated behind explicit `workflow_dispatch`; ⊥ automatic cascade from a tag push. TestPyPI (`testpypi` job) stays automatic on any matching tag push
+V33tz: version check/tag job ! compare candidate version against highest existing tag via PEP 440 ordering; ⊥ emit version sorting lower than prior release channel/version
+V34yn: merge-time tag job ! re-check live `origin` tags; existing `v<version>` collision → hard failure; ⊥ force-overwrite
+V35wk: `workflow_dispatch` publish ! validate input `tag` matches `v[0-9]*.[0-9]*.[0-9]*` and built artifact version equals tag version before real PyPI upload
+V36vp: itis-sumo LICENSE ! own IT'IS copyright/author notice; ⊥ copy itis-dakota attribution or Dakota-source LGPL paragraph
+V37bb: `.env` ! gitignored before token-based publish target lands; token never committed
+V38cc: `publish-testpypi-dev` ! clean worktree → compute/write next `.devN` → build/check/upload via `.env`; ⊥ commit/tag/CI publication
 
 ## §R
 R1: `export_model`/`import_model` child keywords; formats `text_archive`(.sps)/`binary_archive`(.bsps)/`algebraic_file`(.alg); naming `{prefix}.{resp}.{ext}` | branch R2
@@ -129,7 +145,15 @@ T26eq|.|POST-PORT: extract the fitted-model handle (`fit()` → methods → `sav
 T27fr|.|POST-PORT: split `domain` vs `distribution` config + consumer migration; absorb the mmux_vite `jgo/fullstack-logscale` work|V26dd
 T28gs|.|POST-PORT `?`: decide whether `distribution` gets an auto-generated default — explicit discussion required, ⊥ silently defaulted|§C `?`
 T29hw|~|`publish.yml` tag trigger accepts `v`-prefixed PEP 440 prereleases ✓; tagging `v0.1.0a1` BLOCKED on the one-time PyPI Trusted Publisher config (user action), then clean-venv install + `itis-sumo validate` + headless smoke|T1pw
-T30qa|.|release/CI workflow refresh: adopt auto-tag on `main` push, add build→artifact-install test→TestPyPI→PyPI staging, keep git-cliff release notes, add dependency-review + concurrency; skip weekly cron/healthchecks for now|§C,V17rt
+T30qa|✓|release/CI workflow refresh: build→TestPyPI automatic on tag push (✓), PyPI+Release gated manual (✓, T35cc); auto-tag-on-branch redesigned to PR-time check + tag-only-at-merge (no bot commit) — see T31xx/T32yy; keep git-cliff release notes, dependency-review + concurrency (✓); skip weekly cron/healthchecks for now|§C,V17rt
+T31xx|✓|CI: PR-time check job (feature branch→`.devN`, target `develop`→`aN`, target `main`→`bN`) blocking merge if `pyproject.toml` version missing, regresses, or duplicates PEP 440 order vs existing tags|V28tz,V33tz
+T32yy|✓|replace `auto-tag.yml`'s commit-based bump w/ tag-only-at-merge (read already-bumped version from merged commit, re-check live tags, push `v<version>`, ⊥ commit) — removes need for branch-protection bypass|V29yn,V34yn
+T33zz|✓|swap itis-sumo LICENSE + `pyproject.toml` `license`/classifiers to match itis-dakota (IT'IS Foundation - All Rights Reserved); drop MIT classifier|V30wk
+T34aa|✓|`make publish-testpypi` ! source `TESTPYPI_TOKEN` from local `.env` (gitignored) instead of requiring a pre-exported shell var|§C
+T35cc|✓|gate `publish`/`release` jobs behind explicit `workflow_dispatch`; `build`+`testpypi` stay automatic on tag push; fixed `testpypi` job missing checkout (0 tests collected, exit 5) before it ever reached the publish step|V31vp,V32bb
+T36dd|✓|add `.env` to `.gitignore`; make `publish-testpypi` source `.env` without printing token, then build/check/publish|V37bb
+T37ef|✓|validate manual publish tag + artifact version before PyPI upload|V35wk
+T38dd|✓|make `publish-testpypi-dev` auto-compute/write `.devN`, build/check/upload directly to TestPyPI; CI verifies alpha/beta/rc before real PyPI; no dev tag cascade|V38cc
 
 ## §B
 id|date|cause|fix
@@ -145,3 +169,4 @@ B8lf|2026-08-18|the develop merge retained executable mode on changed `funs_eval
 
 B9dw|2026-08-18|after rewriting develop history, GitHub push events reported the unreachable pre-rewrite `before` SHA and detect_changes aborted with `bad object`|fall back to `git diff-tree` when the event base commit is unavailable; no code invariant added because this is CI history topology
 B10cs|2026-08-18|`itis_sumo.api.evaluate_along_axes(at={...})` raised `SumoEngineError: 'x1'` for a PARTIAL held-value mapping — `create_samples_along_axes` reads `[cut_values[var] for var in input_vars]`, so an incomplete dict is a `KeyError`, not a documented default. Never surfaced in flaskapi because its frontend always sends every slider|`_map_held_values` completes the mapping from the sample means (the same value the no-`at` path uses) before translating; covered by `tests/test_api_workflows.py::TestAlongAxes::test_honours_the_values_the_caller_holds_fixed`. ⊥ new §V invariant: V23er already requires taxonomy errors, and the real lesson is that a caller-facing default must be materialised by the API layer rather than assumed by an internal helper
+B11xy|2026-08-19|`publish.yml`'s `testpypi` job ran pytest against the installed wheel w/o a checkout step — `tests/` (not shipped in the wheel) was absent, pytest collected 0 items and exited 5 before the job ever reached the TestPyPI publish step (caught via `gh run view` on the `v0.1.0a1` tag push, which failed harmlessly — no upload occurred anywhere)|added `actions/checkout` before `download-artifact` (ordered first — checkout's default `git clean` would otherwise wipe an already-downloaded `dist/`); V31vp

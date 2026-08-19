@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish to PyPI and cut a GitHub Release for"
+        required: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,6 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Install uv
@@ -34,15 +40,19 @@ jobs:
           name: dist
           path: dist/
 
-  testpypi:
+  verify:
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/itis-sumo
     permissions:
-      id-token: write
+      contents: read
     steps:
+      # Needed so tests/ (not shipped in the wheel) is present to exercise
+      # the installed wheel against; must run before download-artifact
+      # since checkout's default `git clean` would wipe an existing dist/.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
       - uses: actions/download-artifact@v4
         with:
           name: dist
@@ -63,16 +73,18 @@ jobs:
           python -m pip install --force-reinstall --no-deps dist/*.whl
           python -m pytest
 
-      - name: Publish package to Test PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
 
   # Trusted Publisher must be configured once on the PyPI project's "Publishing"
   # settings page (pending-publisher works before the first release exists),
   # pointing at this repo/workflow/environment. No API token is stored here.
+  #
+  # Gated to manual dispatch only: CI verifies the built alpha/beta/rc
+  # artifact, while feature-branch .dev versions are uploaded locally by
+  # make publish-testpypi-dev. Going out to real PyPI (and cutting a GitHub
+  # Release) requires an explicit "Run workflow" dispatch naming the tag.
   publish:
-    needs: testpypi
+    needs: verify
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -83,16 +95,35 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Validate dispatch tag and artifact version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)[0-9]+$ ]] || {
+            echo "Invalid release tag: $RELEASE_TAG"
+            exit 1
+          }
+          wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
+          artifact_version=$(unzip -p "$wheel" '*/METADATA' | sed -n 's/^Version: //p')
+          expected_version="${RELEASE_TAG#v}"
+          [[ "$artifact_version" == "$expected_version" ]] || {
+            echo "Tag $RELEASE_TAG does not match artifact version $artifact_version"
+            exit 1
+          }
+
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   release:
     needs: publish
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       - uses: actions/download-artifact@v8
