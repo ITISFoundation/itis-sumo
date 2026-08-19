@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 # Tightened to itis-dakota==1.5.9's actual wheel matrix (PyPI ships cp310-
