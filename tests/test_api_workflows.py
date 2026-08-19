@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -152,10 +153,10 @@ class TestGrid:
         assert result.response == RESPONSE
         assert result.grid_variables == ("width", "height")
         assert "stress" in result.data
-        assert min(result.data["width"]) >= WIDTH_RANGE[0] - 0.01
-        assert max(result.data["height"]) <= HEIGHT_RANGE[1] + 0.01
+        assert min(cast("list[float]", result.data["width"])) >= WIDTH_RANGE[0] - 0.01
+        assert max(cast("list[float]", result.data["height"])) <= HEIGHT_RANGE[1] + 0.01
         assert len(result.data["stress"]) == 5
-        assert len(result.data["stress"][0]) == 5
+        assert len(cast("dict[str, list[list[float]]]", result.data)["stress"][0]) == 5
 
 
 class TestSobol:

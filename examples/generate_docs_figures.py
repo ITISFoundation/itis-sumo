@@ -118,7 +118,7 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
 
     rng = np.random.default_rng(SEED)
     x_train = rng.uniform(-np.pi, np.pi, size=(300, 3))
-    train_raw = pd.DataFrame(x_train, columns=["x1", "x2", "x3"])
+    train_raw = pd.DataFrame(x_train, columns=pd.Index(["x1", "x2", "x3"]))
     train_raw["y"] = ishigami(x_train)
 
     preprocessor = DataPreprocessor()

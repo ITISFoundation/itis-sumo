@@ -462,12 +462,12 @@ class TestGetBoundsUniformDistributions:
         assert hi == 5.0
 
     def test_get_bounds_non_uniform_raises(self):
-        dist = {"distribution": "normal", "mean": 0, "std": 1}
+        dist: dict[str, float | str] = {"distribution": "normal", "mean": 0, "std": 1}
         with pytest.raises(ValueError, match="Non-uniform"):
             get_bounds_uniform_distribution("x", dist)
 
     def test_get_bounds_missing_keys_raises(self):
-        dist = {"distribution": "uniform"}
+        dist: dict[str, float | str] = {"distribution": "uniform"}
         with pytest.raises(ValueError, match="not defined"):
             get_bounds_uniform_distribution("x", dist)
 
@@ -631,7 +631,7 @@ class TestGetNonDominatedIndices:
     def test_invalid_mode_raises(self):
         df = pd.DataFrame({"f1": [1], "f2": [2]})
         with pytest.raises(ValueError, match="not recognized"):
-            get_non_dominated_indices(df, ["f1", "f2"], ["min", "invalid"])
+            get_non_dominated_indices(df, ["f1", "f2"], ["min", "invalid"])  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.unit

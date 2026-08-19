@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Literal, TypeVar, overload
 
@@ -481,7 +481,7 @@ def extract_predictions_gridpoints(
 
 def create_manual_uq_samples(
     input_vars: list[str],
-    distributions: dict[str, dict[str, float]],
+    distributions: dict[str, dict[str, float | str]],
     num_samples: int,
     seed: int | None = None,
 ):
@@ -502,14 +502,14 @@ def create_manual_uq_samples(
         dist_info = distributions[var]
         dist_type = dist_info["distribution"]
         if dist_type == "normal":
-            mean = dist_info["mean"]
-            std = dist_info["std"]
+            mean = float(dist_info["mean"])
+            std = float(dist_info["std"])
             samples[var] = norm.rvs(
                 size=num_samples, loc=mean, scale=std, random_state=rng
             ).tolist()
         elif dist_type == "uniform":
-            min_val = dist_info["min"]
-            max_val = dist_info["max"]
+            min_val = float(dist_info["min"])
+            max_val = float(dist_info["max"])
             samples[var] = uniform.rvs(
                 size=num_samples, loc=min_val, scale=max_val - min_val, random_state=rng
             ).tolist()
@@ -599,7 +599,7 @@ sanitize_varnames_dict = sanitize_varnames  # For dictionary input
 sanitize_varnames_df = sanitize_varnames  # For DataFrame input
 
 
-def is_dominated(point: np.ndarray, other_points: np.ndarray):
+def is_dominated(point: np.ndarray, other_points: Sequence[np.ndarray] | np.ndarray):
     return any(all(point >= other) for other in other_points)
 
 
@@ -645,7 +645,7 @@ def get_non_dominated_indices(
 
 
 def get_bounds_uniform_distributions(
-    input_vars: list[str], distributions: dict[str, dict[str, float]]
+    input_vars: list[str], distributions: dict[str, dict[str, float | str]]
 ) -> tuple[list[float], list[float]]:
     lower_bounds = []
     upper_bounds = []
@@ -660,7 +660,7 @@ def get_bounds_uniform_distributions(
 
 
 def get_bounds_uniform_distribution(
-    var: str, dist: dict[str, float]
+    var: str, dist: dict[str, float | str]
 ) -> tuple[float, float]:
     """
     Extracts the lower and upper bounds from a uniform distribution specification.
@@ -679,10 +679,12 @@ def get_bounds_uniform_distribution(
         )
     if "min" not in dist or "max" not in dist:
         raise ValueError(f"Bounds for variable '{var}' are not defined.")
-    if dist["min"] >= dist["max"]:
+    min_val = float(dist["min"])
+    max_val = float(dist["max"])
+    if min_val >= max_val:
         raise ValueError(f"Invalid bounds for variable '{var}': min >= max.")
 
-    return dist["min"], dist["max"]
+    return min_val, max_val
 
 
 def compute_correlation_indices(

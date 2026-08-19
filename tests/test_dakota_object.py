@@ -53,6 +53,7 @@ def test_dak_exec_static_runs_study_and_captures_output(tmp_path, monkeypatch):
 
     mock_study.assert_called_once_with(callback=None, input_string="some dakota conf")
     fake_study.execute.assert_called_once()
+    assert stdoutstr is not None
     assert "dakota stdout output" in stdoutstr
     assert stderrstr == ""
 

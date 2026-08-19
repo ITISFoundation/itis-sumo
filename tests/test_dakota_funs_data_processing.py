@@ -62,7 +62,7 @@ def test_sanitize_varnames_dataframe():
 
 def test_sanitize_varnames_unsupported_type_raises():
     with pytest.raises(TypeError, match="Unsupported input type"):
-        sanitize_varnames(12345)
+        sanitize_varnames(12345)  # ty: ignore[no-matching-overload]
 
 
 # --- get_bounds_uniform_distribution(s) --------------------------------------
@@ -142,7 +142,7 @@ def test_get_non_dominated_indices_with_optimization_modes():
 def test_get_non_dominated_indices_invalid_mode_raises():
     df = pd.DataFrame({"a": [1, 2]})
     with pytest.raises(ValueError, match="not recognized"):
-        get_non_dominated_indices(df, ["a"], optimization_modes=["bogus"])
+        get_non_dominated_indices(df, ["a"], optimization_modes=["bogus"])  # ty: ignore[invalid-argument-type]
 
 
 def test_get_non_dominated_indices_mismatched_modes_length_raises():
@@ -422,7 +422,7 @@ def test_get_variable_names_missing_file_raises(tmp_path):
 
 
 def test_filter_data_keep_idxs():
-    df = pd.DataFrame({"a": [1, 2, 3]}, index=[0, 1, 2])
+    df = pd.DataFrame({"a": [1, 2, 3]})
     result = _filter_data(df, keep_idxs=[0, 2])
     assert list(result.index) == [0, 2]
 

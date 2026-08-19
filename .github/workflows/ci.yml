@@ -108,6 +108,12 @@ jobs:
           printf '%s\n' "$changed_py_files" | xargs uv run ruff check
           printf '%s\n' "$changed_py_files" | xargs uv run ruff format --check
 
+      # ty is version-aware (resolves stdlib/typing symbols against
+      # requires-python's floor), so it catches the class of bug the
+      # 3.10-3.13 test matrix below would otherwise be the only thing to
+      # catch (SPEC V41hp). Blocking now that the repo is diagnostic-clean.
+      - name: Run ty
+        run: uv run ty check
   tests:
     runs-on: ubuntu-latest
     needs:

@@ -86,8 +86,8 @@ class TestSobolIshigamiAnalytical:
     def test_sobol_indices_ishigami_analytical(self, tmp_path):
         """§R1 acceptance gate: Ishigami indices match analytical references."""
 
-        from scipy.stats import uniform  # type: ignore
-        from scipy.stats.qmc import Sobol  # type: ignore
+        from scipy.stats import uniform
+        from scipy.stats.qmc import Sobol
 
         # --- Parameters ---
         n = 2**14  # 16384 — low MC noise
@@ -118,7 +118,7 @@ class TestSobolIshigamiAnalytical:
             f_AB[i] = _ishigami(AB[i]).reshape(1, 1, n)
 
         # --- Call scipy.stats.sobol_indices ---
-        from scipy.stats import sobol_indices  # type: ignore
+        from scipy.stats import sobol_indices
 
         si = sobol_indices(func={"f_A": f_A, "f_B": f_B, "f_AB": f_AB}, n=n)
         first_order = si.first_order  # shape (d,)

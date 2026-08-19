@@ -1,4 +1,4 @@
-.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck validate publish-testpypi-dev clean
+.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck prek pre-commit validate publish-testpypi-dev clean
 
 DOCS_PORT := 7777
 
@@ -14,6 +14,7 @@ help:
 	@echo "  lint          - run ruff check"
 	@echo "  format        - run ruff format"
 	@echo "  typecheck     - run ty check"
+	@echo "  prek          - run all commit-time hooks (ruff + ty + file hygiene) on the whole repo"
 	@echo "  validate      - run itis-sumo's Dakota engine probe"
 	@echo "  publish-testpypi-dev - create and upload next .devN release to TestPyPI"
 	@echo "  clean         - remove build artifacts (site/, dist/, __pycache__)"
@@ -64,6 +65,11 @@ format:
 
 typecheck:
 	uv run ty check
+
+prek:
+	uvx prek run --all-files
+
+pre-commit: prek ## backward-compatible alias for prek
 
 validate:
 	uv run itis-sumo validate
