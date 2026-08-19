@@ -149,7 +149,16 @@ jobs:
 
       - name: Run unit tests
         if: steps.resolve.outputs.compatible == 'true'
-        run: uv run --python "${{ matrix.python-version }}" pytest -m "not integration and not analytical"
+        run: uv run --python "${{ matrix.python-version }}" pytest -m "not integration and not analytical" --cov=src/itis_sumo --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        if: steps.resolve.outputs.compatible == 'true' && matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: true
+          disable_search: true
 
   integration_analytical_tests:
     runs-on: ubuntu-latest
