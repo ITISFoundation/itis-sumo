@@ -31,6 +31,7 @@ from itis_sumo.api import (
     cross_validate,
     evaluate_along_axes,
     evaluate_grid,
+    generate_lhs_samples,
 )
 from itis_sumo.api._session import SumoSession, _minimum_samples
 
@@ -107,7 +108,6 @@ class TestPublicSurface:
             }
             & parameters
         )
-
     @pytest.mark.parametrize("workflow", [cross_validate, evaluate_along_axes])
     def test_hides_dakota_file_plumbing(self, workflow):
         """SPEC §G: callers pass data and configuration, not file paths."""
@@ -138,6 +138,25 @@ class TestPublicSurface:
                 source = inspect.getsource(sys.modules[module])
                 assert "import flask" not in source
                 assert "osparc" not in source
+
+
+class TestSampling:
+    def test_lhs_stratifies_each_domain_for_each_sample(self):
+        n_samples = 5
+        domains = {
+            "width": api.DomainSpec(minimum=1.0, maximum=6.0),
+            "height": api.DomainSpec(minimum=100.0, maximum=600.0),
+        }
+
+        result = generate_lhs_samples(domains, n_samples, seed=42)
+
+        assert result.shape == (n_samples, len(domains))
+        for name, domain in domains.items():
+            normalized = (result[name] - domain.minimum) / (
+                domain.maximum - domain.minimum
+            )
+            bins = np.floor(normalized * n_samples).astype(int)
+            assert sorted(bins.tolist()) == list(range(n_samples))
 
 
 class TestErrorTaxonomy:

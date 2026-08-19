@@ -292,10 +292,11 @@ def generate_lhs_samples(
     if not domains:
         raise SumoInputError("At least one variable domain is required.")
     names = list(domains)
-    design = _lhs(n_samples, len(names), seed=seed)
+    design = _lhs(len(names), n_samples, seed=seed)
     return pd.DataFrame(
         {
-            name: design[i] * (domains[name].maximum - domains[name].minimum)
+            name: design[:, i]
+            * (domains[name].maximum - domains[name].minimum)
             + domains[name].minimum
             for i, name in enumerate(names)
         }
