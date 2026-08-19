@@ -32,7 +32,7 @@ from itis_sumo.api import (
     evaluate_along_axes,
     evaluate_grid,
 )
-from itis_sumo.api._session import SumoSession
+from itis_sumo.api._session import SumoSession, _minimum_samples
 
 pytestmark = pytest.mark.unit
 
@@ -188,6 +188,10 @@ class TestSampleValidation:
         """Dakota aborts opaquely below max(5, n_variables + 1); we do not."""
         with pytest.raises(SumoInputError, match="samples are required"):
             cross_validate(make_samples(2), VARIABLES, RESPONSE)
+
+    def test_tabular_sufficiency_rule_keeps_floor_and_variable_count(self):
+        assert _minimum_samples(2) == 5
+        assert _minimum_samples(5) == 6
 
     def test_rejects_overrides_for_columns_not_in_play(self):
         spec = PreprocessingSpec(overrides={"depth": VariableSpec()})

@@ -51,16 +51,16 @@ from itis_sumo.evaluate.funs_evaluate import (
     summarize_uncertainty_samples,
 )
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
-
-# The Dakota sufficiency rule. Named in job vocabulary for historical reasons;
-# aliased here so that vocabulary does not leak into the API layer (SPEC V19cn).
-# T24cm moves the rule itself and only this import line changes.
-from itis_sumo.preprocess.models import required_completed_jobs as _minimum_samples
 from itis_sumo.utils.helpers import create_run_dir
 
 _logger = logging.getLogger(__name__)
 
 _STDERR_TAIL_LINES = 40
+
+
+def _minimum_samples(variable_count: int, floor: int = 5) -> int:
+    """Return the minimum tabular sample count Dakota can fit safely."""
+    return max(floor, variable_count + 1)
 
 
 def _stderr_tail(run_dir: Path | None) -> str:
@@ -149,7 +149,7 @@ def _validate_samples(
             "Incomplete samples must be filtered out before they are passed in"
         )
 
-    minimum = _minimum_samples(list(variables))
+    minimum = _minimum_samples(len(variables))
     if len(selected) < minimum:
         raise SumoInputError(
             f"{minimum} samples are required to build a surrogate over "
