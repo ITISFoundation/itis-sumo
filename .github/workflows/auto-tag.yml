@@ -1,7 +1,8 @@
-name: Tag prerelease
+name: Tag and publish release
 
-# A merged develop/main commit supplies its own version. This workflow only
-# validates the channel and creates the matching git tag; it never commits.
+# A merged develop/main commit supplies its own version. This workflow validates
+# the channel, creates the matching git tag, and dispatches publication for the
+# appropriate package index.
 on:
   push:
     branches: [develop, main]
@@ -16,6 +17,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag-merged-version:
@@ -37,6 +39,7 @@ jobs:
           uv run --no-project --with packaging python - "$GH_REF_NAME" <<'PY'
           import subprocess
           import sys
+          import os
           import tomllib
           from packaging.version import Version
 
@@ -44,9 +47,18 @@ jobs:
           with open("pyproject.toml", "rb") as file:
               version = tomllib.load(file)["project"]["version"]
           candidate = Version(version)
-          expected = "a" if branch == "develop" else "b"
-          if candidate.pre is None or candidate.pre[0] != expected:
-              raise SystemExit(f"{branch} requires {expected} prerelease, found {version}")
+          if branch == "develop":
+              if candidate.pre is None or candidate.pre[0] != "a":
+                  raise SystemExit(
+                      f"develop requires an alpha prerelease, found {version}"
+                  )
+              registry = "testpypi"
+          elif branch == "main":
+              if candidate.is_prerelease:
+                  raise SystemExit(f"main requires a stable release, found {version}")
+              registry = "pypi"
+          else:
+              raise SystemExit(f"unsupported release branch: {branch}")
 
           tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).splitlines()
           tagged_versions = []
@@ -68,4 +80,21 @@ jobs:
           subprocess.run(["git", "tag", tag], check=True)
           subprocess.run(["git", "push", "origin", tag], check=True)
           print(f"created {tag}")
+          subprocess.run(
+              [
+                  "gh",
+                  "workflow",
+                  "run",
+                  "publish.yml",
+                  "--ref",
+                  branch,
+                  "--field",
+                  f"tag={tag}",
+                  "--field",
+                  f"registry={registry}",
+              ],
+              check=True,
+              env={**os.environ, "GH_TOKEN": os.environ["GITHUB_TOKEN"]},
+          )
+          print(f"dispatched {registry} publication for {tag}")
           PY

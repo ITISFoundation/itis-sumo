@@ -38,9 +38,18 @@ jobs:
           with open("pyproject.toml", "rb") as file:
               version = tomllib.load(file)["project"]["version"]
           parsed = Version(version)
-          expected = "a" if target == "develop" else "b"
-          if parsed.pre is None or parsed.pre[0] != expected:
-              raise SystemExit(f"PR target {target} requires {expected} prerelease, found {version}")
+          if target == "develop":
+              if parsed.pre is None or parsed.pre[0] != "a":
+                  raise SystemExit(
+                      f"PR target {target} requires an alpha prerelease, found {version}"
+                  )
+          elif target == "main":
+              if parsed.is_prerelease:
+                  raise SystemExit(
+                      f"PR target {target} requires a stable release, found {version}"
+                  )
+          else:
+              raise SystemExit(f"unsupported PR target: {target}")
 
           tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).splitlines()
           candidate = Version(version)
@@ -51,5 +60,5 @@ jobs:
                   continue
               if tagged >= candidate:
                   raise SystemExit(f"version {version} is not newer than existing tag {tag}")
-          print(f"{target}: {version} is a valid newer prerelease")
+          print(f"{target}: {version} is a valid newer release")
           PY

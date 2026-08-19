@@ -7,8 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to publish to PyPI and cut a GitHub Release for"
+        description: "Existing release tag to publish and optionally release"
         required: true
+      registry:
+        description: "Package index to publish to"
+        required: true
+        type: choice
+        options:
+          - testpypi
+          - pypi
+        default: pypi
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
@@ -74,19 +82,14 @@ jobs:
           python -m pytest
 
 
-  # Trusted Publisher must be configured once on the PyPI project's "Publishing"
-  # settings page (pending-publisher works before the first release exists),
-  # pointing at this repo/workflow/environment. No API token is stored here.
-  #
-  # Gated to manual dispatch only: CI verifies the built alpha/beta/rc
-  # artifact, while feature-branch .dev versions are uploaded locally by
-  # make publish-testpypi-dev. Going out to real PyPI (and cutting a GitHub
-  # Release) requires an explicit "Run workflow" dispatch naming the tag.
+  # Configure Trusted Publishers for this workflow in both package indexes:
+  # environment `testpypi` for alpha releases and `pypi` for stable releases.
+  # No API token is stored here.
   publish:
     needs: verify
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: ${{ inputs.registry }}
     permissions:
       id-token: write
     steps:
@@ -100,7 +103,13 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(a[0-9]+|b[0-9]+|rc[0-9]+)?$ ]] || {
+          registry="${{ inputs.registry }}"
+          if [[ "$registry" == "testpypi" ]]; then
+            tag_pattern='^v[0-9]+\.[0-9]+\.[0-9]+a[0-9]+$'
+          else
+            tag_pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          fi
+          [[ "$RELEASE_TAG" =~ $tag_pattern ]] || {
             echo "Invalid release tag: $RELEASE_TAG"
             exit 1
           }
@@ -113,10 +122,12 @@ jobs:
           }
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ inputs.registry == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
 
   release:
     needs: publish
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.registry == 'pypi'
     runs-on: ubuntu-latest
     permissions:
       contents: write
