@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.1.0a2"
+version = "0.1.0a3"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 # T16mo rung 1 (1.5.9->1.5.11): 1.5.11 ships cp313 wheels, so the <3.13
