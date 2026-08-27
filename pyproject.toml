@@ -4,14 +4,12 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
-# Tightened to itis-dakota==1.5.9's actual wheel matrix (PyPI ships cp310-
-# cp312 only, no cp313) -- the previous "<3.14" upper bound let uv/pip
-# attempt (and fail) to resolve itis-dakota on 3.13. Re-widen once T16mo
-# bumps the engine past 1.5.9 (rung 1: 1.5.11 adds cp313 wheels).
-requires-python = ">=3.10,<3.13"
+# T16mo rung 1 (1.5.9->1.5.11): 1.5.11 ships cp313 wheels, so the <3.13
+# ceiling from the 1.5.9-only wheel matrix no longer applies.
+requires-python = ">=3.10,<3.14"
 license = { file = "LICENSE" }
 authors = [
     { name = "Javier Garcia Ordonez", email = "ordonez@itis.swiss" },
@@ -25,10 +23,11 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    # Parity with mmux/vite flaskapi (itis-dakota==1.5.9, Dakota 6.20). Stay
-    # here until the 6.23+ `Interface::interface_cache()` regression on
-    # interface-less surrogate confs is resolved (see SPEC §T T16mo ladder).
-    "itis-dakota==1.5.9",
+    # T16mo rung 1: itis-dakota==1.5.11 (still Dakota 6.20, packaging-only
+    # bump -- behavior-identical to 1.5.9). Stay on 6.20 until the 6.23+
+    # `Interface::interface_cache()` regression is resolved (SPEC §T T16mo
+    # rung 2). 1.5.9 itself was removed from PyPI (SPEC §B).
+    "itis-dakota==1.5.11",
     "numpy>=2.0,<3.0",
     "pandas>=2.2,<3.0",
     "pydantic>=2.0,<3.0",

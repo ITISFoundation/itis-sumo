@@ -1,0 +1,50 @@
+name: Auto-bump alpha version
+
+# Mechanically bumps the develop-channel `aN` alpha counter on the PR's own
+# head branch (never on develop/main, which stay branch-protected with no
+# bypass — see SPEC.md §V29tz/T32yy). Base-version bumps (major/minor/patch)
+# remain a human decision; `version-check.yml` stays as the enforcement
+# backstop for those cases and for forked PRs (read-only token there).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [develop]
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "**/*.md"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-bump-alpha-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Bump alpha version if needed
+        run: |
+          set -euo pipefail
+          git fetch origin --tags --force
+          version="$(uv run --no-project --with packaging --with tomli python scripts/bump_alpha_version.py --write)"
+          if git diff --quiet -- pyproject.toml; then
+            echo "no bump needed (already $version)"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "chore: bump alpha version to $version"
+          git push origin "HEAD:refs/heads/${{ github.head_ref }}"
