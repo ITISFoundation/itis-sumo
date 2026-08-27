@@ -33,6 +33,7 @@ jobs:
       - name: Validate merged version and create tag
         env:
           GH_REF_NAME: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git fetch --tags --force
