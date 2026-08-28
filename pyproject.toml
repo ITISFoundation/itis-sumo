@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.1.0a3"
+version = "0.1.0a4"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 # T16mo rung 1 (1.5.9->1.5.11): 1.5.11 ships cp313 wheels, so the <3.13
@@ -23,11 +23,16 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    # T16mo rung 1: itis-dakota==1.5.11 (still Dakota 6.20, packaging-only
-    # bump -- behavior-identical to 1.5.9). Stay on 6.20 until the 6.23+
-    # `Interface::interface_cache()` regression is resolved (SPEC §T T16mo
-    # rung 2). 1.5.9 itself was removed from PyPI (SPEC §B).
-    "itis-dakota==1.5.11",
+    # T16mo rung 2: itis-dakota==6.24.7 (Dakota 6.24). The 1.5.x line wrapped
+    # Dakota 6.20; the package renumbered to track Dakota's version. Bumps the
+    # engine a full minor (6.20 -> 6.24). 6.24.7 is the latest 6.24.x that still
+    # ships cp311 wheels, so itis-sumo keeps its Python 3.11 primary (parity
+    # with mmux/vite); 6.24.8+ dropped cp311. The 6.23+ `interface_cache` regression
+    # (SPEC §R5) on pure data-fit surrogate confs is shimmed in itis-sumo via
+    # `add_r5_interface_cache_workaround()` in config/funs_create_dakota_conf.py
+    # (no-op fork interface so the ctor's cache lookup succeeds), rather than
+    # waiting on the upstream get-or-create fix.
+    "itis-dakota==6.24.7",
     "numpy>=2.0,<3.0",
     "pandas>=2.2,<3.0",
     "pydantic>=2.0,<3.0",
