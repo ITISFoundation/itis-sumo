@@ -430,7 +430,7 @@ wheels = [
 
 [[package]]
 name = "itis-dakota"
-version = "1.5.11"
+version = "6.24.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -438,19 +438,27 @@ dependencies = [
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/36/9b/c1414ccf484eb37e69f386a92b92897788ee005da0057c2cf560f64ebbd0/itis_dakota-1.5.11-cp310-cp310-manylinux_2_28_aarch64.whl", hash = "sha256:28484557a96b9ee51b842052166200dc817cb46336afd5e104cdcc7e00a20bd4", size = 35189672, upload-time = "2025-06-30T09:44:42.989Z" },
-    { url = "https://files.pythonhosted.org/packages/ef/a8/93add2546c41ff6a8df8e6e6b8fe933a86adfab8c16171bd44997b97200e/itis_dakota-1.5.11-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:51e71274beebcebb7c0b43d9a8f96b394d790ffab57b0b8465a4ef561c929c03", size = 37738386, upload-time = "2025-06-30T09:44:46.763Z" },
-    { url = "https://files.pythonhosted.org/packages/3f/b2/47ff96944b8da46da9965e19ede1796a67c87c1c53f8633b066d4496e3bc/itis_dakota-1.5.11-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:a2d681907203c70de332ae6bd861e6cc547d3611547af6ad276f43f21c5ef88f", size = 35192830, upload-time = "2025-06-30T09:44:50.176Z" },
-    { url = "https://files.pythonhosted.org/packages/f3/52/c1b51be316124e390a31d20b4c4eeadd5ccee43a9c9268d95a2daf0e1bb2/itis_dakota-1.5.11-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:9da371d788080902aefd0d9c3a65be0ecb83e5802ee800b4782cd490fec8cd01", size = 37741294, upload-time = "2025-06-30T09:44:53.722Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/8b/c5ed69331dbae789b45abd5103f10fbe56d2570beb1c2b578267c0e75d78/itis_dakota-1.5.11-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:79896f15e2eb7f6f0086d4d54ef0994a1eb9de200c7729c3c60a09feb8961c55", size = 35192972, upload-time = "2025-06-30T09:44:57.462Z" },
-    { url = "https://files.pythonhosted.org/packages/46/ba/a64379564c843725d5e240cd43f7a2362f1ff340e1e24e30b5bedd57e1ec/itis_dakota-1.5.11-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:4922a767ca13cf9aec06e7cc4100876efed99a39897aa8ca2b728d2ca1434384", size = 37740118, upload-time = "2025-06-30T09:45:01.099Z" },
-    { url = "https://files.pythonhosted.org/packages/66/3d/fa91c3697a2c4178f0d33b45e64f9ae6bae7bef1f989749c962ae22a92ab/itis_dakota-1.5.11-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:c1fdf6bcef5eabcc8fc756b1b0342d5f4152c40bd4eb4f383e83b7a0c5d79656", size = 35194105, upload-time = "2025-06-30T09:45:05.218Z" },
-    { url = "https://files.pythonhosted.org/packages/90/25/22bb2b4459858a1e50ef51c0c10f279f36fc8b26d4d703b30e1e325f55e1/itis_dakota-1.5.11-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:3d70fee81c91a727ac935a5721b250e68103743755b960491b8fa2c5281fa428", size = 37743856, upload-time = "2025-06-30T09:45:08.974Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/0e/c185836210377777250818ffe9966c2ecdf3d674b70d7e77e8b81ae4c85a/itis_dakota-6.24.7-cp310-cp310-macosx_14_0_arm64.whl", hash = "sha256:f244035d82753942ef844f6a3f47f54d89176f3a3720e65442e3bb5ee50c616f", size = 59159680, upload-time = "2026-08-11T21:06:03.056Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/53/7f71b83b148722945f9f9e59a01dbc02d9c1eebf0327f8b607dfed6be11e/itis_dakota-6.24.7-cp310-cp310-macosx_15_0_x86_64.whl", hash = "sha256:b14a5aca19032f8da50a88f9fd5581a00b1f7766d6fa62d033496247d4b3cb49", size = 65714024, upload-time = "2026-08-11T21:06:08.083Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/32/456f49c63955602f4f02c9bc73be812b66c155f54cc643044d9ddc397734/itis_dakota-6.24.7-cp310-cp310-manylinux_2_28_aarch64.whl", hash = "sha256:04610d4849c132092f2aa813198eef6d1175ab84023deb25694517a5db47e2a2", size = 67314291, upload-time = "2026-08-11T21:06:13.451Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/b6/0f37e7c36d376ec636924003cd1bdfbf7ed06793a075884e2e3dc689aa6d/itis_dakota-6.24.7-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:fe666c942b2701850cfb5d7d659b04e09c72f8c63a1bcec7bb2635d36b44d99e", size = 71952924, upload-time = "2026-08-11T21:06:19.615Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/1b/0bf1d3c1f5e83946596995a6b9071e5cf9f11384786317043a26a1644174/itis_dakota-6.24.7-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:edbe7d6bc7c2ab422df730e770b8d3328ba6913775f5294a1141f133296e034a", size = 59166496, upload-time = "2026-08-11T21:06:25.365Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/49/824cf5f8f6911025402d1963dfad8fd5d1cd4e578dcb57780b6555f4aee3/itis_dakota-6.24.7-cp311-cp311-macosx_15_0_x86_64.whl", hash = "sha256:9a56e5e1cba6f1ba838c186f9c8dd502755cfe016433973f9bb8eb39c3b51988", size = 65737602, upload-time = "2026-08-11T21:06:31.247Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/b2/83b40adf939564968231935f59cd7b6fe74d6737a5d5b36147c76ccbc611/itis_dakota-6.24.7-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:323b21abc6b2c9a2efd2787951274cf671a50a462b6e7ff5042b60b855975ec6", size = 67518343, upload-time = "2026-08-11T21:06:36.753Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/c3/c7befac8127b9b899f43257717fd760e5d3d4411b7bbcabd3687c60fdeff/itis_dakota-6.24.7-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:e1f7f929c3ee99a9eb5a7612efe3229d299bc9cc25e53ad054095aa64ce927c9", size = 72183297, upload-time = "2026-08-11T21:18:56.92Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/3a/5bab9f6315f6936fc01c34d5b00ef428ee61d18c1279183139134fb6fc9a/itis_dakota-6.24.7-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:4a2a19c7c8c561c2bb9a8f37f3ac87bf1472f4452ecefe7d58bba09ea76e95c4", size = 59164513, upload-time = "2026-08-11T21:19:02.969Z" },
+    { url = "https://files.pythonhosted.org/packages/68/19/6a10eae26c0a3eb28e71ee6a17bea899fd64a8cb4377444ab0feb32e9991/itis_dakota-6.24.7-cp312-cp312-macosx_15_0_x86_64.whl", hash = "sha256:f16358d5aec9451c4b2585890f3277d5dc07748d09cffdccdb705d764191a638", size = 65735630, upload-time = "2026-08-11T21:19:09.694Z" },
+    { url = "https://files.pythonhosted.org/packages/29/e8/a76562b1f8854335d49ff6be7a9489f58b2f5d1b07cba9df23bb9efa47c0/itis_dakota-6.24.7-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:fc38f392faca5efd0a2c25d8495d801c2381b04d7b3dc58284197372b35cff39", size = 67781300, upload-time = "2026-08-11T21:19:17.422Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/76/d05abbdf9b1dd0629ef625de1da429c4affcbd2ba8d20e0e71084e869fb3/itis_dakota-6.24.7-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:3493cd374e2fefaf8b2ba691d6484cb6cb35e2a2b19b867c3384f9b6d928edbc", size = 72460282, upload-time = "2026-08-11T21:19:25.508Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/b3/f33ba12215935c95d5f3ab1836cefbfbea1bee195b17d520a76ec720ddbb/itis_dakota-6.24.7-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:0ebeccee782dc5d2e065c2d7932e2fb023d91a9c740ab4da23c4ddd25a95b2b8", size = 59163698, upload-time = "2026-08-11T21:19:32.846Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/e3/28d81977737dcfd026b75d0c94023e660c1342977b0a19d938bcedef29ec/itis_dakota-6.24.7-cp313-cp313-macosx_15_0_x86_64.whl", hash = "sha256:f14e621fca1626eef6e2a09ac3d8d567c397af68e96c5f19dbb59252c11b1b81", size = 65736139, upload-time = "2026-08-11T21:19:40.019Z" },
+    { url = "https://files.pythonhosted.org/packages/91/2d/c423ccbfa24c36903392da6792033df5c29accac3065b08a7c61385cddce/itis_dakota-6.24.7-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:44a50b7b4a4bc3310d87403caf001775f9db2dd2ff8afc535d3595d583fd42cd", size = 67736226, upload-time = "2026-08-11T21:19:47.271Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/5a/dff08421fb84738a4b61060c5aa87250c1c1406299bb6e95533e1454b49b/itis_dakota-6.24.7-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:86dea299e34d5b03191dd6ced84b4a428f8441d67349213244be8e7b15ef3c7e", size = 72378040, upload-time = "2026-08-11T21:19:54.439Z" },
 ]
 
 [[package]]
 name = "itis-sumo"
-version = "0.1.0a2"
+version = "0.1.0a4"
 source = { editable = "." }
 dependencies = [
     { name = "itis-dakota" },
@@ -484,7 +492,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "itis-dakota", specifier = "==1.5.11" },
+    { name = "itis-dakota", specifier = "==6.24.7" },
     { name = "numpy", specifier = ">=2.0,<3.0" },
     { name = "pandas", specifier = ">=2.2,<3.0" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
