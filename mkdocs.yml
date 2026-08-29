@@ -6,24 +6,35 @@ edit_uri: ""
 
 theme:
   name: material
+  custom_dir: docs/overrides
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   features:
+    - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.footer
     - content.code.copy
+    - content.code.annotate
     - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
 
 markdown_extensions:
   - admonition
@@ -33,21 +44,37 @@ markdown_extensions:
   - pymdownx.highlight
   - pymdownx.superfences
   - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.arithmatex:
       generic: true
   - pymdownx.snippets:
       base_path: ["."]
       check_paths: true
 
+plugins:
+  - search
+
+extra_css:
+  - assets/css/workflow.css
+  - assets/css/fonts.css
+
 extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
+copyright: © IT'IS Foundation
+
 nav:
   - Home: index.md
-  - Tutorials:
+  - Quick Start:
       - Getting started: tutorials/getting-started.md
       - Worked examples: tutorials/examples.md
-  - How-to guides:
+  - Workflows:
       - Cross-validate a surrogate: how-to/cross-validate.md
       - Run a sensitivity analysis: how-to/sensitivity-analysis.md
       - Find a Pareto front with MOGA: how-to/moga.md
@@ -63,7 +90,7 @@ nav:
       - Sensitivity (Sobol) & UQ propagation: reference/sensitivity-uq.md
       - MOGA optimization: reference/moga.md
       - Data preprocessing: reference/preprocess.md
-  - Explanation:
+  - Background:
       - Why surrogate modeling: explanation/surrogate-modeling.md
       - How Gaussian Processes work: explanation/gaussian-processes.md
   - About:

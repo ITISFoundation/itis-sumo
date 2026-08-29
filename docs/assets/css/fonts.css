@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --md-text-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Custom IT'IS family palette: primary = TIP blue, accent = TIP indigo.
+   Overrides Material's default indigo so itis-sumo reads as the same family
+   as TIP (blue) and S4L (IT'IS Foundation). */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #0190d0;
+  --md-primary-fg-color--light: #4db8e6;
+  --md-primary-fg-color--dark: #016a99;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+  --md-accent-fg-color: #7280f5;
+  --md-accent-fg-color--transparent: rgba(114, 128, 245, 0.1);
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0190d0;
+  --md-primary-fg-color--light: #4db8e6;
+  --md-primary-fg-color--dark: #016a99;
+  --md-primary-bg-color: #11161c;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.07);
+  --md-accent-fg-color: #8b95f7;
+  --md-accent-fg-color--transparent: rgba(139, 149, 247, 0.1);
+}

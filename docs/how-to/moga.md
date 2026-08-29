@@ -34,11 +34,10 @@ pareto = perform_moga_optimization(
 # pareto["length"], pareto["width"] — the input points that produced them
 ```
 
-`distributions` must use `{"distribution": "uniform", "min": ..., "max": ...}`
-for every entry in `input_vars` — MOGA raises `ValueError` on any
-non-uniform distribution (normal, constant, etc. aren't supported as search
-bounds here). Pass more than one name in `output_responses` to get a
-genuine multi-objective Pareto front instead of a single optimum.
+!!! warning "Uniform bounds only"
+    MOGA raises `ValueError` on any non-uniform distribution. Use
+    `{"distribution": "uniform", ...}` for every input; pass several outputs
+    for a true multi-objective Pareto front.
 
 ## `moga_kwargs` options
 

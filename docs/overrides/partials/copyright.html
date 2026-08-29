@@ -1,0 +1,14 @@
+{% if config.copyright %}
+  <div class="md-copyright">
+    <div class="md-copyright__highlight sumo-footer-links">
+      <a href="https://itis.swiss/who-we-are/contact/" target="_blank" rel="noopener">Contact IT'IS</a>
+      <span class="sumo-footer-sep">&middot;</span>
+      <a href="https://itis.swiss" target="_blank" rel="noopener">IT'IS Website</a>
+      <span class="sumo-footer-sep">&middot;</span>
+      <a href="https://itis.swiss/who-we-are/" target="_blank" rel="noopener">About IT'IS</a>
+    </div>
+    <div class="md-copyright__highlight">
+      {{ config.copyright }}
+    </div>
+  </div>
+{% endif %}

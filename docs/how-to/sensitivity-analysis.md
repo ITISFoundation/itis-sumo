@@ -3,6 +3,10 @@
 **Goal:** find out which inputs actually drive an output's variance, so you
 know where to spend sampling budget and which variables are safe to fix.
 
+!!! info "Key concept"
+    Sobol' indices decompose output variance into per-input contributions —
+    so you know where to spend sampling budget and which variables are safe to fix.
+
 Assumes a fitted preprocessor and a training file in the shape
 [Getting started](../tutorials/getting-started.md) builds.
 
