@@ -12,9 +12,9 @@ uv sync                          # Python 3.10-3.12 currently resolve itis-dakot
 uv run itis-sumo validate        # engine probe (expect: Version 1.5.9)
 ```
 
-If `validate` fails, the Dakota engine wheel didn't resolve correctly — that's
-an install problem, not a itis-sumo problem; nothing below will work until
-`validate` passes.
+!!! warning "Engine gate"
+    If `validate` fails, the Dakota engine wheel didn't resolve — an install
+    problem, not an itis-sumo problem. Nothing below works until it passes.
 
 ## 2. Some training data
 

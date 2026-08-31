@@ -28,10 +28,10 @@ metrics = compute_cv_accuracy_metrics(cv["y1"], cv["y1_hat"])
 print(metrics["root_mean_squared"], metrics["mean_abs"], metrics["max_abs"])
 ```
 
-Use `evaluate_sumo_manual_crossvalidation`, not `evaluate_sumo_crossvalidation`
-(the Dakota-native pathway) — the manual K-fold pathway is the one whose
-numbers are independently verified end to end; Dakota's own CV log parsing
-has a known gap. Full detail: [Reference → Evaluate § Cross-validation](../reference/evaluate.md#cross-validation).
+!!! danger "Use the manual K-fold path"
+    Use `evaluate_sumo_manual_crossvalidation`, not `evaluate_sumo_crossvalidation`
+    (the Dakota-native pathway). Dakota's own CV log parsing has a known gap;
+    the manual K-fold numbers are independently verified end to end.
 
 ## Check for systematic bias
 
