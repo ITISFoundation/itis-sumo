@@ -2,8 +2,12 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: develop
     schedule:
       interval: weekly
+      day: monday
+      time: "03:00"
+      timezone: Europe/Zurich
     groups:
       github-actions:
         patterns:
@@ -11,12 +15,16 @@ updates:
 
   - package-ecosystem: uv
     directory: "/"
+    target-branch: develop
     schedule:
       interval: weekly
+      day: monday
+      time: "03:00"
+      timezone: Europe/Zurich
     groups:
       python-dependencies:
         patterns:
           - "*"
-    # Temporary: remove once the dependency is up to date and verified.
+    # Keep pinned until T16mo resolves the Dakota 6.23+ interface-cache regression.
     ignore:
       - dependency-name: "itis-dakota"
