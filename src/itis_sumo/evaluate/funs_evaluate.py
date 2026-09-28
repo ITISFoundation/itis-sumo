@@ -32,7 +32,9 @@ from itis_sumo.data.funs_data_processing import (
     get_results,
     load_data,
     process_input_file,
+    resolve_log_scale,
     sanitize_varnames,
+    scale_distribution,
 )
 
 _logger = logging.getLogger(__name__)
@@ -1035,7 +1037,7 @@ def evaluate_sobol_indices(
     import math
 
     import pandas as pd
-    from scipy.stats import loguniform, norm, sobol_indices, uniform
+    from scipy.stats import norm, sobol_indices
     from scipy.stats.qmc import Sobol
 
     # NOTE: input_vars/distributions must stay in the caller's original
@@ -1059,33 +1061,23 @@ def evaluate_sobol_indices(
 
     d_varying = len(varying_vars)
 
-    # Build frozen scipy distributions with .ppf for each varying variable. A
-    # log-scale variable is drawn uniformly in log space (log-uniform in the
-    # caller's original units), mirroring create_manual_uq_samples -- the
-    # surrogate's own preprocessor re-applies the log downstream.
+    # Build frozen scipy distributions with .ppf for each varying variable. The
+    # scale map is the shared scale_distribution: a log-scale variable is drawn
+    # log-uniform in the caller's original units (V44ls), the surrogate's
+    # preprocessor re-applies the log downstream.
     ppfs = {}
     for var in varying_vars:
         dist_info = distributions[var]
         dist_type = dist_info["distribution"]
-        log_scale = bool(dist_info.get("log_scale", False))
-        if log_scale and dist_type != "uniform":
-            raise ValueError(
-                f"log_scale is only supported for uniform distributions: {var}"
-            )
+        log_scale = resolve_log_scale(var, dist_info)
         if dist_type == "normal":
             ppfs[var] = norm(loc=dist_info["mean"], scale=dist_info["std"])
         elif dist_type == "uniform":
-            if log_scale:
-                lo, hi = float(dist_info["min"]), float(dist_info["max"])
-                if lo <= 0:
-                    raise ValueError(
-                        f"Log-scale uniform bounds must be strictly positive: {var}"
-                    )
-                ppfs[var] = loguniform(a=lo, b=hi)
-            else:
-                ppfs[var] = uniform(
-                    loc=dist_info["min"], scale=dist_info["max"] - dist_info["min"]
-                )
+            ppfs[var] = scale_distribution(
+                float(dist_info["min"]),
+                float(dist_info["max"]),
+                scale="log" if log_scale else "linear",
+            )
         else:
             raise ValueError(f"Unsupported distribution type: {dist_type}")
 

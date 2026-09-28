@@ -81,6 +81,17 @@ def _stderr_tail(run_dir: Path | None) -> str:
     return "\n".join(lines[-_STDERR_TAIL_LINES:])
 
 
+def column_scale(spec: PreprocessingSpec | None, column: str) -> str:
+    """The scale asked for on ``column``; ``None`` spec ≡ all-linear (V21pf).
+
+    One home for the lookup, shared by the session, the optimizer and the
+    standalone samplers (V45ls: every value producer reads scale through here).
+    """
+    if spec is None:
+        return "linear"
+    return spec.overrides.get(column, VariableSpec()).scale
+
+
 def _validate_samples(
     samples: pd.DataFrame,
     variables: Sequence[str],
@@ -526,7 +537,7 @@ class SumoSession:
 
     def _scale_of(self, column: str) -> str:
         """The scale the caller asked for on ``column`` (default: linear)."""
-        return self._spec.overrides.get(column, VariableSpec()).scale
+        return column_scale(self._spec, column)
 
     def _to_original_std(
         self,
@@ -687,13 +698,17 @@ def optimize_pareto_front(
             f"unknown={unknown_domains}"
         )
 
-    def _is_log(column: str) -> bool:
-        return spec.overrides.get(column, VariableSpec()).scale == "log"
+    log_inputs = [
+        variable for variable in variables if column_scale(spec, variable) == "log"
+    ]
+    log_objectives = [
+        objective for objective in objectives if column_scale(spec, objective) == "log"
+    ]
 
     non_positive_domain = sorted(
         name
         for name, dom in domains.items()
-        if _is_log(name) and (dom.minimum <= 0 or dom.maximum <= 0)
+        if name in log_inputs and (dom.minimum <= 0 or dom.maximum <= 0)
     )
     if non_positive_domain:
         raise SumoInputError(
@@ -703,9 +718,6 @@ def optimize_pareto_front(
     # The training-data positivity guard covers any log-scale objective (log is
     # undefined for <= 0 outputs) and reuses the shared validation path.
     validated = _validate_samples(samples, variables, list(objectives), spec)
-
-    log_inputs = [variable for variable in variables if _is_log(variable)]
-    log_objectives = [objective for objective in objectives if _is_log(objective)]
 
     run_dir = (
         create_run_dir(Path(workspace), "sumo")
@@ -741,7 +753,7 @@ def optimize_pareto_front(
         ]
         mapped_domains: dict[str, dict[str, float | str]] = {}
         for name, dom in domains.items():
-            if _is_log(name):
+            if name in log_inputs:
                 dom = DomainSpec(
                     minimum=float(np.log(dom.minimum)),
                     maximum=float(np.log(dom.maximum)),

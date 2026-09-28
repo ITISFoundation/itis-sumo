@@ -479,6 +479,59 @@ def extract_predictions_gridpoints(
     return results
 
 
+def resolve_log_scale(var: str, dist_info: dict[str, float | str]) -> bool:
+    """Validate a sampler distribution entry's optional ``log_scale`` flag.
+
+    Log-space sampling is only defined for a strictly-positive uniform, and only
+    ``uniform`` entries carry usable bounds to log-transform -- V45ls guards,
+    enforced at the api boundary as ``SumoInputError`` and again here so direct
+    users of this layer cannot drift past them silently.
+    """
+    log_scale = bool(dist_info.get("log_scale", False))
+    if log_scale and dist_info["distribution"] != "uniform":
+        raise ValueError(
+            f"log_scale is only supported for uniform distributions: {var}"
+        )
+    return log_scale
+
+
+def scale_distribution(minimum: float, maximum: float, *, scale: str):
+    """The frozen distribution mapping unit probability -> value on ``scale``.
+
+    One home for the unit->value map every value producer shares (LHS and grid
+    samplers, UQ draws, Sobol ppfs): linear fills the interval uniformly, log
+    fills it log-uniformly (``scipy.stats.loguniform``, base-agnostic since
+    ``ln(10^u)`` is affine in ``u``). ``scale`` is a REQUIRED argument --
+    V45ls' structural tripwire: code producing values without deciding a scale
+    breaks at call with ``TypeError``, never silently defaults to linear.
+    """
+    from scipy.stats import loguniform, uniform
+
+    if scale == "log":
+        lo, hi = float(minimum), float(maximum)
+        if lo <= 0 or hi <= lo:
+            raise ValueError(
+                f"Log-scale bounds must be strictly positive and increasing, "
+                f"got [{lo}, {hi}]"
+            )
+        return loguniform(a=lo, b=hi)
+    if scale == "linear":
+        return uniform(loc=minimum, scale=maximum - minimum)
+    raise ValueError(f"Unknown scale: {scale!r}")
+
+
+def scale_values(values: Sequence[float] | np.ndarray, *, scale: str) -> np.ndarray:
+    """Map raw column values onto the scale the model treats them on."""
+    array = np.asarray(values, dtype=float)
+    if scale == "log":
+        if (array <= 0).any():
+            raise ValueError("log scale is undefined for values <= 0")
+        return np.log(array)
+    if scale == "linear":
+        return array
+    raise ValueError(f"Unknown scale: {scale!r}")
+
+
 def create_manual_uq_samples(
     input_vars: list[str],
     distributions: dict[str, dict[str, float | str]],
@@ -494,18 +547,14 @@ def create_manual_uq_samples(
     matched against a preprocessor fit on original names.
     """
 
-    from scipy.stats import norm, uniform
+    from scipy.stats import norm
 
     rng = np.random.default_rng(seed=seed)
     samples = {}
     for var in input_vars:
         dist_info = distributions[var]
         dist_type = dist_info["distribution"]
-        log_scale = bool(dist_info.get("log_scale", False))
-        if log_scale and dist_type != "uniform":
-            raise ValueError(
-                f"log_scale is only supported for uniform distributions: {var}"
-            )
+        log_scale = resolve_log_scale(var, dist_info)
         if dist_type == "normal":
             mean = float(dist_info["mean"])
             std = float(dist_info["std"])
@@ -513,33 +562,18 @@ def create_manual_uq_samples(
                 size=num_samples, loc=mean, scale=std, random_state=rng
             ).tolist()
         elif dist_type == "uniform":
-            min_val = float(dist_info["min"])
-            max_val = float(dist_info["max"])
-            if log_scale:
-                if min_val <= 0:
-                    raise ValueError(
-                        f"Log-scale uniform bounds must be strictly positive: {var}"
-                    )
-                # Draw uniformly in log10 space, map back to the caller's original
-                # units -- the surrogate's own preprocessor re-applies the log, so
-                # what reaches it is a uniform-in-log sample (SPEC T27fr).
-                log_min, log_max = np.log10(min_val), np.log10(max_val)
-                samples[var] = np.power(
-                    10,
-                    uniform.rvs(
-                        size=num_samples,
-                        loc=log_min,
-                        scale=log_max - log_min,
-                        random_state=rng,
-                    ),
-                ).tolist()
-            else:
-                samples[var] = uniform.rvs(
-                    size=num_samples,
-                    loc=min_val,
-                    scale=max_val - min_val,
-                    random_state=rng,
-                ).tolist()
+            # A log-scale uniform is drawn log-uniform in the caller's original
+            # units -- the surrogate's preprocessor re-applies the log, so what
+            # reaches it is uniform-in-log (V44ls).
+            samples[var] = (
+                scale_distribution(
+                    float(dist_info["min"]),
+                    float(dist_info["max"]),
+                    scale="log" if log_scale else "linear",
+                )
+                .rvs(size=num_samples, random_state=rng)
+                .tolist()
+            )
         elif dist_type == "constant":
             value = dist_info["value"]
             samples[var] = [float(value)] * num_samples
@@ -718,6 +752,9 @@ def compute_correlation_indices(
     input_samples: pd.DataFrame | dict[str, list[float]],
     output_samples: list[float] | np.ndarray,
     input_vars: list[str],
+    *,
+    input_scales: dict[str, str],
+    output_scale: str,
 ) -> dict[str, dict[str, float]]:
     """
     Compute per-input <-> output Pearson and Spearman correlation coefficients.
@@ -734,13 +771,19 @@ def compute_correlation_indices(
         output_samples: Sample values of the output QoI, paired index-for-index with
             each input variable's samples (i.e. same Monte Carlo run).
         input_vars: Input variable names to compute correlations for.
+        input_scales: Per-variable ``"linear"``/``"log"`` scale; correlations run
+            on values mapped onto that scale (V45ls -- Pearson is not invariant to
+            log, so honouring scale changes it; Spearman is monotone-invariant and
+            therefore provably unaffected). REQUIRED, never defaulted.
+        output_scale: Scale of ``output_samples``. REQUIRED, never defaulted.
 
     Returns:
         Dict mapping each input variable name to `{"pearson": float, "spearman": float}`.
 
     Raises:
         ValueError: If `input_vars` is empty, a variable is missing from
-            `input_samples`, or sample lengths are mismatched.
+            `input_samples`, sample lengths are mismatched, or a log-scaled
+            column holds a value <= 0.
     """
     from scipy.stats import pearsonr, spearmanr
 
@@ -752,13 +795,15 @@ def compute_correlation_indices(
             col: input_samples[col].tolist() for col in input_samples.columns
         }
 
-    output_array = np.asarray(output_samples, dtype=float)
+    output_array = scale_values(output_samples, scale=output_scale)
 
     correlations: dict[str, dict[str, float]] = {}
     for var in input_vars:
         if var not in input_samples:
             raise ValueError(f"Input variable '{var}' not found in input samples.")
-        input_array = np.asarray(input_samples[var], dtype=float)
+        input_array = scale_values(
+            input_samples[var], scale=input_scales.get(var, "linear")
+        )
         if len(input_array) != len(output_array):
             raise ValueError(
                 f"Sample length mismatch for variable '{var}': "
