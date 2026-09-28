@@ -264,6 +264,42 @@ class TestOptimize:
                 max_evaluations=200,
             )
 
+    def test_log_objective_front_returns_original_units(self, samples):
+        domains = {
+            "width": DomainSpec(minimum=WIDTH_RANGE[0], maximum=WIDTH_RANGE[1]),
+            "height": DomainSpec(minimum=HEIGHT_RANGE[0], maximum=HEIGHT_RANGE[1]),
+        }
+        result = optimize(
+            samples,
+            VARIABLES,
+            {RESPONSE: "minimize"},
+            domains=domains,
+            max_evaluations=200,
+            preprocessing=_LOG_SCALE,
+        )
+        front = result.data[RESPONSE]
+        assert front
+        # A log-trained objective must come back exp-restored to original stress
+        # units (O(10)), not the O(1..3) ln values.
+        assert min(front) > 0.0
+        assert max(front) < 10 * samples[RESPONSE].max()
+
+    def test_log_variable_domain_rejects_non_positive_bounds(self, samples):
+        domains = {
+            "width": DomainSpec(minimum=0.0, maximum=5.0),  # log => must be > 0
+            "height": DomainSpec(minimum=HEIGHT_RANGE[0], maximum=HEIGHT_RANGE[1]),
+        }
+        log_width = PreprocessingSpec(overrides={"width": VariableSpec(scale="log")})
+        with pytest.raises(SumoInputError, match="domains must be strictly positive"):
+            optimize(
+                samples,
+                VARIABLES,
+                {RESPONSE: "minimize"},
+                domains=domains,
+                max_evaluations=100,
+                preprocessing=log_width,
+            )
+
 
 _LOG_SCALE = PreprocessingSpec(overrides={RESPONSE: VariableSpec(scale="log")})
 

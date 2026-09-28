@@ -670,9 +670,17 @@ def optimize_pareto_front(
     domains: Mapping[str, DomainSpec],
     max_evaluations: int,
     workspace: Path | None,
+    preprocessing: PreprocessingSpec | None = None,
 ) -> ParetoFrontResult:
-    """Fit a surrogate per objective and find its Pareto-optimal trade-off front."""
+    """Fit a surrogate per objective and find its Pareto-optimal trade-off front.
+
+    A ``scale="log"`` override applies the same way everywhere else: a log-scale
+    *variable* trains and is explored in log space (so its search domain is mapped
+    into log space and must be strictly positive), and a log-scale *objective* is
+    fitted on ``ln(y)`` with the front restored to original units on the way out.
+    """
     variables = tuple(variables)
+    spec = preprocessing or PreprocessingSpec()
     missing_domains = sorted(set(variables) - set(domains))
     unknown_domains = sorted(set(domains) - set(variables))
     if missing_domains or unknown_domains:
@@ -681,9 +689,25 @@ def optimize_pareto_front(
             f"unknown={unknown_domains}"
         )
 
-    validated = _validate_samples(
-        samples, variables, list(objectives), PreprocessingSpec()
+    def _is_log(column: str) -> bool:
+        return spec.overrides.get(column, VariableSpec()).scale == "log"
+
+    non_positive_domain = sorted(
+        name
+        for name, dom in domains.items()
+        if _is_log(name) and (dom.minimum <= 0 or dom.maximum <= 0)
     )
+    if non_positive_domain:
+        raise SumoInputError(
+            f"Log-scale {non_positive_domain} domains must be strictly positive"
+        )
+
+    # The training-data positivity guard covers any log-scale objective (log is
+    # undefined for <= 0 outputs) and reuses the shared validation path.
+    validated = _validate_samples(samples, variables, list(objectives), spec)
+
+    log_inputs = [variable for variable in variables if _is_log(variable)]
+    log_objectives = [objective for objective in objectives if _is_log(objective)]
 
     run_dir = (
         create_run_dir(Path(workspace), "sumo")
@@ -702,6 +726,10 @@ def optimize_pareto_front(
         ]
         if maximize:
             preprocessor.setup_sign_switching(output_sign_switches=maximize)
+        if log_inputs or log_objectives:
+            preprocessor.setup_log_transform(
+                input_log_vars=log_inputs, output_log_vars=log_objectives
+            )
         transformed = preprocessor.fit_transform(validated)
         training_file = run_dir / "processed_samples.dat"
         transformed.to_csv(training_file, sep=" ", index=False)
@@ -713,10 +741,16 @@ def optimize_pareto_front(
             preprocessor.output_variables[response].mapped_name
             for response in objectives
         ]
-        mapped_domains = {
-            preprocessor.input_variables[variable].mapped_name: spec.as_engine_dict()
-            for variable, spec in domains.items()
-        }
+        mapped_domains: dict[str, dict[str, float | str]] = {}
+        for name, dom in domains.items():
+            if _is_log(name):
+                dom = DomainSpec(
+                    minimum=float(np.log(dom.minimum)),
+                    maximum=float(np.log(dom.maximum)),
+                )
+            mapped_domains[preprocessor.input_variables[name].mapped_name] = (
+                dom.as_engine_dict()
+            )
 
         try:
             results = perform_moga_optimization(

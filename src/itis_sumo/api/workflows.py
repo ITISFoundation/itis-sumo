@@ -255,6 +255,7 @@ def optimize(
     *,
     domains: Mapping[str, DomainSpec],
     max_evaluations: int = 1000,
+    preprocessing: PreprocessingSpec | None = None,
     workspace: Path | None = None,
 ) -> ParetoFrontResult:
     """Find the Pareto-optimal trade-off front across one or more objectives.
@@ -262,6 +263,8 @@ def optimize(
     Unlike the other workflows, this fits one surrogate per objective over a
     domain (where exploration is allowed), not a real-world uncertainty
     distribution -- MOGA cannot use anything but a uniform domain (SPEC T27fr).
+    A ``scale="log"`` override on a variable explores it in log space; on an
+    objective it fits and reports the front in log space.
     """
     return optimize_pareto_front(
         samples,
@@ -269,6 +272,7 @@ def optimize(
         objectives,
         domains=domains,
         max_evaluations=max_evaluations,
+        preprocessing=preprocessing,
         workspace=workspace,
     )
 
