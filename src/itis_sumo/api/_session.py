@@ -420,9 +420,7 @@ class SumoSession:
                 f"Distributions must cover variables exactly; missing={missing}, "
                 f"unknown={unknown}"
             )
-        engine_distributions = {
-            variable: spec.as_engine_dict() for variable, spec in distributions.items()
-        }
+        engine_distributions = self._uq_engine_distributions(distributions)
         results = self._run_engine(
             "computing Sobol indices",
             evaluate_sobol_indices,
@@ -514,7 +512,7 @@ class SumoSession:
             if self._scale_of(variable) == "log":
                 if spec.distribution != "uniform":
                     raise SumoInputError(
-                        f"'{variable}' is log-scale but its uncertainty is a "
+                        f"'{variable}' is log-scale but its distribution is a "
                         f"'{spec.distribution}'; only a uniform supports log sampling"
                     )
                 if spec.minimum is None or spec.minimum <= 0:

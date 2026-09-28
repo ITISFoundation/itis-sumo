@@ -469,3 +469,59 @@ class TestLogScaleUncertaintyAndMetrics:
         bad.loc[bad.index[0], RESPONSE] = -1.0
         with pytest.raises(SumoInputError, match="log-scale but hold values"):
             evaluate_cv_metrics(bad, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE)
+
+
+class TestLogScaleSobol:
+    """Log must reach the Sobol sampler too (SPEC T27fr -- 'log everywhere'): a
+    log-scale variable is drawn log-uniform, so the variance decomposition is
+    taken over that distribution rather than a linear one."""
+
+    def test_log_input_changes_the_variance_decomposition(self, samples):
+        linear = evaluate_sobol(
+            samples, VARIABLES, RESPONSE, distributions=_UQ_DISTS, seed=7
+        )
+        logw = evaluate_sobol(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            preprocessing=_LOG_WIDTH,
+            seed=7,
+        )
+        assert set(logw.indices) == set(VARIABLES)
+        # width drawn log-uniform is compressed toward its low end, so it explains
+        # slightly less response variance than a linear width -- and height, taking
+        # the residual share, rises. The direction proves the flag reached the
+        # sampler, not just the surrogate fit.
+        assert logw.indices["width"]["total"] < linear.indices["width"]["total"]
+        assert logw.indices["height"]["total"] > linear.indices["height"]["total"]
+
+    def test_log_input_rejects_a_normal_distribution(self, samples):
+        normal_width = {
+            "width": DistributionSpec("normal", mean=3.0, std=0.5),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="only a uniform supports log"):
+            evaluate_sobol(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=normal_width,
+                preprocessing=_LOG_WIDTH,
+                seed=7,
+            )
+
+    def test_log_input_rejects_a_non_positive_lower_bound(self, samples):
+        zero_min = {
+            "width": DistributionSpec("uniform", minimum=0.0, maximum=5.0),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="not strictly positive"):
+            evaluate_sobol(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=zero_min,
+                preprocessing=_LOG_WIDTH,
+                seed=7,
+            )
