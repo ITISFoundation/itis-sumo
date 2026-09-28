@@ -17,11 +17,11 @@ Live results as of the last run of the ported V&V suite:
 
 | Suite | Tests | Result |
 |---|---|---|
-| Full standalone suite (`uv run pytest`) | 245 | **all passing** |
-| Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 26 | **all passing** |
+| Full standalone suite (`uv run pytest`) | 359 | **all passing** |
+| Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 30 | **all passing** |
 | Sobol' / Ishigami acceptance gate (`test_sobol_indices.py`) | 4 | **all passing** |
 
-The analytical tier spawns a real `itis-dakota` (1.5.9 / Dakota 6.20)
+The analytical tier spawns a real `itis-dakota` (6.24.7)
 process per test — nothing here is mocked. Re-run locally with:
 
 ```sh
@@ -131,6 +131,32 @@ See [Data preprocessing](reference/preprocess.md).
 | H1-H3 | Z-score / min-max / sign-switch round-trip to 1e-10 | ✅ |
 | H4 | Round-trip on 1000×20 dataset | ✅ |
 | H5 | Normalization improves accuracy on badly-scaled `f(x) = 1000x+1` | ✅ |
+| H6 | `log_transform` round-trip (`np.log`/`np.exp`), non-positive values refused, delta-method std inverse `std_orig ≈ |y_hat|·std_log` | ✅ |
+
+## Category I: Scale semantics (log)
+
+`scale` is a first-class, un-forgettable axis (SPEC V44ls/V45ls): every public
+value-producing entry point accepts it (defaulting to linear, so existing calls
+are unchanged) and every value the api yields is computed under it. The one
+`unit→value` map behind all of it is `scale_distribution` (`uniform` vs
+`scipy.stats.loguniform`), and it requires the scale argument — unwired code
+breaks with `TypeError`, it can never silently default.
+
+| Test | What | Status |
+|---|---|---|
+| I1 | LHS + grid samplers: log domain ⇒ log-uniform/geometric fill; linear default bit-identical; non-positive log domain ⇒ `SumoInputError` | ✅ |
+| I2 | Correlations: Pearson moves under log, Spearman provably unchanged (monotone-invariant), untouched columns bit-identical; correlator's scale args are required (`TypeError` tripwire) | ✅ |
+| I3 | Surrogate / CV / along-axes / grid eval: log response exp-restored to original units; non-positive training outputs rejected pre-Dakota | ✅ |
+| I4 | UQ propagation: log inputs drawn log-uniform (response skews low vs linear, directionally asserted); log+normal / log+min≤0 rejected; log response ⇒ multiplicative (not additive) spread | ✅ |
+| I5 | CV accuracy metrics: inherit log through `cross_validate` (metrics differ from linear); reject non-positive log responses | ✅ |
+| I6 | MOGA: log variable explored in ln-space (domain mapped, positivity-guarded); log objective exp-restored for **both** minimize and maximize (sign-after-log inverse order verified) | ✅ |
+| I7 | Sobol: log input shifts the variance decomposition in the expected direction (compressed variable explains less); mixed log+constant partition | ✅ |
+| I8 | Flip matrix: all 10 public value-producing entry points' outputs move when a column turns log — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
+
+Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
+`TestScaleAwareSamplers`, `TestScaleFlipMatrix`),
+`tests/test_correlation_indices.py`, `tests/test_dakota_funs_data_processing.py`,
+`tests/test_data_preprocessor.py`.
 
 ## Ishigami analytical acceptance gate
 
@@ -161,7 +187,7 @@ first-order-only check and fail this one.
 ## Known limitations
 
 Carried over from the original test plan, still true of the pinned engine
-(`itis-dakota==1.5.9`, Dakota 6.20):
+(`itis-dakota==6.24.7`):
 
 - **Built-in Dakota CV parsing is unreliable** — `log_output` comes back
   hardcoded empty on some study configurations, which is why
@@ -185,7 +211,7 @@ Carried over from the original test plan, still true of the pinned engine
 
 ## Summary
 
-Every category in the original V&V plan (A through H, plus the Ishigami
+Every category in the original V&V plan (A through I, plus the Ishigami
 acceptance gate) currently passes against its analytical reference, with
 real (unmocked) Dakota execution for every category that requires the
 engine. The known limitations above are pre-existing engine/pipeline
