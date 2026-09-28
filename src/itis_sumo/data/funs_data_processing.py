@@ -501,6 +501,11 @@ def create_manual_uq_samples(
     for var in input_vars:
         dist_info = distributions[var]
         dist_type = dist_info["distribution"]
+        log_scale = bool(dist_info.get("log_scale", False))
+        if log_scale and dist_type != "uniform":
+            raise ValueError(
+                f"log_scale is only supported for uniform distributions: {var}"
+            )
         if dist_type == "normal":
             mean = float(dist_info["mean"])
             std = float(dist_info["std"])
@@ -510,9 +515,31 @@ def create_manual_uq_samples(
         elif dist_type == "uniform":
             min_val = float(dist_info["min"])
             max_val = float(dist_info["max"])
-            samples[var] = uniform.rvs(
-                size=num_samples, loc=min_val, scale=max_val - min_val, random_state=rng
-            ).tolist()
+            if log_scale:
+                if min_val <= 0:
+                    raise ValueError(
+                        f"Log-scale uniform bounds must be strictly positive: {var}"
+                    )
+                # Draw uniformly in log10 space, map back to the caller's original
+                # units -- the surrogate's own preprocessor re-applies the log, so
+                # what reaches it is a uniform-in-log sample (SPEC T27fr).
+                log_min, log_max = np.log10(min_val), np.log10(max_val)
+                samples[var] = np.power(
+                    10,
+                    uniform.rvs(
+                        size=num_samples,
+                        loc=log_min,
+                        scale=log_max - log_min,
+                        random_state=rng,
+                    ),
+                ).tolist()
+            else:
+                samples[var] = uniform.rvs(
+                    size=num_samples,
+                    loc=min_val,
+                    scale=max_val - min_val,
+                    random_state=rng,
+                ).tolist()
         elif dist_type == "constant":
             value = dist_info["value"]
             samples[var] = [float(value)] * num_samples

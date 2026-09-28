@@ -463,9 +463,7 @@ class SumoSession:
                 f"Distributions must cover variables exactly; missing={missing}, "
                 f"unknown={unknown}"
             )
-        engine_distributions = {
-            variable: spec.as_engine_dict() for variable, spec in distributions.items()
-        }
+        engine_distributions = self._uq_engine_distributions(distributions)
         samples = self._run_engine(
             "propagating uncertainty",
             propagate_manual_uq_with_uncertainty,
@@ -499,6 +497,34 @@ class SumoSession:
             minimum=summary["min"],
             maximum=summary["max"],
         )
+
+    def _uq_engine_distributions(
+        self, distributions: Mapping[str, DistributionSpec]
+    ) -> dict[str, dict[str, float | str]]:
+        """Translate distributions for the sampler, flagging log-scale variables.
+
+        A log-scale variable is sampled uniformly in log space (the surrogate
+        preprocessor re-applies the log). Sampling in log space is only defined for
+        a strictly-positive uniform, so anything else is rejected here -- at the
+        API boundary -- rather than surfacing as the sampler's raw ``ValueError``.
+        """
+        engine: dict[str, dict[str, float | str]] = {}
+        for variable, spec in distributions.items():
+            entry = spec.as_engine_dict()
+            if self._scale_of(variable) == "log":
+                if spec.distribution != "uniform":
+                    raise SumoInputError(
+                        f"'{variable}' is log-scale but its uncertainty is a "
+                        f"'{spec.distribution}'; only a uniform supports log sampling"
+                    )
+                if spec.minimum is None or spec.minimum <= 0:
+                    raise SumoInputError(
+                        f"'{variable}' is log-scale but its distribution lower "
+                        "bound is not strictly positive"
+                    )
+                entry["log_scale"] = True
+            engine[variable] = entry
+        return engine
 
     def _scale_of(self, column: str) -> str:
         """The scale the caller asked for on ``column`` (default: linear)."""

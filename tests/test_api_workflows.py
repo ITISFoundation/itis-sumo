@@ -343,3 +343,93 @@ class TestLogScale:
                 preprocessing=log_input,
                 points_per_variable=5,
             )
+
+
+_LOG_WIDTH = PreprocessingSpec(overrides={"width": VariableSpec(scale="log")})
+_UQ_DISTS = {
+    "width": DistributionSpec("uniform", minimum=1.0, maximum=5.0),
+    "height": DistributionSpec("uniform", minimum=100.0, maximum=500.0),
+}
+
+
+class TestLogScaleUncertaintyAndMetrics:
+    """Log must reach the UQ sampler and the CV metrics, not just the surrogate
+    (SPEC T27fr -- 'log applied everywhere')."""
+
+    def test_log_input_samples_log_uniform_skewing_response_low(self, samples):
+        linear = evaluate_uncertainty(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            num_samples=400,
+            n_histograms=5,
+            seed=7,
+        )
+        logw = evaluate_uncertainty(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            preprocessing=_LOG_WIDTH,
+            num_samples=400,
+            n_histograms=5,
+            seed=7,
+        )
+        # width drawn log-uniform is skewed toward the low end, so the stress it
+        # drives must sit meaningfully below the linear-uniform case.
+        assert logw.mean > 0.0
+        assert logw.mean < linear.mean - 0.5
+
+    def test_log_input_rejects_a_normal_uncertainty_distribution(self, samples):
+        normal_width = {
+            "width": DistributionSpec("normal", mean=3.0, std=0.5),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="only a uniform supports log"):
+            evaluate_uncertainty(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=normal_width,
+                preprocessing=_LOG_WIDTH,
+                num_samples=50,
+                n_histograms=3,
+                seed=7,
+            )
+
+    def test_log_input_rejects_a_non_positive_lower_bound(self, samples):
+        zero_min = {
+            "width": DistributionSpec("uniform", minimum=0.0, maximum=5.0),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="not strictly positive"):
+            evaluate_uncertainty(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=zero_min,
+                preprocessing=_LOG_WIDTH,
+                num_samples=50,
+                n_histograms=3,
+                seed=7,
+            )
+
+    def test_cv_metrics_honour_log_scale(self, samples):
+        linear = evaluate_cv_metrics(samples, VARIABLES, RESPONSE, seed=7)
+        log_response = evaluate_cv_metrics(
+            samples, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE, seed=7
+        )
+        assert linear.root_mean_squared >= 0.0
+        assert log_response.root_mean_squared >= 0.0
+        # A log-trained surrogate is a different fit, so the metrics must not be
+        # byte-identical to the linear run (proving the flag reached the path).
+        assert log_response.root_mean_squared != pytest.approx(
+            linear.root_mean_squared, rel=1e-9
+        )
+
+    def test_cv_metrics_reject_non_positive_log_response(self, samples):
+        bad = samples.copy()
+        bad.loc[bad.index[0], RESPONSE] = -1.0
+        with pytest.raises(SumoInputError, match="log-scale but hold values"):
+            evaluate_cv_metrics(bad, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE)
