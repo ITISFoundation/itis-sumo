@@ -218,11 +218,21 @@ class TestSampleValidation:
         with pytest.raises(SumoInputError, match="not in play"):
             cross_validate(make_samples(), VARIABLES, RESPONSE, preprocessing=spec)
 
-    def test_reports_unsupported_scale_instead_of_ignoring_it(self):
-        """An override that cannot be honoured must fail loudly (SPEC V21pf)."""
+    def test_honours_a_log_scale_override(self):
+        """A log-scale override is now applied, not rejected, and is surfaced as
+        the domain-level ``scale`` (never a transform name) in the result (V21pf)."""
         spec = PreprocessingSpec(overrides={"width": VariableSpec(scale="log")})
-        with pytest.raises(SumoInputError, match="Logarithmic"):
-            cross_validate(make_samples(), VARIABLES, RESPONSE, preprocessing=spec)
+        result = cross_validate(make_samples(), VARIABLES, RESPONSE, preprocessing=spec)
+        assert result.effective_config["width"].scale == "log"
+
+    def test_rejects_a_non_positive_log_scale_column(self):
+        """A log-scale column that holds a non-positive value fails loudly with a
+        SumoInputError, before any engine work (log is undefined at <= 0)."""
+        samples = make_samples()
+        samples.loc[samples.index[0], "width"] = 0.0
+        spec = PreprocessingSpec(overrides={"width": VariableSpec(scale="log")})
+        with pytest.raises(SumoInputError, match="log-scale"):
+            cross_validate(samples, VARIABLES, RESPONSE, preprocessing=spec)
 
     def test_rejects_a_single_fold(self):
         with pytest.raises(SumoInputError, match="at least 2 folds"):

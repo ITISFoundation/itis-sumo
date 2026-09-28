@@ -20,7 +20,9 @@ import pytest
 from itis_sumo.api import (
     DistributionSpec,
     DomainSpec,
+    PreprocessingSpec,
     SumoInputError,
+    VariableSpec,
     compute_correlations,
     cross_validate,
     evaluate_along_axes,
@@ -260,4 +262,84 @@ class TestOptimize:
                 {RESPONSE: "minimize"},
                 domains={"width": DomainSpec(minimum=1.0, maximum=5.0)},
                 max_evaluations=200,
+            )
+
+
+_LOG_SCALE = PreprocessingSpec(overrides={RESPONSE: VariableSpec(scale="log")})
+
+
+class TestLogScale:
+    """The domain-level ``scale`` flag must reach the surrogate and come back
+    in the caller's own units -- SPEC V21pf (scale in, no transform in the
+    signature) and the port of the mmux_vite log-scale backend (T27fr)."""
+
+    def test_log_scale_response_comes_back_in_original_units(self, samples):
+        result = cross_validate(samples, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE)
+
+        assert result.effective_config[RESPONSE].scale == "log"
+        predicted = [v for v in result.predicted if not math.isnan(v)]
+        assert predicted, "no fold produced a prediction"
+        # Log-space predictions must be exp-restored: same order of magnitude as
+        # the raw stress (which is O(10)), not the O(1..3) log values.
+        assert min(predicted) > 0.0
+        assert max(predicted) < 10 * samples[RESPONSE].max()
+        observed_mean = float(np.mean(samples[RESPONSE]))
+        assert min(predicted) < 3 * observed_mean < 10 * max(predicted)
+
+    def test_log_scale_survives_from_request_to_engine(self, samples):
+        linear = cross_validate(samples, VARIABLES, RESPONSE)
+        log = cross_validate(samples, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE)
+        # Both agree roughly with the observed stress -- the transform is internal.
+        assert np.mean(log.predicted) == pytest.approx(
+            np.mean(linear.predicted), rel=0.5, nan_ok=True
+        )
+
+    def test_along_axes_log_response_returns_original_units(self, samples):
+        result = evaluate_along_axes(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            preprocessing=_LOG_SCALE,
+            points_per_variable=5,
+        )
+        assert result.effective_config[RESPONSE].scale == "log"
+        for sweep in result.sweeps.values():
+            assert len(sweep.x) == len(sweep.predicted)
+            assert min(sweep.predicted) > 0.0
+            assert max(sweep.predicted) < 10 * samples[RESPONSE].max()
+
+    def test_grid_log_response_returns_original_units(self, samples):
+        result = evaluate_grid(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            grid_variables=["width", "height"],
+            preprocessing=_LOG_SCALE,
+            points_per_variable=5,
+        )
+        flat = [v for row in result.data["stress"] for v in row]
+        assert min(flat) > 0.0
+        assert max(flat) < 10 * samples[RESPONSE].max()
+
+    def test_non_positive_log_response_is_rejected_before_dakota(self):
+        bad = pd.DataFrame(
+            {
+                "width": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "height": [100.0, 200.0, 300.0, 400.0, 500.0],
+                "stress": [5.0, 8.0, 0.0, 12.0, 15.0],  # <= 0 under log
+            }
+        )
+        with pytest.raises(SumoInputError, match="log-scale but hold values"):
+            cross_validate(bad, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE)
+
+    def test_holding_a_log_variable_at_zero_is_rejected(self, samples):
+        log_input = PreprocessingSpec(overrides={"height": VariableSpec(scale="log")})
+        with pytest.raises(SumoInputError, match="log-scale .* fixed at a value"):
+            evaluate_along_axes(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                at={"height": 0.0},
+                preprocessing=log_input,
+                points_per_variable=5,
             )

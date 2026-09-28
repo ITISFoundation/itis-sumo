@@ -127,14 +127,6 @@ def _validate_samples(
             f"Preprocessing overrides given for columns that are not in play: "
             f"{unknown_overrides}"
         )
-    logarithmic = sorted(
-        name for name, override in spec.overrides.items() if override.scale == "log"
-    )
-    if logarithmic:
-        raise SumoInputError(
-            f"Logarithmic scale is not supported yet (requested for {logarithmic}); "
-            "it arrives together with the domain/distribution split"
-        )
 
     selected = samples.loc[:, columns].copy()
     try:
@@ -153,6 +145,20 @@ def _validate_samples(
         raise SumoInputError(
             f"Columns {unusable} contain missing or infinite values. "
             "Incomplete samples must be filtered out before they are passed in"
+        )
+
+    # A log-scale column is trained as log(value); log is undefined at or below
+    # zero, so rejecting a non-positive sample here (as a SumoInputError the
+    # consumer can surface) preempts the preprocessor's raw ValueError deeper in.
+    non_positive = sorted(
+        name
+        for name, override in spec.overrides.items()
+        if override.scale == "log" and (selected[name].to_numpy() <= 0).any()
+    )
+    if non_positive:
+        raise SumoInputError(
+            f"Columns {non_positive} are marked log-scale but hold values <= 0, "
+            "for which the logarithm is undefined"
         )
 
     minimum = _minimum_samples(len(variables))
@@ -227,6 +233,18 @@ class SumoSession:
         preprocessor.setup_variables(
             input_vars=list(self._variables), output_vars=[self._response]
         )
+        preprocessor.setup_log_transform(
+            input_log_vars=[
+                variable
+                for variable in self._variables
+                if self._scale_of(variable) == "log"
+            ],
+            output_log_vars=[
+                response
+                for response in [self._response]
+                if self._scale_of(response) == "log"
+            ],
+        )
         transformed = preprocessor.fit_transform(self._samples)
 
         assert self._run_dir is not None
@@ -265,12 +283,17 @@ class SumoSession:
                 "with uncertainty estimates"
             )
 
+        predicted_original = self._to_original_units(
+            response, results[f"{response}_hat"]
+        )
         return CrossValidationResult(
             response=self._response,
             observed=self._to_original_units(response, results[response]),
-            predicted=self._to_original_units(response, results[f"{response}_hat"]),
-            predicted_std=self._to_original_units(
-                response, results[f"{response}_std_hat"]
+            predicted=predicted_original,
+            predicted_std=self._to_original_std(
+                response,
+                results[f"{response}_std_hat"],
+                {self._response: predicted_original},
             ),
             warnings=list(results.get("warnings", [])),
             seed=seed,
@@ -304,17 +327,22 @@ class SumoSession:
         sweeps: dict[str, AxisSweep] = {}
         for mapped_variable, axis in results.items():
             variable = original_names.get(mapped_variable, mapped_variable)
+            predicted = self._to_original_units(response, axis["y_hat"])
+            # A standard deviation is a width, not a position: it goes through the
+            # delta-method std inverse (a no-op remap unless this response is log
+            # scale), not the plain point inverse applied to ``predicted``.
+            predicted_std = (
+                self._to_original_std(
+                    response, axis["std_hat"], {self._response: predicted}
+                )
+                if "std_hat" in axis
+                else None
+            )
             sweeps[variable] = AxisSweep(
                 variable=variable,
                 x=self._to_original_units(mapped_variable, axis["x"]),
-                predicted=self._to_original_units(response, axis["y_hat"]),
-                # A standard deviation is a width, not a position: it is reported
-                # as produced rather than shifted back through the transform.
-                predicted_std=(
-                    [float(value) for value in axis["std_hat"]]
-                    if "std_hat" in axis
-                    else None
-                ),
+                predicted=predicted,
+                predicted_std=predicted_std,
             )
 
         return AlongAxesResult(
@@ -472,6 +500,38 @@ class SumoSession:
             maximum=summary["max"],
         )
 
+    def _scale_of(self, column: str) -> str:
+        """The scale the caller asked for on ``column`` (default: linear)."""
+        return self._spec.overrides.get(column, VariableSpec()).scale
+
+    def _to_original_std(
+        self,
+        mapped_name: str,
+        std_values: Sequence[float],
+        point_estimates_original: Mapping[str, Sequence[float]],
+    ) -> list[float]:
+        """Restore a predicted *standard deviation* to original units.
+
+        A std is a width, not a position, so it cannot go through the ordinary
+        point inverse-transform. A log-scale response in particular needs the
+        multiplicative delta-method rule, which is why the point estimates (already
+        back in original units) are threaded in alongside. For every other column
+        this is a plain name remap, matching the pre-log behaviour exactly.
+        """
+        assert self._preprocessor is not None
+        original = self._preprocessor.get_inverse_mapping().get(
+            mapped_name, mapped_name
+        )
+        points = {
+            name: [float(value) for value in values]
+            for name, values in point_estimates_original.items()
+        }
+        restored = self._preprocessor.inverse_transform_output_std(
+            {mapped_name: [float(value) for value in std_values]},
+            point_estimates_original=points,
+        )
+        return [float(value) for value in restored.get(original, list(std_values))]
+
     def _mapped_name(self, variable: str) -> str:
         assert self._preprocessor is not None
         return self._preprocessor.input_variables[variable].mapped_name
@@ -530,6 +590,13 @@ class SumoSession:
             raise SumoInputError(
                 f"Cannot hold {unknown} fixed: they are not variables of this model"
             )
+        bad = sorted(
+            name
+            for name, value in at.items()
+            if self._scale_of(name) == "log" and float(value) <= 0
+        )
+        if bad:
+            raise SumoInputError(f"Cannot hold log-scale {bad} fixed at a value <= 0")
         assert self._preprocessor is not None
         held_row = {
             **self._samples.mean().to_dict(),
