@@ -27,12 +27,14 @@ def test_v19nd_dependabot_updates_are_grouped_and_scheduled():
     blocks = _update_blocks()
 
     assert len(blocks) == 2
-    assert {
-        re.search(r"package-ecosystem: (\S+)", block).group(1) for block in blocks
-    } == {
-        "github-actions",
-        "uv",
-    }
+    ecosystems = set()
+    for block in blocks:
+        # _update_blocks only yields blocks anchored on this key, but ty needs
+        # the Optional narrowed -- assert rather than silently skip a block.
+        ecosystem = re.search(r"package-ecosystem: (\S+)", block)
+        assert ecosystem is not None
+        ecosystems.add(ecosystem.group(1))
+    assert ecosystems == {"github-actions", "uv"}
 
     for block in blocks:
         assert "target-branch: develop" in block
