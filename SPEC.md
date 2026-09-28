@@ -84,7 +84,7 @@ V17ab: ∀ `.py` file in repo ! `ruff check` + `ruff format --check` clean (CI-e
 V18rs: ∀ `.github/workflows/**` change ! at least one validation job executes the affected workflow path; shared CI workflow changes ⊥ leave the validation matrix entirely skipped
 V19cn: public API ! use VOCAB nouns (sample/variable=parameter/response=QoI); ⊥ "job" in any itis_sumo signature, docstring, or result field
 V20dm: consumer-facing entrypoints ! accept plain tabular data; ⊥ `FunctionJob`/`JobVariableSelection`/oSPARC status strings inside itis_sumo (test-enforced, sibling of V4ty)
-V21pf: preprocessing ! auto-defaulted + overridable in domain vocabulary only; ⊥ transform vocabulary reachable from a public signature; effective config inspectable in the result
+V21pf: preprocessing ! auto-defaulted + overridable in domain vocabulary only; ⊥ transform vocabulary reachable from a public signature; effective config inspectable in the result; ∀ value-producing entry point ! accept `scale` (default linear — ⊥ caller must pass) ∧ ! apply it (V45ls)
 V22rs: results ! typed dataclass, original units + original names, `dataclasses.asdict()`-serializable; ⊥ `_hat`/`_std_hat` suffix keys in the public shape
 V23er: ∀ error escaping `itis_sumo.api` ! be a `SumoError` subclass; ⊥ raw `KeyError`/`IndexError`/`ValueError` crossing the boundary
 V24af: run dir ! discarded on success, PRESERVED on failure w/ its path + stderr tail attached to the raised `SumoEngineError`
@@ -110,6 +110,7 @@ V41hp: `ty check` ! zero diagnostics repo-wide (blocking in both the local `prek
 V19nd: ∀ Dependabot ecosystem entry in `.github/dependabot.yml` → weekly Monday 03:00 Europe/Zurich schedule ∧ exactly one wildcard dependency group; ⊥ unspecified default schedule or one PR per dependency
 V20qx: ∀ ignored Dependabot dependency → ignore reason names active compatibility constraint ∧ references tracked resolution task; `itis-dakota` remains ignored until T16mo resolves the Dakota 6.23+ interface-cache regression
 V44ls: ∀ scale-consuming `itis_sumo.api` workflow (surrogate fit ∧ UQ/Sobol input sampling ∧ MOGA search domain ∧ CV accuracy metric) → a `scale="log"` override ! be honoured in that workflow's own computation (log-space surrogate + log-space sampling/search where a distribution or domain is involved, positivity-guarded); ⊥ a `scale` override accepted but silently ignored outside the surrogate fit
+V45ls: ∀ value-producing `itis_sumo.api` entry point → `scale` ! be threaded into the computation that yields those values ∧ observable in the result; ⊥ a value the api produced while ignoring the caller's scale; enforced: structural (internal value-producers `scale_distribution`/`resolve_log_scale` take scale/flag as a required arg — unwired code breaks at call w/ `TypeError`, never silent drift) ∧ behavioural (linear↔log flip-test over ∀ 10 entry points; rank-correlation exempt — monotone-invariant, asserted unchanged)
 
 ## §R
 R1: `export_model`/`import_model` child keywords; formats `text_archive`(.sps)/`binary_archive`(.bsps)/`algebraic_file`(.alg); naming `{prefix}.{resp}.{ext}` | branch R2
@@ -160,6 +161,7 @@ T33zz|✓|swap itis-sumo LICENSE + `pyproject.toml` `license`/classifiers to mat
 T34aa|✓|`make publish-testpypi-dev` ! source `TESTPYPI_TOKEN` from local `.env` (gitignored) instead of requiring a pre-exported shell var|§C
 T35cc|✓|gate `publish`/`release` jobs behind explicit `workflow_dispatch`; `build`+`verify` stay CI-only for release tags; feature `.devN` uploads move to local Make target|V31vp,V32bb
 T36dd|✓|add `.env` to `.gitignore`; make `publish-testpypi` source `.env` without printing token, then build/check/publish|V37bb
+T46ls|.|scale first-class across the WHOLE api surface: `generate_lhs_samples` ∧ `generate_grid_samples` ∧ `compute_correlations` take `preprocessing` ∧ honour scale; one `scale_distribution` unit→value helper absorbs the log10-power hand-roll ∧ the duplicate log guards ∧ the `_is_log` closure; V45ls linear↔log flip-tests over ∀ 10 entry points + 5 gap tests (MOGA log·maximize, log-variable axis x-restoration, log-response UQ spread, Sobol mixed partition, repo-wide `ty`); rows land in the V&V report Category I|V45ls,V44ls,V21pf,V22rs
 T37ef|✓|validate manual publish tag + artifact version before PyPI upload|V35wk
 T38dd|✓|make `publish-testpypi-dev` auto-compute/write `.devN`, build/check/upload directly to TestPyPI, then restore project version; CI verifies alpha/beta/rc before real PyPI; no dev tag cascade|V38cc,V39qf
 T39pk|.|POST-PORT/deepen candidate: `itis_sumo.api.workflows` repeats the same build-session → translate-config → call → translate-result → wrap-errors skeleton per function; pull the shared shape down into `_session.py` so each `workflows.py` function shrinks to signature+one call — behavior-preserving refactor, tests green before/after; natural precursor to T26eq's handle extraction|V16qf,V27fq,T26eq
