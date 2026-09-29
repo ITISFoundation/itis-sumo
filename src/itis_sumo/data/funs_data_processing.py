@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, TypeVar, overload
 
@@ -753,7 +753,7 @@ def compute_correlation_indices(
     output_samples: list[float] | np.ndarray,
     input_vars: list[str],
     *,
-    input_scales: dict[str, str],
+    input_scales: Mapping[str, str],
     output_scale: str,
 ) -> dict[str, dict[str, float]]:
     """

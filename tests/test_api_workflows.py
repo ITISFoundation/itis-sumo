@@ -12,6 +12,7 @@ import dataclasses
 import json
 import math
 from collections.abc import Callable
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -27,6 +28,7 @@ from itis_sumo.api import (
     compute_correlations,
     cross_validate,
     evaluate_along_axes,
+    evaluate_correlations,
     evaluate_cv_metrics,
     evaluate_grid,
     evaluate_sobol,
@@ -685,6 +687,123 @@ class TestScaleAwareSamplers:
         )
 
 
+class TestEvaluateCorrelations:
+    """`evaluate_correlations` owns the MC-through-surrogate correlation
+    workflow (#470) so no consumer re-implements the sampling chain (V45ls)."""
+
+    def test_recovers_dominant_variable_over_shared_sample_set(self, samples):
+        result = evaluate_correlations(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            num_samples=300,
+            seed=7,
+        )
+        assert result.response == RESPONSE
+        assert result.seed == 7
+        assert set(result.coefficients) == set(VARIABLES)
+        # stress = 3*width + 0.01*height: width dominates on the shared set.
+        assert abs(result.coefficients["width"]["pearson"]) > 0.9
+        assert abs(result.coefficients["width"]["pearson"]) > abs(
+            result.coefficients["height"]["pearson"]
+        )
+
+    def test_is_seed_reproducible(self, samples):
+        first = evaluate_correlations(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            num_samples=150,
+            seed=11,
+        )
+        second = evaluate_correlations(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            num_samples=150,
+            seed=11,
+        )
+        assert first.coefficients == second.coefficients
+
+    def test_log_scale_moves_the_coefficients(self, samples):
+        # NOTE: unlike table-mode correlation, log mode ALSO changes the draw
+        # (log-uniform vs uniform), so only "the numbers move" is guaranteed --
+        # no rank-invariance claim here.
+        linear = evaluate_correlations(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            num_samples=300,
+            seed=7,
+        )
+        logw = evaluate_correlations(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_UQ_DISTS,
+            num_samples=300,
+            preprocessing=_LOG_WIDTH,
+            seed=7,
+        )
+        assert logw.coefficients["width"]["pearson"] != pytest.approx(
+            linear.coefficients["width"]["pearson"], rel=1e-3
+        )
+
+    def test_log_variable_requires_uniform_positive_support(self, samples):
+        non_uniform = {
+            "width": DistributionSpec("normal", mean=3.0, std=0.5),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="only a uniform supports log"):
+            evaluate_correlations(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=non_uniform,
+                num_samples=50,
+                preprocessing=_LOG_WIDTH,
+                seed=7,
+            )
+        non_positive = {
+            "width": DistributionSpec("uniform", minimum=0.0, maximum=5.0),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="strictly positive"):
+            evaluate_correlations(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=non_positive,
+                num_samples=50,
+                preprocessing=_LOG_WIDTH,
+                seed=7,
+            )
+
+    def test_distributions_must_cover_variables_exactly(self, samples):
+        with pytest.raises(SumoInputError, match="cover variables exactly"):
+            evaluate_correlations(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions={"width": _UQ_DISTS["width"]},
+                num_samples=50,
+                seed=7,
+            )
+
+    def test_producer_requires_scales(self):
+        """V45ls structural tripwire on the new value-producing entry point."""
+        from itis_sumo.evaluate.funs_evaluate import correlate_manual_uq_samples
+
+        with pytest.raises(TypeError):
+            correlate_manual_uq_samples(  # ty: ignore[missing-argument]
+                Path("."), Path("."), ["x"], "y", {}, None, 10, seed=1
+            )
+
+
 class TestScaleFlipMatrix:
     """V45ls behavioural enforcement in one place: EVERY public value-producing
     entry point's output must move when a column turns log. A silent scale-ignore
@@ -791,6 +910,23 @@ class TestScaleFlipMatrix:
                 ),
             ),
             (
+                "evaluate_correlations",
+                lambda p: self._fp(
+                    [
+                        entry["pearson"]
+                        for entry in evaluate_correlations(
+                            samples,
+                            VARIABLES,
+                            RESPONSE,
+                            distributions=_UQ_DISTS,
+                            num_samples=150,
+                            preprocessing=p,
+                            seed=7,
+                        ).coefficients.values()
+                    ]
+                ),
+            ),
+            (
                 "compute_correlations",
                 lambda p: self._fp(
                     [
@@ -820,7 +956,7 @@ class TestScaleFlipMatrix:
                 ),
             ),
         ]
-        assert len(cases) == 10
+        assert len(cases) == 11
         for name, fingerprint in cases:
             linear = fingerprint(None)
             log = fingerprint(_LOG_WIDTH)

@@ -76,6 +76,7 @@ class TestPublicSurface:
             "compute_correlations",
             "cross_validate",
             "evaluate_along_axes",
+            "evaluate_correlations",
             "evaluate_grid",
             "evaluate_sobol",
             "evaluate_cv_metrics",

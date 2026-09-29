@@ -149,6 +149,7 @@ class CorrelationResult:
 
     response: str
     coefficients: dict[str, dict[str, float]]
+    seed: int | None = None
 
 
 @dataclass(frozen=True)

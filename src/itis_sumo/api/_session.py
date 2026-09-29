@@ -36,6 +36,7 @@ from itis_sumo.api.errors import (
 from itis_sumo.api.types import (
     AlongAxesResult,
     AxisSweep,
+    CorrelationResult,
     CrossValidationResult,
     Direction,
     DistributionSpec,
@@ -48,6 +49,7 @@ from itis_sumo.api.types import (
     VariableSpec,
 )
 from itis_sumo.evaluate.funs_evaluate import (
+    correlate_manual_uq_samples,
     evaluate_sobol_indices,
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
@@ -505,6 +507,47 @@ class SumoSession:
             std=summary["std"],
             minimum=summary["min"],
             maximum=summary["max"],
+        )
+
+    def correlations(
+        self,
+        *,
+        distributions: Mapping[str, DistributionSpec],
+        num_samples: int,
+        seed: int,
+    ) -> CorrelationResult:
+        """Correlate each variable with the surrogate-predicted response over a
+        shared Monte Carlo sample set drawn from ``distributions``.
+
+        Scale comes from the session's own spec (V45ls): each column's samples
+        and the prediction are correlated on their declared scale.
+        """
+        missing = sorted(set(self._variables) - set(distributions))
+        unknown = sorted(set(distributions) - set(self._variables))
+        if missing or unknown:
+            raise SumoInputError(
+                f"Distributions must cover variables exactly; missing={missing}, "
+                f"unknown={unknown}"
+            )
+        engine_distributions = self._uq_engine_distributions(distributions)
+        coefficients = self._run_engine(
+            "correlating through the surrogate",
+            correlate_manual_uq_samples,
+            self._run_dir,
+            self._training_file,
+            self._variables,
+            self._response,
+            engine_distributions,
+            self._preprocessor,
+            num_samples,
+            input_scales={
+                variable: self._scale_of(variable) for variable in self._variables
+            },
+            output_scale=self._scale_of(self._response),
+            seed=seed,
+        )
+        return CorrelationResult(
+            response=self._response, seed=seed, coefficients=coefficients
         )
 
     def _uq_engine_distributions(

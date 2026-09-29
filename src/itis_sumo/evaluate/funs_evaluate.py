@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -23,6 +23,7 @@ from itis_sumo.config.funs_create_dakota_conf import (
 from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.core.sumo_model_store import stage_model_for_import, store_exported_model
 from itis_sumo.data.funs_data_processing import (
+    compute_correlation_indices,
     create_grid_samples,
     create_manual_uq_samples,
     create_samples_along_axes,
@@ -249,6 +250,75 @@ def propagate_manual_uq_with_uncertainty(
     all_samples_original = preprocessor.inverse_transform(all_samples_dict)
     return np.asarray(all_samples_original[output_response]).reshape(
         n_histograms, num_samples
+    )
+
+
+def correlate_manual_uq_samples(
+    run_dir: Path,
+    PROCESSED_TRAINING_FILE: Path,
+    input_vars: list[str],
+    output_response: str,
+    distributions: dict[str, dict[str, float | str]],
+    preprocessor,
+    num_samples: int,
+    *,
+    input_scales: Mapping[str, str],
+    output_scale: str,
+    seed: int = 42,
+) -> dict[str, dict[str, float]]:
+    """Correlate each input variable with the surrogate-predicted response over
+    a shared Monte Carlo sample set.
+
+    Draws ``num_samples`` per-variable samples from ``distributions`` (in the
+    caller's original units), evaluates the surrogate once, then correlates
+    every input's samples against the inverse-transformed prediction -- the
+    workflow behind the historical ``/flask/dakota/compute_correlation_indices``
+    route (#470), owned here so no consumer re-implements the sampling/
+    surrogate/correlation chain.
+
+    Correlations run on values mapped onto each column's own scale (V45ls):
+    ``input_scales``/``output_scale`` are REQUIRED keyword arguments -- a
+    producer of values cannot forget to decide a scale (``TypeError``, never a
+    silent linear default). Pearson moves under a log reparametrization;
+    Spearman is monotone-invariant by construction.
+    """
+    samples = create_manual_uq_samples(input_vars, distributions, num_samples, seed)
+    df_samples = pd.DataFrame(samples)
+    SAMPLES_FILE = run_dir / "correlation_samples.csv"
+    df_samples.to_csv(SAMPLES_FILE, index=False)
+
+    df_samples_transformed = preprocessor.transform(df_samples)
+    PROCESSED_SAMPLES_FILE = run_dir / "correlation_samples_processed.csv"
+    df_samples_transformed.to_csv(PROCESSED_SAMPLES_FILE, sep=" ", index=False)
+
+    mapped_input_vars = [
+        preprocessor.input_variables[var].mapped_name for var in input_vars
+    ]
+    mapped_response = preprocessor.output_variables[output_response].mapped_name
+    results = evaluate_sumo(
+        run_dir,
+        PROCESSED_TRAINING_FILE,
+        PROCESSED_SAMPLES_FILE,
+        mapped_input_vars,
+        mapped_response,
+    )
+
+    prediction_key = mapped_response + "_hat"
+    if prediction_key not in results:
+        raise ValueError(
+            f"Cannot compute correlation indices without '{prediction_key}' "
+            f"predictions. Available keys: {list(results.keys())}."
+        )
+
+    predictions_original = preprocessor.inverse_transform(
+        {mapped_response: results[prediction_key]}
+    )
+    return compute_correlation_indices(
+        df_samples,
+        predictions_original[output_response],
+        input_vars,
+        input_scales=input_scales,
+        output_scale=output_scale,
     )
 
 
