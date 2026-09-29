@@ -206,8 +206,11 @@ def test_create_manual_uq_samples_log_scale_is_log_uniform_in_original_units():
     assert float(values.mean()) < 50.0  # skewed toward the low end, unlike linear
 
 
-def test_create_manual_uq_samples_log_scale_rejects_non_uniform():
-    with pytest.raises(ValueError, match="only supported for uniform"):
+def test_create_manual_uq_samples_log_scale_normal_draws_lognormal():
+    # Flipped by B19ps/V46rn: log+normal used to be rejected; now mu/sigma
+    # parameterize the ln-space distribution -- raw draws are lognormal and
+    # positive, and ln(draws) recovers N(mu, sigma).
+    values = np.array(
         create_manual_uq_samples(
             ["x"],
             {
@@ -218,9 +221,14 @@ def test_create_manual_uq_samples_log_scale_rejects_non_uniform():
                     "log_scale": True,
                 }
             },
-            num_samples=5,
+            num_samples=2000,
             seed=1,
-        )
+        )["x"]
+    )
+    assert (values > 0.0).all()
+    ln_values = np.log(values)
+    assert abs(float(ln_values.mean()) - 1.0) < 0.05
+    assert abs(float(ln_values.std()) - 0.1) < 0.05
 
 
 def test_create_manual_uq_samples_log_scale_rejects_non_positive_bound():

@@ -153,6 +153,7 @@ breaks with `TypeError`, it can never silently default.
 | I7 | Sobol: log input shifts the variance decomposition in the expected direction (compressed variable explains less; a log⊗normal widens the lognormal tail so it explains more, V46rn); mixed log+constant partition | ✅ |
 | I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log, ∀ 3 `distributions`-taking entry points also move when a NORMAL column turns log (V46rn) — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
 | I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
+| I10 | Boundary input guards (V47st): `DomainSpec`/`DistributionSpec` reject inverted/degenerate bounds at construction; unused `preprocessing` overrides rejected by the table-mode + sampler entry points (not just the session path); log-uniform upper bound required ∧ ordered at the api boundary; a variable missing from the correlator's `input_scales` raises instead of defaulting to linear | ✅ |
 
 Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
 `TestScaleAwareSamplers`, `TestScaleFlipMatrix`),

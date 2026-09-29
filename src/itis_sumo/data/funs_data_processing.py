@@ -559,9 +559,7 @@ def create_manual_uq_samples(
         if dist_type == "normal":
             mean = float(dist_info["mean"])
             std = float(dist_info["std"])
-            draws = norm.rvs(
-                size=num_samples, loc=mean, scale=std, random_state=rng
-            )
+            draws = norm.rvs(size=num_samples, loc=mean, scale=std, random_state=rng)
             # A log-scale normal keeps μ/σ in ln space (V46rn): ln(x) ~ N(μ,σ),
             # so the raw draws are lognormal in the caller's original units --
             # positive by construction, and what the surrogate's preprocessor

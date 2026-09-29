@@ -69,8 +69,7 @@ def _reject_unused_overrides(
     )
     if unknown:
         raise SumoInputError(
-            f"Preprocessing overrides given for columns that are not in play: "
-            f"{unknown}"
+            f"Preprocessing overrides given for columns that are not in play: {unknown}"
         )
 
 

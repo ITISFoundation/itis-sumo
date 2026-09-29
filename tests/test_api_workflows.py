@@ -857,17 +857,11 @@ class TestEvaluateCorrelations:
         """V47st: a misspelled log-scale column fails loud everywhere, not just
         in the session-backed workflows -- a silently ignored override would
         return plausible linear results."""
-        misspelled = PreprocessingSpec(
-            overrides={"wdith": VariableSpec(scale="log")}
-        )
+        misspelled = PreprocessingSpec(overrides={"wdith": VariableSpec(scale="log")})
         with pytest.raises(SumoInputError, match="not in play"):
-            compute_correlations(
-                samples, VARIABLES, RESPONSE, preprocessing=misspelled
-            )
+            compute_correlations(samples, VARIABLES, RESPONSE, preprocessing=misspelled)
         with pytest.raises(SumoInputError, match="not in play"):
-            generate_lhs_samples(
-                _SAMPLER_DOMAINS, 20, preprocessing=misspelled, seed=7
-            )
+            generate_lhs_samples(_SAMPLER_DOMAINS, 20, preprocessing=misspelled, seed=7)
         with pytest.raises(SumoInputError, match="not in play"):
             generate_grid_samples(
                 _SAMPLER_DOMAINS,

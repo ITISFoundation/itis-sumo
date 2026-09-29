@@ -1144,7 +1144,9 @@ def evaluate_sobol_indices(
         log_scale = resolve_log_scale(var, dist_info)
         if dist_type == "normal":
             ppfs[var] = (
-                lognorm(s=float(dist_info["std"]), scale=np.exp(float(dist_info["mean"])))
+                lognorm(
+                    s=float(dist_info["std"]), scale=np.exp(float(dist_info["mean"]))
+                )
                 if log_scale
                 else norm(loc=dist_info["mean"], scale=dist_info["std"])
             )
