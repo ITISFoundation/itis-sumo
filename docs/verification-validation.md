@@ -17,7 +17,7 @@ Live results as of the last run of the ported V&V suite:
 
 | Suite | Tests | Result |
 |---|---|---|
-| Full standalone suite (`uv run pytest`) | 359 | **all passing** |
+| Full standalone suite (`uv run pytest`) | 365 | **all passing** |
 | Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 30 | **all passing** |
 | Sobol' / Ishigami acceptance gate (`test_sobol_indices.py`) | 4 | **all passing** |
 
@@ -151,7 +151,8 @@ breaks with `TypeError`, it can never silently default.
 | I5 | CV accuracy metrics: inherit log through `cross_validate` (metrics differ from linear); reject non-positive log responses | ✅ |
 | I6 | MOGA: log variable explored in ln-space (domain mapped, positivity-guarded); log objective exp-restored for **both** minimize and maximize (sign-after-log inverse order verified) | ✅ |
 | I7 | Sobol: log input shifts the variance decomposition in the expected direction (compressed variable explains less); mixed log+constant partition | ✅ |
-| I8 | Flip matrix: all 10 public value-producing entry points' outputs move when a column turns log — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
+| I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
+| I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move, log+non-uniform / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
 
 Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
 `TestScaleAwareSamplers`, `TestScaleFlipMatrix`),
