@@ -1,4 +1,6 @@
+import numpy as np
 import pandas as pd
+import pytest
 
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
@@ -82,3 +84,67 @@ class TestDataPreprocessor:
 
         assert loaded.get_variable_mapping() == {"alpha": "x1", "beta": "y1"}
         assert loaded.output_variables["beta"].mean == 5.0
+
+
+class TestLogTransform:
+    def test_log_output_round_trips_to_original_space(self):
+        dataframe = pd.DataFrame(
+            {"length": [1.0, 2.0, 3.0], "stress": [10.0, 100.0, 1000.0]}
+        )
+        preprocessor = DataPreprocessor()
+        preprocessor.setup_variables(["length"], ["stress"])
+        preprocessor.setup_log_transform(output_log_vars=["stress"])
+
+        transformed = preprocessor.fit_transform(dataframe)
+        restored = preprocessor.inverse_transform(transformed)
+
+        # The surrogate sees the natural log of the response, not the raw value.
+        assert transformed["y1"].tolist() == pytest.approx(
+            np.log([10.0, 100.0, 1000.0])
+        )
+        # And the caller gets their own units back.
+        assert restored["stress"] == pytest.approx([10.0, 100.0, 1000.0])
+
+    def test_mixed_scales_keep_each_column_in_its_own_space(self):
+        dataframe = pd.DataFrame(
+            {"lin": [2.0, 4.0], "log": [2.0, 4.0], "y": [1.0, 1.0]}
+        )
+        preprocessor = DataPreprocessor()
+        preprocessor.setup_variables(["lin", "log"], ["y"])
+        preprocessor.setup_log_transform(input_log_vars=["log"])
+
+        transformed = preprocessor.fit_transform(dataframe)
+
+        assert transformed["x1"].tolist() == pytest.approx([2.0, 4.0])
+        assert transformed["x2"].tolist() == pytest.approx(np.log([2.0, 4.0]))
+
+    def test_fit_rejects_non_positive_values_for_a_log_column(self):
+        preprocessor = DataPreprocessor()
+        preprocessor.setup_variables(["x"], ["y"])
+        preprocessor.setup_log_transform(input_log_vars=["x"])
+        with pytest.raises(ValueError, match="log is undefined"):
+            preprocessor.fit(pd.DataFrame({"x": [1.0, 0.0, 3.0], "y": [1.0, 1.0, 1.0]}))
+
+    def test_inverse_transform_output_std_uses_the_delta_method(self):
+        preprocessor = DataPreprocessor()
+        preprocessor.setup_variables(["x"], ["y"])
+        preprocessor.setup_log_transform(output_log_vars=["y"])
+        preprocessor.fit(pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [10.0, 20.0, 40.0]}))
+
+        # std_orig ~= |point_orig| * std_log
+        restored = preprocessor.inverse_transform_output_std(
+            {"y1": [0.1, 0.2, 0.15]},
+            point_estimates_original={"y": [10.0, 20.0, 40.0]},
+        )
+        assert restored["y"] == pytest.approx([1.0, 4.0, 6.0])
+
+    def test_inverse_transform_output_std_without_points_leaves_std_unchanged(
+        self, caplog
+    ):
+        preprocessor = DataPreprocessor()
+        preprocessor.setup_variables(["x"], ["y"])
+        preprocessor.setup_log_transform(output_log_vars=["y"])
+        preprocessor.fit(pd.DataFrame({"x": [1.0, 2.0], "y": [10.0, 20.0]}))
+
+        restored = preprocessor.inverse_transform_output_std({"y1": [0.1, 0.2]})
+        assert restored["y"] == pytest.approx([0.1, 0.2])

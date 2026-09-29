@@ -109,6 +109,35 @@ Supporting utility used across the workflow above, not a workflow stage on its o
 
 **`DataPreprocessor`** — roundtrip fidelity (see Tier 2, P3/P6)
 
+### 7. Scale semantics helpers (`funs_data_processing.py`, `api/_session.py`)
+
+The `unit→value` map shared by every value producer (SPEC V44ls/V45ls).
+
+**`resolve_log_scale(var, dist_info) -> bool`**
+- `log_scale=True` on a non-`uniform` entry → `ValueError` naming the variable
+- absent flag → `False` (linear default)
+
+**`scale_distribution(minimum, maximum, *, scale)`**
+- `scale` is a REQUIRED keyword — omitting it raises `TypeError` (structural tripwire)
+- `"linear"` → `uniform(loc=min, scale=max-min)` (bit-identical to the pre-scale sampler math)
+- `"log"` → `loguniform(a=min, b=hi)`: geometric ppf/rvs, geometric mean at the log-midpoint
+- `min <= 0` or `max <= min` under log → `ValueError` ("strictly positive and increasing")
+- unknown scale string → `ValueError`
+
+**`scale_values(values, *, scale) -> np.ndarray`**
+- `"log"` of any `<= 0` → `ValueError("log scale is undefined...")`; otherwise `np.log`
+- `"linear"` → unchanged array
+
+**`compute_correlation_indices(..., *, input_scales, output_scale)`**
+- scales required (tripwire test); log-reparametrized input shifts Pearson, leaves Spearman bit-identical
+
+**`correlate_manual_uq_samples(...)` → `api.evaluate_correlations`**
+- MC→surrogate→correlate workflow (#470) with REQUIRED `input_scales`/`output_scale` (tripwire test); distributions must cover variables exactly; log variable requires uniform ∧ strictly-positive lower bound
+
+**`create_manual_uq_samples`** — `log_scale` uniform drawn log-uniform in original units; log+normal and log+min≤0 refused
+
+**`DataPreprocessor` log transform** — `setup_log_transform`/fit/transform/inverse round-trip; delta-method `inverse_transform_output_std` (`tests/test_data_preprocessor.py::TestLogTransform`)
+
 ---
 
 ## Tier 2: Property-Based / Invariant Tests

@@ -19,9 +19,14 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
-from itis_sumo.api._session import SumoSession, optimize_pareto_front
+from itis_sumo.api._session import (
+    SumoSession,
+    column_scale,
+    optimize_pareto_front,
+)
 from itis_sumo.api.errors import SumoInputError
 from itis_sumo.api.types import (
     DEFAULT_SEED,
@@ -42,6 +47,7 @@ from itis_sumo.data.funs_data_processing import (
     compute_correlation_indices,
     create_grid_samples,
     load_data,
+    scale_distribution,
 )
 from itis_sumo.evaluate.funs_evaluate import compute_cv_accuracy_metrics
 from itis_sumo.sampling.lhs import lhs as _lhs
@@ -180,18 +186,78 @@ def compute_correlations(
     samples: pd.DataFrame,
     variables: Sequence[str],
     response: str,
+    *,
+    preprocessing: PreprocessingSpec | None = None,
 ) -> CorrelationResult:
-    """Compute response correlations from a caller-owned sample table."""
+    """Compute response correlations from a caller-owned sample table.
+
+    Each column is correlated on its own scale (V45ls): Pearson is not
+    invariant to log, so a log-scaled variable's coefficient shifts; Spearman
+    is monotone-invariant and therefore unchanged.
+    """
     missing = sorted((set(variables) | {response}) - set(samples.columns))
     if missing:
         raise SumoInputError(f"Samples do not contain columns: {missing}")
+    spec = preprocessing or PreprocessingSpec()
     try:
         coefficients = compute_correlation_indices(
-            samples, samples[response].tolist(), list(variables)
+            samples,
+            samples[response].tolist(),
+            list(variables),
+            input_scales={v: column_scale(spec, v) for v in variables},
+            output_scale=column_scale(spec, response),
         )
     except ValueError as exc:
         raise SumoInputError(str(exc)) from exc
     return CorrelationResult(response=response, coefficients=coefficients)
+
+
+def evaluate_correlations(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    response: str,
+    *,
+    distributions: Mapping[str, DistributionSpec],
+    num_samples: int = 1000,
+    seed: int = DEFAULT_SEED,
+    preprocessing: PreprocessingSpec | None = None,
+    workspace: Path | None = None,
+) -> CorrelationResult:
+    """Correlate a response against every variable over the SAME Monte Carlo
+    sample set the surrogate predicts.
+
+    Draws ``num_samples`` from ``distributions``, evaluates the fitted surrogate
+    once, and reports Pearson + Spearman of each variable's samples against the
+    prediction (original units, original names). This is the sampling-through-
+    the-surrogate correlation the web UI needs -- distinct from
+    ``compute_correlations``, which correlates columns of a table the caller
+    already owns.
+
+    Args:
+        samples: Training samples (the surrogate is fitted on these).
+        variables: Input variable columns.
+        response: Response column, named as in the table.
+        distributions: Per-variable Monte Carlo distributions; must cover the
+            variables exactly.
+        num_samples: Monte Carlo sample size.
+        seed: Controls the draw and the surrogate.
+        preprocessing: Per-column scale overrides (V45ls): each column's samples
+            and the prediction are correlated on their declared scale, so a
+            log-scale variable's Pearson moves while its Spearman is provably
+            unchanged.
+        workspace: If given, working files are written here and kept. If
+            omitted, they are discarded on success and kept on failure.
+
+    Raises:
+        SumoInputError: Distributions do not cover the variables exactly, or a
+            log-scale variable's distribution cannot support log sampling.
+    """
+    with SumoSession(
+        samples, variables, response, preprocessing=preprocessing, workspace=workspace
+    ) as session:
+        return session.fit().correlations(
+            distributions=distributions, num_samples=num_samples, seed=seed
+        )
 
 
 def evaluate_cv_metrics(
@@ -255,6 +321,7 @@ def optimize(
     *,
     domains: Mapping[str, DomainSpec],
     max_evaluations: int = 1000,
+    preprocessing: PreprocessingSpec | None = None,
     workspace: Path | None = None,
 ) -> ParetoFrontResult:
     """Find the Pareto-optimal trade-off front across one or more objectives.
@@ -262,6 +329,8 @@ def optimize(
     Unlike the other workflows, this fits one surrogate per objective over a
     domain (where exploration is allowed), not a real-world uncertainty
     distribution -- MOGA cannot use anything but a uniform domain (SPEC T27fr).
+    A ``scale="log"`` override on a variable explores it in log space; on an
+    objective it fits and reports the front in log space.
     """
     return optimize_pareto_front(
         samples,
@@ -269,6 +338,7 @@ def optimize(
         objectives,
         domains=domains,
         max_evaluations=max_evaluations,
+        preprocessing=preprocessing,
         workspace=workspace,
     )
 
@@ -277,47 +347,66 @@ def generate_lhs_samples(
     domains: Mapping[str, DomainSpec],
     n_samples: int,
     *,
+    preprocessing: PreprocessingSpec | None = None,
     seed: int = DEFAULT_SEED,
 ) -> pd.DataFrame:
     """Draw a Latin-hypercube design over the given variable domains.
 
+    A ``scale="log"`` domain (via ``preprocessing``) is filled log-uniformly --
+    the unit design maps through the same ``scale_distribution`` every value
+    producer uses (V45ls); linear domains are unchanged.
+
     Args:
         domains: Variable name -> allowed range to draw from.
         n_samples: Number of sample rows to generate.
+        preprocessing: Per-column scale overrides (default: all linear).
         seed: Controls the draw.
 
     Raises:
-        SumoInputError: No domains given.
+        SumoInputError: No domains given, or a log-scale domain is not strictly
+            positive.
     """
     if not domains:
         raise SumoInputError("At least one variable domain is required.")
     names = list(domains)
     design = _lhs(len(names), n_samples, seed=seed)
-    return pd.DataFrame(
-        {
-            name: design[:, i] * (domains[name].maximum - domains[name].minimum)
-            + domains[name].minimum
-            for i, name in enumerate(names)
-        }
-    )
+    columns = {}
+    for i, name in enumerate(names):
+        dom = domains[name]
+        try:
+            dist = scale_distribution(
+                dom.minimum, dom.maximum, scale=column_scale(preprocessing, name)
+            )
+        except ValueError as exc:
+            raise SumoInputError(f"'{name}': {exc}") from exc
+        columns[name] = dist.ppf(design[:, i])
+    return pd.DataFrame(columns)
 
 
 def generate_grid_samples(
     domains: Mapping[str, DomainSpec],
     points_per_variable: Mapping[str, int],
     *,
+    preprocessing: PreprocessingSpec | None = None,
     workspace: Path | None = None,
 ) -> pd.DataFrame:
     """Generate a full-factorial grid of samples over the given variable domains.
 
+    A ``scale="log"`` domain (via ``preprocessing``) is gridded log-uniformly:
+    the axis is built in log space (``ln`` bounds to the linspace, then exp back),
+    so its points are geometrically spaced -- matching the LHS/UQ log spacing
+    (V45ls). Linear domains are unchanged.
+
     Args:
         domains: Variable name -> allowed range to draw from.
         points_per_variable: Variable name -> number of grid points along that axis.
+        preprocessing: Per-column scale overrides (default: all linear).
         workspace: If given, working files are written here and kept. If omitted,
             they are discarded on success and kept on failure.
 
     Raises:
-        SumoInputError: No domains given, or a variable is missing its point count.
+        SumoInputError: No domains given, a variable is missing its point count,
+            or a log-scale domain is not strictly positive.
     """
     if not domains:
         raise SumoInputError("At least one variable domain is required.")
@@ -325,6 +414,24 @@ def generate_grid_samples(
     missing = [name for name in names if name not in points_per_variable]
     if missing:
         raise SumoInputError(f"Missing points_per_variable for: {', '.join(missing)}")
+
+    log_names = set()
+    build_bounds: dict[str, tuple[float, float]] = {}
+    for name in names:
+        dom = domains[name]
+        if column_scale(preprocessing, name) == "log":
+            if dom.minimum <= 0:
+                raise SumoInputError(
+                    f"'{name}': log-scale domain must be strictly positive, got "
+                    f"[{dom.minimum}, {dom.maximum}]"
+                )
+            log_names.add(name)
+            build_bounds[name] = (
+                float(np.log(dom.minimum)),
+                float(np.log(dom.maximum)),
+            )
+        else:
+            build_bounds[name] = (dom.minimum, dom.maximum)
 
     run_dir = (
         create_run_dir(Path(workspace), "grid-sample")
@@ -336,14 +443,17 @@ def generate_grid_samples(
             run_dir=run_dir,
             grid_vars=names,
             input_vars=names,
-            mins=[domains[name].minimum for name in names],
+            mins=[build_bounds[name][0] for name in names],
             cut_values=[
-                (domains[name].minimum + domains[name].maximum) / 2 for name in names
+                (build_bounds[name][0] + build_bounds[name][1]) / 2 for name in names
             ],
-            maxs=[domains[name].maximum for name in names],
+            maxs=[build_bounds[name][1] for name in names],
             n_points_per_dimension=[points_per_variable[name] for name in names],
         )
-        return load_data(grid_file)[names].astype(float)
+        grid = load_data(grid_file)[names].astype(float)
+        for name in log_names:
+            grid[name] = np.exp(grid[name])
+        return grid
     finally:
         if workspace is None:
             shutil.rmtree(run_dir, ignore_errors=True)

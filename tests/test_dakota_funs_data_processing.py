@@ -189,6 +189,57 @@ def test_create_manual_uq_samples_unsupported_distribution_raises():
         )
 
 
+def test_create_manual_uq_samples_log_scale_is_log_uniform_in_original_units():
+    samples = create_manual_uq_samples(
+        ["x"],
+        {"x": {"distribution": "uniform", "min": 1.0, "max": 100.0, "log_scale": True}},
+        num_samples=2000,
+        seed=3,
+    )
+    values = np.asarray(samples["x"])
+    # Returned in the caller's original units, but uniform in log10 space: the
+    # geometric mean sits at the midpoint of the log range (~10), well below the
+    # arithmetic midpoint (~50.5) a linear draw would centre on.
+    assert values.min() >= 1.0 and values.max() <= 100.0
+    geometric_mean = float(np.exp(np.log(values).mean()))
+    assert geometric_mean == pytest.approx(10.0, rel=0.15)
+    assert float(values.mean()) < 50.0  # skewed toward the low end, unlike linear
+
+
+def test_create_manual_uq_samples_log_scale_rejects_non_uniform():
+    with pytest.raises(ValueError, match="only supported for uniform"):
+        create_manual_uq_samples(
+            ["x"],
+            {
+                "x": {
+                    "distribution": "normal",
+                    "mean": 1.0,
+                    "std": 0.1,
+                    "log_scale": True,
+                }
+            },
+            num_samples=5,
+            seed=1,
+        )
+
+
+def test_create_manual_uq_samples_log_scale_rejects_non_positive_bound():
+    with pytest.raises(ValueError, match="strictly positive"):
+        create_manual_uq_samples(
+            ["x"],
+            {
+                "x": {
+                    "distribution": "uniform",
+                    "min": 0.0,
+                    "max": 5.0,
+                    "log_scale": True,
+                }
+            },
+            num_samples=5,
+            seed=1,
+        )
+
+
 class TestCreateManualUqSamplesSeedReproducibility:
     """B12/V27: `seed` must actually control reproducibility of generated samples."""
 

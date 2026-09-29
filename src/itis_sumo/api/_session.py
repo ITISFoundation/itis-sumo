@@ -36,6 +36,7 @@ from itis_sumo.api.errors import (
 from itis_sumo.api.types import (
     AlongAxesResult,
     AxisSweep,
+    CorrelationResult,
     CrossValidationResult,
     Direction,
     DistributionSpec,
@@ -48,6 +49,7 @@ from itis_sumo.api.types import (
     VariableSpec,
 )
 from itis_sumo.evaluate.funs_evaluate import (
+    correlate_manual_uq_samples,
     evaluate_sobol_indices,
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
@@ -79,6 +81,17 @@ def _stderr_tail(run_dir: Path | None) -> str:
         return ""
     lines = logs[-1].read_text(errors="replace").splitlines()
     return "\n".join(lines[-_STDERR_TAIL_LINES:])
+
+
+def column_scale(spec: PreprocessingSpec | None, column: str) -> str:
+    """The scale asked for on ``column``; ``None`` spec ≡ all-linear (V21pf).
+
+    One home for the lookup, shared by the session, the optimizer and the
+    standalone samplers (V45ls: every value producer reads scale through here).
+    """
+    if spec is None:
+        return "linear"
+    return spec.overrides.get(column, VariableSpec()).scale
 
 
 def _validate_samples(
@@ -127,14 +140,6 @@ def _validate_samples(
             f"Preprocessing overrides given for columns that are not in play: "
             f"{unknown_overrides}"
         )
-    logarithmic = sorted(
-        name for name, override in spec.overrides.items() if override.scale == "log"
-    )
-    if logarithmic:
-        raise SumoInputError(
-            f"Logarithmic scale is not supported yet (requested for {logarithmic}); "
-            "it arrives together with the domain/distribution split"
-        )
 
     selected = samples.loc[:, columns].copy()
     try:
@@ -153,6 +158,20 @@ def _validate_samples(
         raise SumoInputError(
             f"Columns {unusable} contain missing or infinite values. "
             "Incomplete samples must be filtered out before they are passed in"
+        )
+
+    # A log-scale column is trained as log(value); log is undefined at or below
+    # zero, so rejecting a non-positive sample here (as a SumoInputError the
+    # consumer can surface) preempts the preprocessor's raw ValueError deeper in.
+    non_positive = sorted(
+        name
+        for name, override in spec.overrides.items()
+        if override.scale == "log" and (selected[name].to_numpy() <= 0).any()
+    )
+    if non_positive:
+        raise SumoInputError(
+            f"Columns {non_positive} are marked log-scale but hold values <= 0, "
+            "for which the logarithm is undefined"
         )
 
     minimum = _minimum_samples(len(variables))
@@ -227,6 +246,18 @@ class SumoSession:
         preprocessor.setup_variables(
             input_vars=list(self._variables), output_vars=[self._response]
         )
+        preprocessor.setup_log_transform(
+            input_log_vars=[
+                variable
+                for variable in self._variables
+                if self._scale_of(variable) == "log"
+            ],
+            output_log_vars=[
+                response
+                for response in [self._response]
+                if self._scale_of(response) == "log"
+            ],
+        )
         transformed = preprocessor.fit_transform(self._samples)
 
         assert self._run_dir is not None
@@ -265,12 +296,17 @@ class SumoSession:
                 "with uncertainty estimates"
             )
 
+        predicted_original = self._to_original_units(
+            response, results[f"{response}_hat"]
+        )
         return CrossValidationResult(
             response=self._response,
             observed=self._to_original_units(response, results[response]),
-            predicted=self._to_original_units(response, results[f"{response}_hat"]),
-            predicted_std=self._to_original_units(
-                response, results[f"{response}_std_hat"]
+            predicted=predicted_original,
+            predicted_std=self._to_original_std(
+                response,
+                results[f"{response}_std_hat"],
+                {self._response: predicted_original},
             ),
             warnings=list(results.get("warnings", [])),
             seed=seed,
@@ -304,17 +340,22 @@ class SumoSession:
         sweeps: dict[str, AxisSweep] = {}
         for mapped_variable, axis in results.items():
             variable = original_names.get(mapped_variable, mapped_variable)
+            predicted = self._to_original_units(response, axis["y_hat"])
+            # A standard deviation is a width, not a position: it goes through the
+            # delta-method std inverse (a no-op remap unless this response is log
+            # scale), not the plain point inverse applied to ``predicted``.
+            predicted_std = (
+                self._to_original_std(
+                    response, axis["std_hat"], {self._response: predicted}
+                )
+                if "std_hat" in axis
+                else None
+            )
             sweeps[variable] = AxisSweep(
                 variable=variable,
                 x=self._to_original_units(mapped_variable, axis["x"]),
-                predicted=self._to_original_units(response, axis["y_hat"]),
-                # A standard deviation is a width, not a position: it is reported
-                # as produced rather than shifted back through the transform.
-                predicted_std=(
-                    [float(value) for value in axis["std_hat"]]
-                    if "std_hat" in axis
-                    else None
-                ),
+                predicted=predicted,
+                predicted_std=predicted_std,
             )
 
         return AlongAxesResult(
@@ -392,9 +433,7 @@ class SumoSession:
                 f"Distributions must cover variables exactly; missing={missing}, "
                 f"unknown={unknown}"
             )
-        engine_distributions = {
-            variable: spec.as_engine_dict() for variable, spec in distributions.items()
-        }
+        engine_distributions = self._uq_engine_distributions(distributions)
         results = self._run_engine(
             "computing Sobol indices",
             evaluate_sobol_indices,
@@ -435,9 +474,7 @@ class SumoSession:
                 f"Distributions must cover variables exactly; missing={missing}, "
                 f"unknown={unknown}"
             )
-        engine_distributions = {
-            variable: spec.as_engine_dict() for variable, spec in distributions.items()
-        }
+        engine_distributions = self._uq_engine_distributions(distributions)
         samples = self._run_engine(
             "propagating uncertainty",
             propagate_manual_uq_with_uncertainty,
@@ -471,6 +508,107 @@ class SumoSession:
             minimum=summary["min"],
             maximum=summary["max"],
         )
+
+    def correlations(
+        self,
+        *,
+        distributions: Mapping[str, DistributionSpec],
+        num_samples: int,
+        seed: int,
+    ) -> CorrelationResult:
+        """Correlate each variable with the surrogate-predicted response over a
+        shared Monte Carlo sample set drawn from ``distributions``.
+
+        Scale comes from the session's own spec (V45ls): each column's samples
+        and the prediction are correlated on their declared scale.
+        """
+        missing = sorted(set(self._variables) - set(distributions))
+        unknown = sorted(set(distributions) - set(self._variables))
+        if missing or unknown:
+            raise SumoInputError(
+                f"Distributions must cover variables exactly; missing={missing}, "
+                f"unknown={unknown}"
+            )
+        engine_distributions = self._uq_engine_distributions(distributions)
+        coefficients = self._run_engine(
+            "correlating through the surrogate",
+            correlate_manual_uq_samples,
+            self._run_dir,
+            self._training_file,
+            self._variables,
+            self._response,
+            engine_distributions,
+            self._preprocessor,
+            num_samples,
+            input_scales={
+                variable: self._scale_of(variable) for variable in self._variables
+            },
+            output_scale=self._scale_of(self._response),
+            seed=seed,
+        )
+        return CorrelationResult(
+            response=self._response, seed=seed, coefficients=coefficients
+        )
+
+    def _uq_engine_distributions(
+        self, distributions: Mapping[str, DistributionSpec]
+    ) -> dict[str, dict[str, float | str]]:
+        """Translate distributions for the sampler, flagging log-scale variables.
+
+        A log-scale variable is sampled uniformly in log space (the surrogate
+        preprocessor re-applies the log). Sampling in log space is only defined for
+        a strictly-positive uniform, so anything else is rejected here -- at the
+        API boundary -- rather than surfacing as the sampler's raw ``ValueError``.
+        """
+        engine: dict[str, dict[str, float | str]] = {}
+        for variable, spec in distributions.items():
+            entry = spec.as_engine_dict()
+            if self._scale_of(variable) == "log":
+                if spec.distribution != "uniform":
+                    raise SumoInputError(
+                        f"'{variable}' is log-scale but its distribution is a "
+                        f"'{spec.distribution}'; only a uniform supports log sampling"
+                    )
+                if spec.minimum is None or spec.minimum <= 0:
+                    raise SumoInputError(
+                        f"'{variable}' is log-scale but its distribution lower "
+                        "bound is not strictly positive"
+                    )
+                entry["log_scale"] = True
+            engine[variable] = entry
+        return engine
+
+    def _scale_of(self, column: str) -> str:
+        """The scale the caller asked for on ``column`` (default: linear)."""
+        return column_scale(self._spec, column)
+
+    def _to_original_std(
+        self,
+        mapped_name: str,
+        std_values: Sequence[float],
+        point_estimates_original: Mapping[str, Sequence[float]],
+    ) -> list[float]:
+        """Restore a predicted *standard deviation* to original units.
+
+        A std is a width, not a position, so it cannot go through the ordinary
+        point inverse-transform. A log-scale response in particular needs the
+        multiplicative delta-method rule, which is why the point estimates (already
+        back in original units) are threaded in alongside. For every other column
+        this is a plain name remap, matching the pre-log behaviour exactly.
+        """
+        assert self._preprocessor is not None
+        original = self._preprocessor.get_inverse_mapping().get(
+            mapped_name, mapped_name
+        )
+        points = {
+            name: [float(value) for value in values]
+            for name, values in point_estimates_original.items()
+        }
+        restored = self._preprocessor.inverse_transform_output_std(
+            {mapped_name: [float(value) for value in std_values]},
+            point_estimates_original=points,
+        )
+        return [float(value) for value in restored.get(original, list(std_values))]
 
     def _mapped_name(self, variable: str) -> str:
         assert self._preprocessor is not None
@@ -530,6 +668,13 @@ class SumoSession:
             raise SumoInputError(
                 f"Cannot hold {unknown} fixed: they are not variables of this model"
             )
+        bad = sorted(
+            name
+            for name, value in at.items()
+            if self._scale_of(name) == "log" and float(value) <= 0
+        )
+        if bad:
+            raise SumoInputError(f"Cannot hold log-scale {bad} fixed at a value <= 0")
         assert self._preprocessor is not None
         held_row = {
             **self._samples.mean().to_dict(),
@@ -577,9 +722,17 @@ def optimize_pareto_front(
     domains: Mapping[str, DomainSpec],
     max_evaluations: int,
     workspace: Path | None,
+    preprocessing: PreprocessingSpec | None = None,
 ) -> ParetoFrontResult:
-    """Fit a surrogate per objective and find its Pareto-optimal trade-off front."""
+    """Fit a surrogate per objective and find its Pareto-optimal trade-off front.
+
+    A ``scale="log"`` override applies the same way everywhere else: a log-scale
+    *variable* trains and is explored in log space (so its search domain is mapped
+    into log space and must be strictly positive), and a log-scale *objective* is
+    fitted on ``ln(y)`` with the front restored to original units on the way out.
+    """
     variables = tuple(variables)
+    spec = preprocessing or PreprocessingSpec()
     missing_domains = sorted(set(variables) - set(domains))
     unknown_domains = sorted(set(domains) - set(variables))
     if missing_domains or unknown_domains:
@@ -588,9 +741,26 @@ def optimize_pareto_front(
             f"unknown={unknown_domains}"
         )
 
-    validated = _validate_samples(
-        samples, variables, list(objectives), PreprocessingSpec()
+    log_inputs = [
+        variable for variable in variables if column_scale(spec, variable) == "log"
+    ]
+    log_objectives = [
+        objective for objective in objectives if column_scale(spec, objective) == "log"
+    ]
+
+    non_positive_domain = sorted(
+        name
+        for name, dom in domains.items()
+        if name in log_inputs and (dom.minimum <= 0 or dom.maximum <= 0)
     )
+    if non_positive_domain:
+        raise SumoInputError(
+            f"Log-scale {non_positive_domain} domains must be strictly positive"
+        )
+
+    # The training-data positivity guard covers any log-scale objective (log is
+    # undefined for <= 0 outputs) and reuses the shared validation path.
+    validated = _validate_samples(samples, variables, list(objectives), spec)
 
     run_dir = (
         create_run_dir(Path(workspace), "sumo")
@@ -609,6 +779,10 @@ def optimize_pareto_front(
         ]
         if maximize:
             preprocessor.setup_sign_switching(output_sign_switches=maximize)
+        if log_inputs or log_objectives:
+            preprocessor.setup_log_transform(
+                input_log_vars=log_inputs, output_log_vars=log_objectives
+            )
         transformed = preprocessor.fit_transform(validated)
         training_file = run_dir / "processed_samples.dat"
         transformed.to_csv(training_file, sep=" ", index=False)
@@ -620,10 +794,16 @@ def optimize_pareto_front(
             preprocessor.output_variables[response].mapped_name
             for response in objectives
         ]
-        mapped_domains = {
-            preprocessor.input_variables[variable].mapped_name: spec.as_engine_dict()
-            for variable, spec in domains.items()
-        }
+        mapped_domains: dict[str, dict[str, float | str]] = {}
+        for name, dom in domains.items():
+            if name in log_inputs:
+                dom = DomainSpec(
+                    minimum=float(np.log(dom.minimum)),
+                    maximum=float(np.log(dom.maximum)),
+                )
+            mapped_domains[preprocessor.input_variables[name].mapped_name] = (
+                dom.as_engine_dict()
+            )
 
         try:
             results = perform_moga_optimization(
