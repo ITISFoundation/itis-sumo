@@ -555,24 +555,36 @@ class SumoSession:
     ) -> dict[str, dict[str, float | str]]:
         """Translate distributions for the sampler, flagging log-scale variables.
 
-        A log-scale variable is sampled uniformly in log space (the surrogate
-        preprocessor re-applies the log). Sampling in log space is only defined for
-        a strictly-positive uniform, so anything else is rejected here -- at the
-        API boundary -- rather than surfacing as the sampler's raw ``ValueError``.
+        A log-scale variable is sampled in the space the surrogate trains on: a
+        uniform is drawn log-uniform and a normal keeps its μ/σ in ln space, so
+        the raw draws are lognormal (V46rn); the surrogate preprocessor
+        re-applies the log either way. A log-scale uniform needs a strictly-
+        positive lower bound; a log-scale normal is positive by construction and
+        needs no bounds. Anything else (e.g. ``constant``) is rejected here -- at
+        the API boundary -- rather than surfacing as the sampler's raw
+        ``ValueError``.
         """
         engine: dict[str, dict[str, float | str]] = {}
         for variable, spec in distributions.items():
             entry = spec.as_engine_dict()
             if self._scale_of(variable) == "log":
-                if spec.distribution != "uniform":
+                if spec.distribution == "uniform":
+                    if spec.minimum is None or spec.minimum <= 0:
+                        raise SumoInputError(
+                            f"'{variable}' is log-scale but its distribution lower "
+                            "bound is not strictly positive"
+                        )
+                    if spec.maximum is None or spec.maximum <= spec.minimum:
+                        raise SumoInputError(
+                            f"'{variable}' is log-scale but its distribution upper "
+                            f"bound is missing or not above its lower bound "
+                            f"({spec.maximum!r} <= {spec.minimum!r})"
+                        )
+                elif spec.distribution != "normal":
                     raise SumoInputError(
                         f"'{variable}' is log-scale but its distribution is a "
-                        f"'{spec.distribution}'; only a uniform supports log sampling"
-                    )
-                if spec.minimum is None or spec.minimum <= 0:
-                    raise SumoInputError(
-                        f"'{variable}' is log-scale but its distribution lower "
-                        "bound is not strictly positive"
+                        f"'{spec.distribution}'; only a uniform or normal "
+                        "supports log sampling"
                     )
                 entry["log_scale"] = True
             engine[variable] = entry

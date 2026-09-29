@@ -16,6 +16,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
+from itis_sumo.api.errors import SumoInputError
+
 #: Seed used by every stochastic entrypoint unless the caller overrides it.
 #: Fixed rather than required, so that results are reproducible by default
 #: without the caller having to think about it (SPEC V25sd).
@@ -56,6 +58,19 @@ class DistributionSpec:
             values["max"] = self.maximum
         return values
 
+    def __post_init__(self) -> None:
+        # V47st: a declared interval must be increasing; catching it at
+        # construction beats an inverted axis surfacing mid-engine later.
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and self.maximum <= self.minimum
+        ):
+            raise SumoInputError(
+                f"DistributionSpec bounds must increase: maximum "
+                f"({self.maximum}) <= minimum ({self.minimum})"
+            )
+
 
 Direction = Literal["minimize", "maximize"]
 
@@ -71,6 +86,15 @@ class DomainSpec:
 
     minimum: float
     maximum: float
+
+    def __post_init__(self) -> None:
+        # V47st: an inverted (or degenerate) box is always a caller mistake --
+        # a silently descending grid axis or a mid-engine MOGA failure.
+        if self.maximum <= self.minimum:
+            raise SumoInputError(
+                f"DomainSpec bounds must increase: maximum "
+                f"({self.maximum}) <= minimum ({self.minimum})"
+            )
 
     def as_engine_dict(self) -> dict[str, float | str]:
         return {"distribution": "uniform", "min": self.minimum, "max": self.maximum}

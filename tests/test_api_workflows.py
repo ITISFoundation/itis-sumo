@@ -395,6 +395,13 @@ _UQ_DISTS = {
     "width": DistributionSpec("uniform", minimum=1.0, maximum=5.0),
     "height": DistributionSpec("uniform", minimum=100.0, maximum=500.0),
 }
+# For a log-scale normal the μ/σ parameterize ln space (V46rn), so e^μ puts the
+# raw-space centre where the uniform above has it -- scale flips stay near the
+# training range instead of extrapolating.
+_NORMAL_WIDTH = {
+    "width": DistributionSpec("normal", mean=math.log(3.0), std=0.5),
+    "height": _UQ_DISTS["height"],
+}
 
 
 class TestLogScaleUncertaintyAndMetrics:
@@ -426,22 +433,34 @@ class TestLogScaleUncertaintyAndMetrics:
         assert logw.mean > 0.0
         assert logw.mean < linear.mean - 0.5
 
-    def test_log_input_rejects_a_normal_uncertainty_distribution(self, samples):
-        normal_width = {
-            "width": DistributionSpec("normal", mean=3.0, std=0.5),
-            "height": _UQ_DISTS["height"],
-        }
-        with pytest.raises(SumoInputError, match="only a uniform supports log"):
-            evaluate_uncertainty(
-                samples,
-                VARIABLES,
-                RESPONSE,
-                distributions=normal_width,
-                preprocessing=_LOG_WIDTH,
-                num_samples=50,
-                n_histograms=3,
-                seed=7,
-            )
+    def test_log_input_with_a_normal_distribution_draws_lognormal(self, samples):
+        # V46rn: log composes with normal -- μ/σ stay in ln space, raw draws are
+        # lognormal (positive by construction), and the propagated statistics
+        # move relative to the linear draw.
+        linear = evaluate_uncertainty(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_NORMAL_WIDTH,
+            num_samples=400,
+            n_histograms=5,
+            seed=7,
+        )
+        logw = evaluate_uncertainty(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_NORMAL_WIDTH,
+            preprocessing=_LOG_WIDTH,
+            num_samples=400,
+            n_histograms=5,
+            seed=7,
+        )
+        # E[lognormal] = exp(mu + sigma^2/2) > exp(mu) = E[normal] (Jensen), so
+        # the lognormal drive sits above the linear one -- the flag reached the
+        # sampler, it was not quietly treated as linear.
+        assert logw.mean > 0.0
+        assert logw.mean > linear.mean + 0.05
 
     def test_log_input_rejects_a_non_positive_lower_bound(self, samples):
         zero_min = {
@@ -505,20 +524,27 @@ class TestLogScaleSobol:
         assert logw.indices["width"]["total"] < linear.indices["width"]["total"]
         assert logw.indices["height"]["total"] > linear.indices["height"]["total"]
 
-    def test_log_input_rejects_a_normal_distribution(self, samples):
-        normal_width = {
-            "width": DistributionSpec("normal", mean=3.0, std=0.5),
-            "height": _UQ_DISTS["height"],
-        }
-        with pytest.raises(SumoInputError, match="only a uniform supports log"):
-            evaluate_sobol(
-                samples,
-                VARIABLES,
-                RESPONSE,
-                distributions=normal_width,
-                preprocessing=_LOG_WIDTH,
-                seed=7,
-            )
+    def test_log_input_with_a_normal_distribution_shifts_the_decomposition(
+        self, samples
+    ):
+        # V46rn: a log-scale normal widens the dominant variable's raw-space
+        # spread (lognormal tail), so its share of the response variance rises
+        # and the residual variable's falls -- the decomposition is taken over
+        # what the model sees, not a silently linear draw.
+        linear = evaluate_sobol(
+            samples, VARIABLES, RESPONSE, distributions=_NORMAL_WIDTH, seed=7
+        )
+        logw = evaluate_sobol(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_NORMAL_WIDTH,
+            preprocessing=_LOG_WIDTH,
+            seed=7,
+        )
+        assert set(logw.indices) == set(VARIABLES)
+        assert logw.indices["width"]["total"] > linear.indices["width"]["total"]
+        assert logw.indices["height"]["total"] < linear.indices["height"]["total"]
 
     def test_log_input_rejects_a_non_positive_lower_bound(self, samples):
         zero_min = {
@@ -753,17 +779,41 @@ class TestEvaluateCorrelations:
             linear.coefficients["width"]["pearson"], rel=1e-3
         )
 
-    def test_log_variable_requires_uniform_positive_support(self, samples):
-        non_uniform = {
-            "width": DistributionSpec("normal", mean=3.0, std=0.5),
+    def test_log_normal_variable_moves_the_coefficients(self, samples):
+        # V46rn: log composes with normal -- the shared MC set is drawn
+        # lognormal, so Pearson over the surrogate predictions moves.
+        linear = evaluate_correlations(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_NORMAL_WIDTH,
+            num_samples=300,
+            seed=7,
+        )
+        logw = evaluate_correlations(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=_NORMAL_WIDTH,
+            num_samples=300,
+            preprocessing=_LOG_WIDTH,
+            seed=7,
+        )
+        assert logw.coefficients["width"]["pearson"] != pytest.approx(
+            linear.coefficients["width"]["pearson"], rel=1e-3
+        )
+
+    def test_log_variable_rejects_constant_and_non_positive_uniform(self, samples):
+        constant = {
+            "width": DistributionSpec("constant", value=3.0),
             "height": _UQ_DISTS["height"],
         }
-        with pytest.raises(SumoInputError, match="only a uniform supports log"):
+        with pytest.raises(SumoInputError, match="only a uniform or normal"):
             evaluate_correlations(
                 samples,
                 VARIABLES,
                 RESPONSE,
-                distributions=non_uniform,
+                distributions=constant,
                 num_samples=50,
                 preprocessing=_LOG_WIDTH,
                 seed=7,
@@ -801,6 +851,41 @@ class TestEvaluateCorrelations:
         with pytest.raises(TypeError):
             correlate_manual_uq_samples(  # ty: ignore[missing-argument]
                 Path("."), Path("."), ["x"], "y", {}, None, 10, seed=1
+            )
+
+    def test_table_entry_points_reject_unused_overrides(self, samples):
+        """V47st: a misspelled log-scale column fails loud everywhere, not just
+        in the session-backed workflows -- a silently ignored override would
+        return plausible linear results."""
+        misspelled = PreprocessingSpec(overrides={"wdith": VariableSpec(scale="log")})
+        with pytest.raises(SumoInputError, match="not in play"):
+            compute_correlations(samples, VARIABLES, RESPONSE, preprocessing=misspelled)
+        with pytest.raises(SumoInputError, match="not in play"):
+            generate_lhs_samples(_SAMPLER_DOMAINS, 20, preprocessing=misspelled, seed=7)
+        with pytest.raises(SumoInputError, match="not in play"):
+            generate_grid_samples(
+                _SAMPLER_DOMAINS,
+                {"width": 3, "height": 3},
+                preprocessing=misspelled,
+            )
+
+    def test_log_uniform_requires_a_usable_upper_bound(self, samples):
+        """V47st: the boundary checks both bounds -- a missing maximum must not
+        reach the engine and resurface there as a SumoEngineError."""
+        missing_max = {
+            "width": DistributionSpec("uniform", minimum=1.0),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="upper bound"):
+            evaluate_uncertainty(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=missing_max,
+                preprocessing=_LOG_WIDTH,
+                num_samples=50,
+                n_histograms=3,
+                seed=7,
             )
 
 
@@ -963,4 +1048,67 @@ class TestScaleFlipMatrix:
             assert log != pytest.approx(linear, rel=1e-9, nan_ok=True), (
                 f"{name}: output is identical under log scale -- the scale "
                 "override was silently ignored (V45ls)"
+            )
+
+    def test_every_distribution_entry_point_moves_for_a_log_normal(self, samples):
+        """V46rn: the same flip guarantee for a NORMAL column turned log -- the
+        entry points that take `distributions` must draw lognormal, not reject
+        (the pre-B19ps behaviour) and not silently stay linear."""
+        cases: list[tuple[str, Callable[[PreprocessingSpec | None], list[float]]]] = [
+            (
+                "evaluate_uncertainty",
+                lambda p: self._fp(
+                    evaluate_uncertainty(
+                        samples,
+                        VARIABLES,
+                        RESPONSE,
+                        distributions=_NORMAL_WIDTH,
+                        preprocessing=p,
+                        num_samples=150,
+                        n_histograms=4,
+                        seed=7,
+                    ).mean
+                ),
+            ),
+            (
+                "evaluate_sobol",
+                lambda p: self._fp(
+                    [
+                        entry["total"]
+                        for entry in evaluate_sobol(
+                            samples,
+                            VARIABLES,
+                            RESPONSE,
+                            distributions=_NORMAL_WIDTH,
+                            preprocessing=p,
+                            seed=7,
+                        ).indices.values()
+                    ]
+                ),
+            ),
+            (
+                "evaluate_correlations",
+                lambda p: self._fp(
+                    [
+                        entry["pearson"]
+                        for entry in evaluate_correlations(
+                            samples,
+                            VARIABLES,
+                            RESPONSE,
+                            distributions=_NORMAL_WIDTH,
+                            num_samples=150,
+                            preprocessing=p,
+                            seed=7,
+                        ).coefficients.values()
+                    ]
+                ),
+            ),
+        ]
+        assert len(cases) == 3
+        for name, fingerprint in cases:
+            linear = fingerprint(None)
+            log = fingerprint(_LOG_WIDTH)
+            assert log != pytest.approx(linear, rel=1e-9, nan_ok=True), (
+                f"{name}: output is identical under a log-scale normal -- the "
+                "lognormal draw was bypassed (V46rn)"
             )

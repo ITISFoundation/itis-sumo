@@ -367,3 +367,26 @@ class TestGridContract:
         )
         payload = json.loads(json.dumps(dataclasses.asdict(result)))
         assert payload["grid_variables"] == ["width", "height"]
+
+
+class TestSpecValidation:
+    """V47st: malformed specs fail at construction (input errors), never later
+    as a silently descending grid axis or a mid-engine SumoEngineError."""
+
+    def test_domain_spec_rejects_inverted_bounds(self):
+        with pytest.raises(SumoInputError, match="bounds must increase"):
+            api.DomainSpec(minimum=5.0, maximum=1.0)
+
+    def test_domain_spec_rejects_degenerate_bounds(self):
+        with pytest.raises(SumoInputError, match="bounds must increase"):
+            api.DomainSpec(minimum=2.0, maximum=2.0)
+
+    def test_distribution_spec_rejects_inverted_bounds(self):
+        with pytest.raises(SumoInputError, match="bounds must increase"):
+            api.DistributionSpec("uniform", minimum=8.0, maximum=2.0)
+
+    def test_distribution_spec_allows_one_sided_bounds(self):
+        # Only self-contradictory ranges are refused here; shape-specific
+        # requirements (e.g. the log-uniform needing a usable upper bound) are
+        # enforced where the shape is interpreted.
+        api.DistributionSpec("uniform", minimum=1.0)  # must not raise
