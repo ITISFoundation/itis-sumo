@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal, TypeVar, overload
+from typing import Any, Literal, TypeVar, overload
 
 import numpy as np
 import pandas as pd
@@ -582,9 +582,173 @@ def create_manual_uq_samples(
         elif dist_type == "constant":
             value = dist_info["value"]
             samples[var] = [float(value)] * num_samples
+        # elif dist_type == "lognormal":
+        #     mean = dist_info["mean"]
+        #     std = dist_info["std"]
+        #     samples[var] = float(rng.lognormal(mean, std, (num_samples,)))
+        # DEV NOTE (internal only, not user-facing): the supported taxonomy is
+        # deliberately just constant/uniform/normal (each possibly fit in
+        # log-space via a "log_"-prefixed column, see process_input_file's
+        # make_log and select_variable_scale/auto_select_distributions below)
+        # -- no variable we've seen in practice needed anything else.
+        # Exponential is a plausible future addition (e.g. `{"distribution":
+        # "exponential", "rate": ...}` -> rng.exponential) but don't surface
+        # it in docs or auto-selection until there's a concrete case for it.
         else:
             raise ValueError(f"Unsupported distribution type: {dist_type}")
     return samples
+
+
+def select_variable_scale(
+    values: np.ndarray | list[float], alpha: float = 0.05
+) -> dict[str, Any]:
+    """Decide whether a variable is better modeled as normal or uniform, in
+    linear or log space, by testing all scale/distribution combinations that
+    apply and picking the one least contradicted by the data.
+
+    Every variable this module samples is assumed to be one of exactly three
+    shapes -- constant, uniform, or normal (see `create_manual_uq_samples`)
+    -- each possibly fit in linear or log space (log space achieved by
+    pre-transforming the data, e.g. `process_input_file(..., make_log=True)`;
+    a normal fit in log space is the same thing as a lognormal fit in linear
+    space). This picks among those four non-trivial combinations
+    automatically instead of assuming one.
+
+    Decision rule: run `scipy.stats.shapiro` (normal fit) and
+    `scipy.stats.kstest` against a fitted uniform (uniform fit), on both the
+    raw values and their log (log skipped if any value is <= 0), then pick
+    whichever of the (up to) four candidates has the highest p-value -- the
+    hypothesis least rejected by the data. `p_value` is the resulting
+    quantification of fit quality; `confident` is `p_value > alpha`, i.e.
+    whether the *winning* candidate is itself a statistically defensible fit
+    (not rejected at the `alpha` significance level) rather than merely the
+    least-bad of four options that are all a poor match for the data --
+    signaling a call worth a human look rather than a clean choice.
+
+    A variable with (near-)zero variance short-circuits to
+    `{"distribution": "constant", ...}` without running either test --
+    Shapiro-Wilk and the KS test are both undefined/degenerate on constant
+    data, and constant is the correct answer regardless.
+
+    Args:
+        values: Raw (linear-space) sample values for one variable.
+        alpha: Significance level the winning candidate's `p_value` must
+            clear for `confident` to be `True`.
+
+    Returns:
+        `{"scale": "linear"|"log", "distribution": "constant"|"uniform"|"normal",
+        "p_value": float, "confident": bool, "candidates": {...}}` --
+        `candidates` keyed `"{scale}_{distribution}"` (log entries omitted if
+        log isn't defined), each `{"test", "statistic", "p_value"}`. Constant
+        variables return `"value"` instead of `"p_value"`/`"candidates"`.
+    """
+    from scipy.stats import kstest, shapiro
+
+    arr = np.asarray(values, dtype=float)
+    if np.ptp(arr) == 0:
+        return {
+            "scale": "linear",
+            "distribution": "constant",
+            "value": float(arr[0]),
+            "confident": True,
+            "candidates": {},
+        }
+
+    candidates: dict[str, dict[str, Any]] = {}
+    scales = {"linear": arr}
+    if np.all(arr > 0):
+        scales["log"] = np.log(arr)
+
+    for scale_name, x in scales.items():
+        w_stat, w_p = shapiro(x)
+        candidates[f"{scale_name}_normal"] = {
+            "test": "shapiro",
+            "statistic": float(w_stat),
+            "p_value": float(w_p),
+        }
+        lo, span = float(x.min()), float(x.max() - x.min())
+        ks_stat, ks_p = kstest(x, "uniform", args=(lo, span))
+        candidates[f"{scale_name}_uniform"] = {
+            "test": "kstest",
+            "statistic": float(ks_stat),
+            "p_value": float(ks_p),
+        }
+
+    best_key = max(candidates, key=lambda k: candidates[k]["p_value"])
+    best_p_value = candidates[best_key]["p_value"]
+    scale, distribution = best_key.split("_")
+
+    return {
+        "scale": scale,
+        "distribution": distribution,
+        "p_value": best_p_value,
+        "confident": best_p_value > alpha,
+        "candidates": candidates,
+    }
+
+
+def auto_select_distributions(
+    df: pd.DataFrame, columns: list[str], alpha: float = 0.05
+) -> tuple[dict[str, dict[str, float | str]], dict[str, Any]]:
+    """Run `select_variable_scale` over each of `columns` and assemble the
+    result directly into a `distributions` dict usable by
+    `create_manual_uq_samples`/`evaluate_sobol_indices`, alongside the raw
+    per-variable diagnostics.
+
+    A column selected for log space is renamed with a `"log_"` prefix in the
+    returned `distributions` dict (matching `process_input_file`'s
+    `make_log` convention) -- callers must fit/evaluate the corresponding
+    surrogate against log-transformed data for that variable to match.
+
+    This is an auto-selected *default*: the returned `distributions` dict is
+    a plain dict like any hand-written one, so a caller can inspect
+    `diagnostics[var]` (e.g. print/log it, or surface it however their
+    application does) and override any entry before passing `distributions`
+    on to downstream sampling/evaluation.
+
+    Args:
+        df: DataFrame with one column per variable, raw (linear-space) values.
+        columns: Column names to select a distribution for.
+        alpha: Forwarded to `select_variable_scale`.
+
+    Returns:
+        `(distributions, diagnostics)` -- `distributions` keyed by the
+        (possibly `log_`-prefixed) variable name, `diagnostics` keyed by the
+        original column name and holding each variable's full
+        `select_variable_scale` result (including `"confident"`).
+    """
+    distributions: dict[str, dict[str, float | str]] = {}
+    diagnostics: dict[str, Any] = {}
+
+    for col in columns:
+        values = df[col].to_numpy(dtype=float)
+        decision = select_variable_scale(values, alpha=alpha)
+        diagnostics[col] = decision
+
+        if decision["distribution"] == "constant":
+            distributions[col] = {
+                "distribution": "constant",
+                "value": decision["value"],
+            }
+            continue
+
+        scale = decision["scale"]
+        x = np.log(values) if scale == "log" else values
+        key = f"log_{col}" if scale == "log" else col
+        if decision["distribution"] == "normal":
+            distributions[key] = {
+                "distribution": "normal",
+                "mean": float(np.mean(x)),
+                "std": float(np.std(x, ddof=1)),
+            }
+        else:
+            distributions[key] = {
+                "distribution": "uniform",
+                "min": float(np.min(x)),
+                "max": float(np.max(x)),
+            }
+
+    return distributions, diagnostics
 
 
 T = TypeVar("T")
