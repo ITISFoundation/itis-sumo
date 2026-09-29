@@ -147,12 +147,12 @@ breaks with `TypeError`, it can never silently default.
 | I1 | LHS + grid samplers: log domain ⇒ log-uniform/geometric fill; linear default bit-identical; non-positive log domain ⇒ `SumoInputError` | ✅ |
 | I2 | Correlations: Pearson moves under log, Spearman provably unchanged (monotone-invariant), untouched columns bit-identical; correlator's scale args are required (`TypeError` tripwire) | ✅ |
 | I3 | Surrogate / CV / along-axes / grid eval: log response exp-restored to original units; non-positive training outputs rejected pre-Dakota | ✅ |
-| I4 | UQ propagation: log inputs drawn log-uniform (response skews low vs linear, directionally asserted); log+normal / log+min≤0 rejected; log response ⇒ multiplicative (not additive) spread | ✅ |
+| I4 | UQ propagation: log inputs drawn log-uniform (response skews low vs linear, directionally asserted); log⊗normal drawn lognormal — ln-space μ/σ, mean shifts high vs linear by Jensen, directionally asserted (V46rn); log+min≤0 / log+constant rejected; log response ⇒ multiplicative (not additive) spread | ✅ |
 | I5 | CV accuracy metrics: inherit log through `cross_validate` (metrics differ from linear); reject non-positive log responses | ✅ |
 | I6 | MOGA: log variable explored in ln-space (domain mapped, positivity-guarded); log objective exp-restored for **both** minimize and maximize (sign-after-log inverse order verified) | ✅ |
-| I7 | Sobol: log input shifts the variance decomposition in the expected direction (compressed variable explains less); mixed log+constant partition | ✅ |
-| I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
-| I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move, log+non-uniform / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
+| I7 | Sobol: log input shifts the variance decomposition in the expected direction (compressed variable explains less; a log⊗normal widens the lognormal tail so it explains more, V46rn); mixed log+constant partition | ✅ |
+| I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log, ∀ 3 `distributions`-taking entry points also move when a NORMAL column turns log (V46rn) — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
+| I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
 
 Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
 `TestScaleAwareSamplers`, `TestScaleFlipMatrix`),

@@ -1107,7 +1107,7 @@ def evaluate_sobol_indices(
     import math
 
     import pandas as pd
-    from scipy.stats import norm, sobol_indices
+    from scipy.stats import lognorm, norm, sobol_indices
     from scipy.stats.qmc import Sobol
 
     # NOTE: input_vars/distributions must stay in the caller's original
@@ -1132,16 +1132,22 @@ def evaluate_sobol_indices(
     d_varying = len(varying_vars)
 
     # Build frozen scipy distributions with .ppf for each varying variable. The
-    # scale map is the shared scale_distribution: a log-scale variable is drawn
-    # log-uniform in the caller's original units (V44ls), the surrogate's
-    # preprocessor re-applies the log downstream.
+    # scale map is the shared scale_distribution: a log-scale uniform is drawn
+    # log-uniform in the caller's original units (V44ls) and a log-scale normal
+    # becomes lognorm(s=σ, scale=e^μ) (V46rn — exp of an ln-space N(μ,σ)), the
+    # surrogate's preprocessor re-applying the log downstream. Either way the
+    # decomposition is taken over what the model actually sees.
     ppfs = {}
     for var in varying_vars:
         dist_info = distributions[var]
         dist_type = dist_info["distribution"]
         log_scale = resolve_log_scale(var, dist_info)
         if dist_type == "normal":
-            ppfs[var] = norm(loc=dist_info["mean"], scale=dist_info["std"])
+            ppfs[var] = (
+                lognorm(s=float(dist_info["std"]), scale=np.exp(float(dist_info["mean"])))
+                if log_scale
+                else norm(loc=dist_info["mean"], scale=dist_info["std"])
+            )
         elif dist_type == "uniform":
             ppfs[var] = scale_distribution(
                 float(dist_info["min"]),

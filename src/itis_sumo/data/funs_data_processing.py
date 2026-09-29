@@ -482,15 +482,16 @@ def extract_predictions_gridpoints(
 def resolve_log_scale(var: str, dist_info: dict[str, float | str]) -> bool:
     """Validate a sampler distribution entry's optional ``log_scale`` flag.
 
-    Log-space sampling is only defined for a strictly-positive uniform, and only
-    ``uniform`` entries carry usable bounds to log-transform -- V45ls guards,
-    enforced at the api boundary as ``SumoInputError`` and again here so direct
-    users of this layer cannot drift past them silently.
+    Log scale composes with a strictly-positive ``uniform`` (log-uniform draw)
+    and with a ``normal`` whose μ/σ parameterize the ln-space distribution
+    (V46rn); ``constant`` carries no shape to bend. V45ls/V46rn guards, enforced
+    at the api boundary as ``SumoInputError`` and again here so direct users of
+    this layer cannot drift past them silently.
     """
     log_scale = bool(dist_info.get("log_scale", False))
-    if log_scale and dist_info["distribution"] != "uniform":
+    if log_scale and dist_info["distribution"] not in ("uniform", "normal"):
         raise ValueError(
-            f"log_scale is only supported for uniform distributions: {var}"
+            f"log_scale is only supported for uniform and normal distributions: {var}"
         )
     return log_scale
 
@@ -558,9 +559,15 @@ def create_manual_uq_samples(
         if dist_type == "normal":
             mean = float(dist_info["mean"])
             std = float(dist_info["std"])
-            samples[var] = norm.rvs(
+            draws = norm.rvs(
                 size=num_samples, loc=mean, scale=std, random_state=rng
-            ).tolist()
+            )
+            # A log-scale normal keeps μ/σ in ln space (V46rn): ln(x) ~ N(μ,σ),
+            # so the raw draws are lognormal in the caller's original units --
+            # positive by construction, and what the surrogate's preprocessor
+            # re-logs is exactly N(μ,σ). Same "distribution describes what the
+            # model sees" contract as the log-uniform branch below.
+            samples[var] = (np.exp(draws) if log_scale else draws).tolist()
         elif dist_type == "uniform":
             # A log-scale uniform is drawn log-uniform in the caller's original
             # units -- the surrogate's preprocessor re-applies the log, so what
@@ -577,10 +584,6 @@ def create_manual_uq_samples(
         elif dist_type == "constant":
             value = dist_info["value"]
             samples[var] = [float(value)] * num_samples
-        # elif dist_type == "lognormal":
-        #     mean = dist_info["mean"]
-        #     std = dist_info["std"]
-        #     samples[var] = float(rng.lognormal(mean, std, (num_samples,)))
         else:
             raise ValueError(f"Unsupported distribution type: {dist_type}")
     return samples

@@ -411,6 +411,44 @@ class TestCreateManualUqSamples:
         assert np.isclose(np.mean(samples["x"]), 5.0, atol=0.05)
         assert np.isclose(np.std(samples["x"]), 1.0, atol=0.05)
 
+    def test_log_scale_normal_draws_are_lognormal(self):
+        # V46rn: for a log-scale normal the μ/σ parameterize the ln-space
+        # distribution, so raw draws are lognormal and positive, and ln(draws)
+        # recovers N(μ,σ) -- exactly what the surrogate preprocessor re-logs.
+        samples = create_manual_uq_samples(
+            input_vars=["x"],
+            distributions={
+                "x": {
+                    "distribution": "normal",
+                    "mean": 1.0,
+                    "std": 0.5,
+                    "log_scale": True,
+                }
+            },
+            num_samples=10_000,
+            seed=42,
+        )
+        draws = np.array(samples["x"])
+        assert np.all(draws > 0.0)
+        ln_draws = np.log(draws)
+        assert np.isclose(ln_draws.mean(), 1.0, atol=0.05)
+        assert np.isclose(ln_draws.std(), 0.5, atol=0.05)
+
+    def test_log_scale_constant_is_rejected(self):
+        with pytest.raises(ValueError, match="only supported for uniform and normal"):
+            create_manual_uq_samples(
+                input_vars=["x"],
+                distributions={
+                    "x": {
+                        "distribution": "constant",
+                        "value": 3.0,
+                        "log_scale": True,
+                    }
+                },
+                num_samples=10,
+                seed=42,
+            )
+
     def test_uniform_distribution_range(self):
         samples = create_manual_uq_samples(
             input_vars=["x"],
