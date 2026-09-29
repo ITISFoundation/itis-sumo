@@ -24,6 +24,7 @@ from itis_sumo.data.funs_dataset_diagnostics import (
     OutlierSummary,
     VariableDiagnostics,
     analyze_dataset,
+    detect_raw_outliers,
 )
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "create_grid_samples",
     "create_manual_uq_samples",
     "create_samples_along_axes",
+    "detect_raw_outliers",
     "extract_predictions_along_axes",
     "extract_predictions_gridpoints",
     "get_bounds_uniform_distribution",
