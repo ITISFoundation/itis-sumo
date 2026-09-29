@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -52,6 +52,26 @@ from itis_sumo.data.funs_data_processing import (
 from itis_sumo.evaluate.funs_evaluate import compute_cv_accuracy_metrics
 from itis_sumo.sampling.lhs import lhs as _lhs
 from itis_sumo.utils.helpers import create_run_dir
+
+
+def _reject_unused_overrides(
+    preprocessing: PreprocessingSpec | None, columns: Iterable[str]
+) -> None:
+    """Refuse scale overrides for columns this call never touches (V47st).
+
+    The session-based workflows reject unknown overrides at ``_session.py``;
+    the table-mode/sampler entry points must honor the same exact-cover
+    contract, so a misspelled log-scale column fails loud instead of silently
+    returning linear results.
+    """
+    unknown = sorted(
+        set((preprocessing or PreprocessingSpec()).overrides) - set(columns)
+    )
+    if unknown:
+        raise SumoInputError(
+            f"Preprocessing overrides given for columns that are not in play: "
+            f"{unknown}"
+        )
 
 
 def cross_validate(
@@ -198,6 +218,7 @@ def compute_correlations(
     missing = sorted((set(variables) | {response}) - set(samples.columns))
     if missing:
         raise SumoInputError(f"Samples do not contain columns: {missing}")
+    _reject_unused_overrides(preprocessing, [*variables, response])
     spec = preprocessing or PreprocessingSpec()
     try:
         coefficients = compute_correlation_indices(
@@ -330,7 +351,8 @@ def optimize(
     domain (where exploration is allowed), not a real-world uncertainty
     distribution -- MOGA cannot use anything but a uniform domain (SPEC T27fr).
     A ``scale="log"`` override on a variable explores it in log space; on an
-    objective it fits and reports the front in log space.
+    objective it fits in ln space and reports the front exp-restored, in the
+    original units the public result contract promises.
     """
     return optimize_pareto_front(
         samples,
@@ -369,6 +391,7 @@ def generate_lhs_samples(
     if not domains:
         raise SumoInputError("At least one variable domain is required.")
     names = list(domains)
+    _reject_unused_overrides(preprocessing, names)
     design = _lhs(len(names), n_samples, seed=seed)
     columns = {}
     for i, name in enumerate(names):
@@ -411,6 +434,7 @@ def generate_grid_samples(
     if not domains:
         raise SumoInputError("At least one variable domain is required.")
     names = list(domains)
+    _reject_unused_overrides(preprocessing, names)
     missing = [name for name in names if name not in points_per_variable]
     if missing:
         raise SumoInputError(f"Missing points_per_variable for: {', '.join(missing)}")

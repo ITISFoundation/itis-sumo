@@ -804,9 +804,12 @@ def compute_correlation_indices(
     for var in input_vars:
         if var not in input_samples:
             raise ValueError(f"Input variable '{var}' not found in input samples.")
-        input_array = scale_values(
-            input_samples[var], scale=input_scales.get(var, "linear")
-        )
+        if var not in input_scales:
+            raise ValueError(
+                f"Input variable '{var}' has no entry in input_scales -- every "
+                "correlated variable's scale is required, never defaulted (V45ls)"
+            )
+        input_array = scale_values(input_samples[var], scale=input_scales[var])
         if len(input_array) != len(output_array):
             raise ValueError(
                 f"Sample length mismatch for variable '{var}': "

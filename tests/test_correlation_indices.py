@@ -137,6 +137,18 @@ class TestComputeCorrelationIndices:
                 output_scale=_LINEAR,
             )
 
+    def test_missing_scale_entry_raises(self):
+        """V45ls: every correlated variable needs its own scale entry -- an
+        omitted variable must not silently default to linear."""
+        with pytest.raises(ValueError, match="no entry in input_scales"):
+            compute_correlation_indices(
+                {"x1": [1.0, 2.0, 3.0], "x2": [3.0, 2.0, 1.0]},
+                [1.0, 2.0, 3.0],
+                ["x1", "x2"],
+                input_scales=_lin("x1"),
+                output_scale=_LINEAR,
+            )
+
     def test_mismatched_lengths_raises(self):
         """Input/output sample length mismatch raises ValueError."""
         with pytest.raises(ValueError, match="Sample length mismatch"):

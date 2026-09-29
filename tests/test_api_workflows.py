@@ -853,6 +853,47 @@ class TestEvaluateCorrelations:
                 Path("."), Path("."), ["x"], "y", {}, None, 10, seed=1
             )
 
+    def test_table_entry_points_reject_unused_overrides(self, samples):
+        """V47st: a misspelled log-scale column fails loud everywhere, not just
+        in the session-backed workflows -- a silently ignored override would
+        return plausible linear results."""
+        misspelled = PreprocessingSpec(
+            overrides={"wdith": VariableSpec(scale="log")}
+        )
+        with pytest.raises(SumoInputError, match="not in play"):
+            compute_correlations(
+                samples, VARIABLES, RESPONSE, preprocessing=misspelled
+            )
+        with pytest.raises(SumoInputError, match="not in play"):
+            generate_lhs_samples(
+                _SAMPLER_DOMAINS, 20, preprocessing=misspelled, seed=7
+            )
+        with pytest.raises(SumoInputError, match="not in play"):
+            generate_grid_samples(
+                _SAMPLER_DOMAINS,
+                {"width": 3, "height": 3},
+                preprocessing=misspelled,
+            )
+
+    def test_log_uniform_requires_a_usable_upper_bound(self, samples):
+        """V47st: the boundary checks both bounds -- a missing maximum must not
+        reach the engine and resurface there as a SumoEngineError."""
+        missing_max = {
+            "width": DistributionSpec("uniform", minimum=1.0),
+            "height": _UQ_DISTS["height"],
+        }
+        with pytest.raises(SumoInputError, match="upper bound"):
+            evaluate_uncertainty(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                distributions=missing_max,
+                preprocessing=_LOG_WIDTH,
+                num_samples=50,
+                n_histograms=3,
+                seed=7,
+            )
+
 
 class TestScaleFlipMatrix:
     """V45ls behavioural enforcement in one place: EVERY public value-producing

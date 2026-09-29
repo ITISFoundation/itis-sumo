@@ -574,6 +574,12 @@ class SumoSession:
                             f"'{variable}' is log-scale but its distribution lower "
                             "bound is not strictly positive"
                         )
+                    if spec.maximum is None or spec.maximum <= spec.minimum:
+                        raise SumoInputError(
+                            f"'{variable}' is log-scale but its distribution upper "
+                            f"bound is missing or not above its lower bound "
+                            f"({spec.maximum!r} <= {spec.minimum!r})"
+                        )
                 elif spec.distribution != "normal":
                     raise SumoInputError(
                         f"'{variable}' is log-scale but its distribution is a "
