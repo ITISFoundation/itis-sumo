@@ -33,7 +33,6 @@ from itis_sumo.data.funs_data_processing import (
     get_results,
     load_data,
     process_input_file,
-    resolve_log_scale,
     sanitize_varnames,
     scale_distribution,
 )
@@ -1269,19 +1268,25 @@ def evaluate_sobol_indices(
     PROCESSED_TRAINING_FILE: Path,
     input_vars: list[str],
     response_var: str,
-    distributions: dict[str, dict],
+    sampling: dict[str, dict],
     preprocessor,
     seed: int | None = None,
 ) -> dict[str, Any]:
     """Compute Sobol' first-order, total-order, and second-order sensitivity indices.
 
-    Generates Saltelli A/B/C sample matrices locally (honouring per-input
-    distributions via ``scipy.stats.rv_continuous.ppf``), evaluates all samples
-    in ONE batch through ``evaluate_sumo()`` (surrogate-only, Dakota does not run
+    Generates Saltelli A/B/C sample matrices locally from per-input DOMAIN
+    BOXES (uniform, or log-uniform for a log-scale variable, via
+    ``scipy.stats.rv_continuous.ppf``), evaluates all samples in ONE batch
+    through ``evaluate_sumo()`` (surrogate-only, Dakota does not run
     ``variance_based_decomp`` itself), then applies ``_sobol_algebra`` -- the
     exact scipy.stats.sobol_indices saltelli_2010 algebra (pinned equal by the
     estimator-parity test) -- for first/total order plus the exact joint-pair
     second-order (pairwise interaction) estimator and order masses.
+
+    The sampling design comes from the exploration domain only (V26dd): a
+    variable is drawn across its box; modeller uncertainty distributions are
+    NOT an input here (they drive ``evaluate_uncertainty``, not the sensitivity
+    box), and no box is ever re-derived from a distribution's mean ± 3σ.
 
     Second-order estimator: exact joint-pair designs,
     S_ij = Var(E[Y|X_i,X_j])/V - S_i - S_j, exact for ANY d -- derivation,
@@ -1304,10 +1309,10 @@ def evaluate_sobol_indices(
         PROCESSED_TRAINING_FILE: Path to the preprocessed training data file.
         input_vars: Original (unmapped) input variable names.
         response_var: Mapped response variable name (as known to Dakota).
-        distributions: Dict mapping original var names to distribution params
-            (``{"distribution": "normal", "mean":, "std":}`` /
-            ``{"distribution": "uniform", "min":, "max":}`` /
-            ``{"distribution": "constant", "value":}``).
+        sampling: Dict mapping original var names to sampling entries --
+            ``{"minimum": m, "maximum": M}`` (uniform box; add
+            ``"log_scale": True`` to draw log-uniform, V44ls) or
+            ``{"value": v}`` to hold the variable fixed.
         preprocessor: Fitted ``DataPreprocessor`` for transforming samples.
         seed: Random seed for reproducibility (numpy/scipy RNGs accept 0).
 
@@ -1324,9 +1329,8 @@ def evaluate_sobol_indices(
     import math
 
     import pandas as pd
-    from scipy.stats import lognorm, norm
 
-    # NOTE: input_vars/distributions must stay in the caller's original
+    # NOTE: input_vars/sampling must stay in the caller's original
     # (unsanitized) form here -- preprocessor.input_variables is keyed by
     # original names and preprocessor.transform() looks samples up by those
     # same original column names (see propagate_manual_uq_with_uncertainty
@@ -1335,45 +1339,38 @@ def evaluate_sobol_indices(
     # df_varying[input_vars] needs list, not tuple, indexing
     input_vars = list(input_vars)
 
-    # --- 1. Separate constant vs. varying input variables ---
+    # --- 1. Separate fixed vs. varying input variables ---
     constant_vars: dict[str, float] = {}
     varying_vars: list[str] = []
     for var in input_vars:
-        dist_info = distributions[var]
-        if dist_info["distribution"] == "constant":
-            constant_vars[var] = float(dist_info["value"])
+        box = sampling[var]
+        if "value" in box:
+            constant_vars[var] = float(box["value"])
         else:
             varying_vars.append(var)
 
     d_varying = len(varying_vars)
 
-    # Build frozen scipy distributions with .ppf for each varying variable. The
-    # scale map is the shared scale_distribution: a log-scale uniform is drawn
-    # log-uniform in the caller's original units (V44ls) and a log-scale normal
-    # becomes lognorm(s=σ, scale=e^μ) (V46rn — exp of an ln-space N(μ,σ)), the
-    # surrogate's preprocessor re-applying the log downstream. Either way the
-    # decomposition is taken over what the model actually sees.
+    # Build frozen scipy sampling ppfs per varying box. The scale map is the
+    # shared scale_distribution: a log-scale variable is drawn log-uniform in
+    # the caller's original units (V44ls), the surrogate's preprocessor
+    # re-applying the log downstream; the decomposition is taken over what the
+    # model actually sees.
     ppfs = {}
     for var in varying_vars:
-        dist_info = distributions[var]
-        dist_type = dist_info["distribution"]
-        log_scale = resolve_log_scale(var, dist_info)
-        if dist_type == "normal":
-            ppfs[var] = (
-                lognorm(
-                    s=float(dist_info["std"]), scale=np.exp(float(dist_info["mean"]))
-                )
-                if log_scale
-                else norm(loc=dist_info["mean"], scale=dist_info["std"])
+        box = sampling[var]
+        lo, hi = float(box["minimum"]), float(box["maximum"])
+        log_scale = bool(box.get("log_scale", False))
+        if log_scale and (lo <= 0.0 or hi <= lo):
+            raise ValueError(
+                f"'{var}' is log-scale but its sampling box "
+                f"{lo!r}..{hi!r} is not strictly positive and ordered"
             )
-        elif dist_type == "uniform":
-            ppfs[var] = scale_distribution(
-                float(dist_info["min"]),
-                float(dist_info["max"]),
-                scale="log" if log_scale else "linear",
+        if hi <= lo:
+            raise ValueError(
+                f"'{var}' sampling box {lo!r}..{hi!r} must have maximum > minimum"
             )
-        else:
-            raise ValueError(f"Unsupported distribution type: {dist_type}")
+        ppfs[var] = scale_distribution(lo, hi, scale="log" if log_scale else "linear")
 
     # --- 2. Fixed base sample count, rounded up to next power of 2 (V36) ---
     if d_varying == 0:

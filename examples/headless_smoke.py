@@ -79,16 +79,16 @@ def main() -> int:
     print(f"[2/3] CV OK: root_mean_squared={root_meansq:.4f} (5-fold)")
 
     # --- 3. Sobol' sensitivity indices ---
-    distributions = {
-        "length": {"distribution": "uniform", "min": 0.0, "max": 1.0},
-        "width": {"distribution": "uniform", "min": 0.0, "max": 1.0},
+    sampling = {
+        "length": {"minimum": 0.0, "maximum": 1.0},
+        "width": {"minimum": 0.0, "maximum": 1.0},
     }
     sobol = evaluate_sobol_indices(
         run_dir,
         training_file,
         ["length", "width"],
         "y1",
-        distributions,
+        sampling,
         preprocessor,
         seed=SEED,
     )

@@ -189,12 +189,19 @@ def evaluate_sobol(
     variables: Sequence[str],
     response: str,
     *,
-    distributions: Mapping[str, DistributionSpec],
+    domains: Mapping[str, DomainSpec] | None = None,
     preprocessing: PreprocessingSpec | None = None,
     seed: int = DEFAULT_SEED,
     workspace: Path | None = None,
 ) -> SobolResult:
-    """Compute Sobol sensitivity indices from explicit distributions.
+    """Compute Sobol sensitivity indices over the exploration domain.
+
+    The sampling box is DOMAIN vocabulary (V26dd): pass per-variable
+    :class:`DomainSpec` boxes, or omit them and the box is auto-inferred from
+    the observed sample bounds; a variable constant in the samples stays
+    fixed. Draws are uniform across the box -- log-uniform for a ``scale="log"``
+    override (V44ls). Modeller distributions are NOT an input here; they drive
+    :func:`evaluate_uncertainty`.
 
     Second-order pairs come from the exact joint-pair estimator (valid for any
     input count), and the result carries the M1/M2/R order-mass partition --
@@ -203,7 +210,7 @@ def evaluate_sobol(
     with SumoSession(
         samples, variables, response, preprocessing=preprocessing, workspace=workspace
     ) as session:
-        return session.fit().sobol(distributions=distributions, seed=seed)
+        return session.fit().sobol(domains=domains, seed=seed)
 
 
 def compute_correlations(

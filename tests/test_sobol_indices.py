@@ -100,22 +100,18 @@ class TestSobolSampling:
         assert SOBOL_BASE_SAMPLES == 1024
 
     def test_constant_variable_indices_are_zero(self):
-        """Constant input variables get main=0, total=0 in the response."""
+        """Fixed input variables get main=0, total=0 in the response."""
 
         # We can't call evaluate_sumo without a real surrogate, so test the
-        # logic by verifying the constant-var detection and zero assignment.
-        # This is tested indirectly via the degenerate paths below.
-        distributions = {
-            "x1": {"distribution": "uniform", "min": -3.14159, "max": 3.14159},
-            "x2": {"distribution": "constant", "value": 1.0},
+        # logic by verifying the fixed-var detection and zero assignment.
+        # This is tested directly via the degenerate paths below.
+        sampling = {
+            "x1": {"minimum": -3.14159, "maximum": 3.14159},
+            "x2": {"value": 1.0},
         }
-        # Verify constant detection
-        constant_vars = {
-            k: v["value"]
-            for k, v in distributions.items()
-            if v["distribution"] == "constant"
-        }
-        varying_vars = [k for k in distributions if k not in constant_vars]
+        # Verify fixed-var detection (V26dd sampling shape)
+        constant_vars = {k: v["value"] for k, v in sampling.items() if "value" in v}
+        varying_vars = [k for k in sampling if k not in constant_vars]
         assert constant_vars == {"x2": 1.0}
         assert varying_vars == ["x1"]
 
@@ -383,16 +379,13 @@ class TestDegenerateResponses:
         from itis_sumo.evaluate import funs_evaluate
 
         pre = self._FakePreprocessor(["x1", "x2"])
-        distributions = {
-            "x1": {"distribution": "constant", "value": 1.0},
-            "x2": {"distribution": "constant", "value": 2.0},
-        }
+        sampling = {"x1": {"value": 1.0}, "x2": {"value": 2.0}}
         out = funs_evaluate.evaluate_sobol_indices(
             tmp_path,
             tmp_path / "training.dat",
             ["x1", "x2"],
             "y",
-            distributions,
+            sampling,
             pre,
             seed=1,
         )
@@ -417,16 +410,16 @@ class TestDegenerateResponses:
 
         monkeypatch.setattr(funs_evaluate, "evaluate_sumo", _constant_sumo)
         pre = self._FakePreprocessor(["x1", "x2"])
-        distributions = {
-            "x1": {"distribution": "uniform", "min": -1.0, "max": 1.0},
-            "x2": {"distribution": "constant", "value": 0.0},
+        sampling = {
+            "x1": {"minimum": -1.0, "maximum": 1.0},
+            "x2": {"value": 0.0},
         }
         out = funs_evaluate.evaluate_sobol_indices(
             tmp_path,
             tmp_path / "training.dat",
             ["x1", "x2"],
             "y",
-            distributions,
+            sampling,
             pre,
             seed=2,
         )
