@@ -63,6 +63,7 @@ class TestPublicSurface:
             "DistributionSpec",
             "DomainSpec",
             "GridResult",
+            "OrderMasses",
             "ParetoFrontResult",
             "PreprocessingSpec",
             "Scale",

@@ -42,6 +42,7 @@ from itis_sumo.api.types import (
     DistributionSpec,
     DomainSpec,
     GridResult,
+    OrderMasses,
     ParetoFrontResult,
     PreprocessingSpec,
     SobolResult,
@@ -449,10 +450,12 @@ class SumoSession:
             raise SumoResultError(
                 f"No Sobol indices were produced for '{self._response}'"
             )
+        masses = results["sobolOrderContributions"]
         return SobolResult(
             response=self._response,
             indices=results["sobol"],
             second_order=results["sobolSecondOrder"],
+            order_contributions=OrderMasses(**masses) if masses is not None else None,
             seed=seed,
             distributions=dict(distributions),
         )

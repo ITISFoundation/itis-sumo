@@ -194,7 +194,12 @@ def evaluate_sobol(
     seed: int = DEFAULT_SEED,
     workspace: Path | None = None,
 ) -> SobolResult:
-    """Compute Sobol sensitivity indices from explicit distributions."""
+    """Compute Sobol sensitivity indices from explicit distributions.
+
+    Second-order pairs come from the exact joint-pair estimator (valid for any
+    input count), and the result carries the M1/M2/R order-mass partition --
+    ``None`` when the sample variance is zero and the fractions undefined.
+    """
     with SumoSession(
         samples, variables, response, preprocessing=preprocessing, workspace=workspace
     ) as session:
