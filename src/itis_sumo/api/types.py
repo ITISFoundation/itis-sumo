@@ -166,9 +166,9 @@ class SobolResult:
     The indices describe sensitivity over the exploration DOMAIN, not over
     modeller distributions (V26dd): ``domains`` are the boxes actually sampled
     (explicit or auto-inferred from the observed bounds), ``fixed`` holds the
-    variables that were constant in the samples and therefore pinned (zero
-    variance contribution by construction), and ``effective_config`` shows the
-    scale each column was sampled on.
+    pinned variables — caller-stated via ``fixed`` or constant in the samples —
+    with zero variance contribution by construction, and ``effective_config``
+    shows the scale each column was sampled on.
 
     ``second_order`` holds the exact joint-pair estimator
     ``S_ij = Var(E[Y|X_i,X_j])/V - S_i - S_j``, valid for any input count.

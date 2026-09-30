@@ -190,6 +190,7 @@ def evaluate_sobol(
     response: str,
     *,
     domains: Mapping[str, DomainSpec] | None = None,
+    fixed: Mapping[str, float] | None = None,
     preprocessing: PreprocessingSpec | None = None,
     seed: int = DEFAULT_SEED,
     workspace: Path | None = None,
@@ -199,7 +200,9 @@ def evaluate_sobol(
     The sampling box is DOMAIN vocabulary (V26dd): pass per-variable
     :class:`DomainSpec` boxes, or omit them and the box is auto-inferred from
     the observed sample bounds; a variable constant in the samples stays
-    fixed. Draws are uniform across the box -- log-uniform for a ``scale="log"``
+    fixed. ``fixed`` pins caller-stated factors at given values (the
+    domain-vocabulary freeze; a variable cannot be both boxed and fixed).
+    Draws are uniform across the box -- log-uniform for a ``scale="log"``
     override (V44ls). Modeller distributions are NOT an input here; they drive
     :func:`evaluate_uncertainty`.
 
@@ -210,7 +213,7 @@ def evaluate_sobol(
     with SumoSession(
         samples, variables, response, preprocessing=preprocessing, workspace=workspace
     ) as session:
-        return session.fit().sobol(domains=domains, seed=seed)
+        return session.fit().sobol(domains=domains, fixed=fixed, seed=seed)
 
 
 def compute_correlations(

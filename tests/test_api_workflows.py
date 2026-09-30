@@ -200,6 +200,43 @@ class TestSobol:
                 domains={"width": DomainSpec(1.0, 5.0), "ghost": DomainSpec(0.0, 1.0)},
             )
 
+    def test_explicit_fixed_pins_the_factor(self, samples):
+        """V26dd: a caller-stated pin is domain vocabulary -- the factor is
+        frozen at the given value (surrogate still sees its real spread)."""
+        result = evaluate_sobol(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            domains={"width": _SOBOL_DOMAINS["width"]},
+            fixed={"height": 300.0},
+            seed=7,
+        )
+        assert result.fixed == {"height": 300.0}
+        assert "height" not in result.domains
+        assert result.indices["height"]["main"] == 0.0
+        assert result.indices["height"]["total"] == 0.0
+        assert result.indices["width"]["total"] > 0.5
+        assert result.second_order == {}
+
+    def test_fixed_and_domain_conflict_is_rejected(self, samples):
+        with pytest.raises(SumoInputError, match="both boxed and fixed"):
+            evaluate_sobol(
+                samples,
+                VARIABLES,
+                RESPONSE,
+                domains=_SOBOL_DOMAINS,
+                fixed={"width": 3.0},
+                seed=7,
+            )
+
+    def test_fixed_guards_unknown_names_and_values(self, samples):
+        with pytest.raises(SumoInputError, match="not in play"):
+            evaluate_sobol(samples, VARIABLES, RESPONSE, fixed={"ghost": 1.0}, seed=7)
+        with pytest.raises(SumoInputError, match="finite"):
+            evaluate_sobol(
+                samples, VARIABLES, RESPONSE, fixed={"width": float("nan")}, seed=7
+            )
+
 
 class TestDiagnostics:
     def test_correlations_use_original_column_names(self, samples):
