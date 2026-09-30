@@ -134,14 +134,57 @@ class UncertaintyResult:
 
 
 @dataclass(frozen=True)
+class OrderMasses:
+    """Unique ANOVA order masses of one response's variance partition.
+
+    ``first_order`` is M1 = sum of the first-order indices, ``second_order`` is
+    M2 = sum of the unordered second-order pairs (each pair once), and
+    ``third_and_higher`` is the closure residual R = 1 - M1 - M2, so
+    ``M1 + M2 + R = 1`` holds by construction. Bootstrap CIs come from the same
+    shared-row resample as the indices, so they preserve estimator covariance
+    and the closure per replicate. R's CI covering zero means it is unresolved
+    from sampling noise; ``heuristic_noise_floor`` (median CI half-width of the
+    first/total indices) is an explicitly rough comparator, not a verdict.
+    """
+
+    first_order: float
+    second_order: float
+    third_and_higher: float
+    first_order_ci_low: float
+    first_order_ci_high: float
+    second_order_ci_low: float
+    second_order_ci_high: float
+    third_and_higher_ci_low: float
+    third_and_higher_ci_high: float
+    heuristic_noise_floor: float
+
+
+@dataclass(frozen=True)
 class SobolResult:
-    """First-, total-, and second-order sensitivity indices."""
+    """First-, total-, and second-order sensitivity indices.
+
+    The indices describe sensitivity over the exploration DOMAIN, not over
+    modeller distributions (V26dd): ``domains`` are the boxes actually sampled
+    (explicit or auto-inferred from the observed bounds), ``fixed`` holds the
+    variables that were constant in the samples and therefore pinned (zero
+    variance contribution by construction), and ``effective_config`` shows the
+    scale each column was sampled on.
+
+    ``second_order`` holds the exact joint-pair estimator
+    ``S_ij = Var(E[Y|X_i,X_j])/V - S_i - S_j``, valid for any input count.
+    ``order_contributions`` is ``None`` exactly when the sample output variance
+    is zero -- there is no variance to partition, so the masses are undefined
+    rather than silently ``(0, 0, 0)``.
+    """
 
     response: str
     indices: dict[str, dict[str, float]]
     second_order: dict[str, dict[str, float]]
+    order_contributions: OrderMasses | None
     seed: int
-    distributions: dict[str, DistributionSpec]
+    domains: dict[str, DomainSpec]
+    fixed: dict[str, float]
+    effective_config: dict[str, VariableSpec]
 
 
 @dataclass(frozen=True)

@@ -167,26 +167,37 @@ class TestGrid:
 
 
 class TestSobol:
-    def test_returns_seeded_indices_for_explicit_distributions(self, samples):
-        distributions = {
-            "width": DistributionSpec("uniform", minimum=1.0, maximum=5.0),
-            "height": DistributionSpec("uniform", minimum=100.0, maximum=500.0),
-        }
+    """V26dd: the sampling box is the exploration DOMAIN, not modeller
+    distributions (which stay the exclusive input of ``evaluate_uncertainty``)."""
+
+    def test_uses_explicit_domain_boxes_verbatim(self, samples):
         result = evaluate_sobol(
-            samples, VARIABLES, RESPONSE, distributions=distributions, seed=7
+            samples, VARIABLES, RESPONSE, domains=_SOBOL_DOMAINS, seed=7
         )
         assert result.response == RESPONSE
         assert result.seed == 7
         assert set(result.indices) == set(VARIABLES)
         assert set(result.second_order) <= set(VARIABLES)
+        # the sampled box is exactly what the caller declared (not a box
+        # re-derived from anything else) and scales are visible (V21pf)
+        assert result.domains == _SOBOL_DOMAINS
+        assert result.fixed == {}
+        assert result.effective_config["width"].scale == "linear"
 
-    def test_requires_a_distribution_for_each_variable(self, samples):
-        with pytest.raises(SumoInputError, match="cover variables exactly"):
+    def test_auto_infers_boxes_from_observed_bounds(self, samples):
+        result = evaluate_sobol(samples, VARIABLES, RESPONSE, seed=7)
+        assert set(result.domains) == set(VARIABLES)
+        assert result.fixed == {}
+        assert result.domains["width"].minimum >= samples["width"].min()
+        assert result.domains["width"].maximum <= samples["width"].max()
+
+    def test_rejects_domains_for_columns_not_in_play(self, samples):
+        with pytest.raises(SumoInputError, match="not in play"):
             evaluate_sobol(
                 samples,
                 VARIABLES,
                 RESPONSE,
-                distributions={"width": DistributionSpec("constant", value=2.0)},
+                domains={"width": DomainSpec(1.0, 5.0), "ghost": DomainSpec(0.0, 1.0)},
             )
 
 
@@ -402,6 +413,12 @@ _NORMAL_WIDTH = {
     "width": DistributionSpec("normal", mean=math.log(3.0), std=0.5),
     "height": _UQ_DISTS["height"],
 }
+# Explicit Sobol sampling boxes (V26dd) -- match the training range so the
+# linear<->log flips stay interpolation instead of extrapolation.
+_SOBOL_DOMAINS = {
+    "width": DomainSpec(minimum=WIDTH_RANGE[0], maximum=WIDTH_RANGE[1]),
+    "height": DomainSpec(minimum=HEIGHT_RANGE[0], maximum=HEIGHT_RANGE[1]),
+}
 
 
 class TestLogScaleUncertaintyAndMetrics:
@@ -501,18 +518,19 @@ class TestLogScaleUncertaintyAndMetrics:
 
 class TestLogScaleSobol:
     """Log must reach the Sobol sampler too (SPEC T27fr -- 'log everywhere'): a
-    log-scale variable is drawn log-uniform, so the variance decomposition is
-    taken over that distribution rather than a linear one."""
+    log-scale variable is drawn log-uniform across its DOMAIN box, so the
+    variance decomposition is taken over that spread rather than a linear one
+    (V44ls; the box itself is domain vocabulary per V26dd)."""
 
     def test_log_input_changes_the_variance_decomposition(self, samples):
         linear = evaluate_sobol(
-            samples, VARIABLES, RESPONSE, distributions=_UQ_DISTS, seed=7
+            samples, VARIABLES, RESPONSE, domains=_SOBOL_DOMAINS, seed=7
         )
         logw = evaluate_sobol(
             samples,
             VARIABLES,
             RESPONSE,
-            distributions=_UQ_DISTS,
+            domains=_SOBOL_DOMAINS,
             preprocessing=_LOG_WIDTH,
             seed=7,
         )
@@ -524,39 +542,29 @@ class TestLogScaleSobol:
         assert logw.indices["width"]["total"] < linear.indices["width"]["total"]
         assert logw.indices["height"]["total"] > linear.indices["height"]["total"]
 
-    def test_log_input_with_a_normal_distribution_shifts_the_decomposition(
-        self, samples
-    ):
-        # V46rn: a log-scale normal widens the dominant variable's raw-space
-        # spread (lognormal tail), so its share of the response variance rises
-        # and the residual variable's falls -- the decomposition is taken over
-        # what the model sees, not a silently linear draw.
-        linear = evaluate_sobol(
-            samples, VARIABLES, RESPONSE, distributions=_NORMAL_WIDTH, seed=7
-        )
-        logw = evaluate_sobol(
-            samples,
-            VARIABLES,
-            RESPONSE,
-            distributions=_NORMAL_WIDTH,
-            preprocessing=_LOG_WIDTH,
-            seed=7,
-        )
-        assert set(logw.indices) == set(VARIABLES)
-        assert logw.indices["width"]["total"] > linear.indices["width"]["total"]
-        assert logw.indices["height"]["total"] < linear.indices["height"]["total"]
-
-    def test_log_input_rejects_a_non_positive_lower_bound(self, samples):
-        zero_min = {
-            "width": DistributionSpec("uniform", minimum=0.0, maximum=5.0),
-            "height": _UQ_DISTS["height"],
+    def test_narrow_domain_concentrates_sensitivity(self, samples):
+        """V26dd: sensitivity is taken over the DECLARED box -- pinning the
+        height box to a sliver routes nearly all variance to width."""
+        narrow = {
+            "width": _SOBOL_DOMAINS["width"],
+            "height": DomainSpec(minimum=299.0, maximum=301.0),
         }
-        with pytest.raises(SumoInputError, match="not strictly positive"):
+        result = evaluate_sobol(samples, VARIABLES, RESPONSE, domains=narrow, seed=7)
+        assert result.indices["width"]["total"] > 0.8
+        assert result.indices["height"]["total"] < 0.3
+        assert result.domains["height"] == narrow["height"]
+
+    def test_log_input_rejects_a_non_positive_domain(self, samples):
+        zero_min = {
+            "width": DomainSpec(minimum=0.0, maximum=5.0),
+            "height": _SOBOL_DOMAINS["height"],
+        }
+        with pytest.raises(SumoInputError, match="strictly positive"):
             evaluate_sobol(
                 samples,
                 VARIABLES,
                 RESPONSE,
-                distributions=zero_min,
+                domains=zero_min,
                 preprocessing=_LOG_WIDTH,
                 seed=7,
             )
@@ -626,22 +634,20 @@ class TestScaleGapCoverage:
         assert 0.5 < result.q1 / result.median
         assert result.q3 / result.median < 2.0
 
-    def test_sobol_mixed_log_and_constant(self, samples):
-        dists = {
-            "width": DistributionSpec("uniform", minimum=1.0, maximum=5.0),
-            "height": DistributionSpec("constant", value=300.0),
-        }
+    def test_column_constant_in_the_samples_stays_fixed(self, samples):
+        """V26dd: a variable with no observed spread is pinned (no invented box);
+        its indices are zero and it reports in ``fixed``, not ``domains``."""
+        const = samples.copy()
+        const["height"] = 300.0
         result = evaluate_sobol(
-            samples,
-            VARIABLES,
-            RESPONSE,
-            distributions=dists,
-            preprocessing=_LOG_WIDTH,
-            seed=7,
+            const, VARIABLES, RESPONSE, preprocessing=_LOG_WIDTH, seed=7
         )
         assert set(result.indices) == set(VARIABLES)
-        assert result.indices["width"]["total"] > 0.8
-        assert result.indices["height"]["total"] < 0.3
+        assert "height" not in result.domains
+        assert result.fixed == {"height": 300.0}
+        assert result.indices["height"]["main"] == 0.0
+        assert result.indices["height"]["total"] == 0.0
+        assert result.indices["width"]["total"] > 0.5
 
 
 class TestScaleAwareSamplers:
@@ -972,7 +978,7 @@ class TestScaleFlipMatrix:
                             samples,
                             VARIABLES,
                             RESPONSE,
-                            distributions=_UQ_DISTS,
+                            domains=_SOBOL_DOMAINS,
                             preprocessing=p,
                             seed=7,
                         ).indices.values()
@@ -1070,22 +1076,10 @@ class TestScaleFlipMatrix:
                     ).mean
                 ),
             ),
-            (
-                "evaluate_sobol",
-                lambda p: self._fp(
-                    [
-                        entry["total"]
-                        for entry in evaluate_sobol(
-                            samples,
-                            VARIABLES,
-                            RESPONSE,
-                            distributions=_NORMAL_WIDTH,
-                            preprocessing=p,
-                            seed=7,
-                        ).indices.values()
-                    ]
-                ),
-            ),
+            # evaluate_sobol has NO normal matrix row (V26dd): its sampling box
+            # is domain-only, so a normal-vs-distribution flip has no meaning
+            # there -- the scale flip over domain boxes is asserted in the
+            # uniform matrix above.
             (
                 "evaluate_correlations",
                 lambda p: self._fp(
@@ -1104,7 +1098,9 @@ class TestScaleFlipMatrix:
                 ),
             ),
         ]
-        assert len(cases) == 3
+        # 2, not 3: evaluate_sobol lost its normal row when V26dd made its box
+        # domain-only -- distributions are no longer an input there at all.
+        assert len(cases) == 2
         for name, fingerprint in cases:
             linear = fingerprint(None)
             log = fingerprint(_LOG_WIDTH)

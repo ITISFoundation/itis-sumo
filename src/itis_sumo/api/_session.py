@@ -42,6 +42,7 @@ from itis_sumo.api.types import (
     DistributionSpec,
     DomainSpec,
     GridResult,
+    OrderMasses,
     ParetoFrontResult,
     PreprocessingSpec,
     SobolResult,
@@ -422,18 +423,53 @@ class SumoSession:
     def sobol(
         self,
         *,
-        distributions: Mapping[str, DistributionSpec],
+        domains: Mapping[str, DomainSpec] | None = None,
         seed: int,
     ) -> SobolResult:
-        """Compute sensitivity indices from explicitly supplied uncertainty."""
-        missing = sorted(set(self._variables) - set(distributions))
-        unknown = sorted(set(distributions) - set(self._variables))
-        if missing or unknown:
+        """Compute sensitivity indices over the exploration DOMAIN (V26dd).
+
+        The Saltelli sampling box comes from the domain, never from modeller
+        distributions: ``domains`` boxes are optional (unknown names are
+        rejected), anything not given is auto-inferred from the observed sample
+        bounds, and a column constant in the samples stays fixed. Draws are
+        uniform across the box -- log-uniform under a log-scale override
+        (V44ls), which also requires a strictly positive box.
+        """
+        given = domains or {}
+        unknown = sorted(set(given) - set(self._variables))
+        if unknown:
             raise SumoInputError(
-                f"Distributions must cover variables exactly; missing={missing}, "
-                f"unknown={unknown}"
+                f"Domains given for variables that are not in play: {unknown}"
             )
-        engine_distributions = self._uq_engine_distributions(distributions)
+        sampling: dict[str, dict[str, float | bool]] = {}
+        effective_boxes: dict[str, DomainSpec] = {}
+        fixed: dict[str, float] = {}
+        for variable in self._variables:
+            log_scale = self._scale_of(variable) == "log"
+            dom = given.get(variable)
+            if dom is None:
+                column = self._samples[variable]
+                lo, hi = float(column.min()), float(column.max())
+                if lo == hi:
+                    # Constant in the samples -> fixed factor; a DomainSpec
+                    # cannot express it (V47st requires minimum < maximum), and
+                    # inventing a box around it would fabricate sensitivity.
+                    fixed[variable] = lo
+                    sampling[variable] = {"value": lo}
+                    continue
+                dom = DomainSpec(minimum=lo, maximum=hi)
+            if log_scale and (dom.minimum <= 0 or dom.maximum <= 0):
+                raise SumoInputError(
+                    f"Log-scale '{variable}' domains must be strictly positive"
+                )
+            entry: dict[str, float | bool] = {
+                "minimum": dom.minimum,
+                "maximum": dom.maximum,
+            }
+            if log_scale:
+                entry["log_scale"] = True
+            sampling[variable] = entry
+            effective_boxes[variable] = dom
         results = self._run_engine(
             "computing Sobol indices",
             evaluate_sobol_indices,
@@ -441,7 +477,7 @@ class SumoSession:
             self._training_file,
             self._variables,
             self._mapped_response,
-            engine_distributions,
+            sampling,
             self._preprocessor,
             seed=seed,
         )
@@ -449,12 +485,16 @@ class SumoSession:
             raise SumoResultError(
                 f"No Sobol indices were produced for '{self._response}'"
             )
+        masses = results["sobolOrderContributions"]
         return SobolResult(
             response=self._response,
             indices=results["sobol"],
             second_order=results["sobolSecondOrder"],
+            order_contributions=OrderMasses(**masses) if masses is not None else None,
             seed=seed,
-            distributions=dict(distributions),
+            domains=effective_boxes,
+            fixed=dict(fixed),
+            effective_config=self.effective_config,
         )
 
     def uncertainty(

@@ -83,7 +83,7 @@ noisy-free samples of the Ishigami function and runs the full
 
 ```python
 sobol = evaluate_sobol_indices(
-    run_dir, train_file, ["x1", "x2", "x3"], "y1", distributions, preprocessor, seed=42
+    run_dir, train_file, ["x1", "x2", "x3"], "y1", sampling, preprocessor, seed=42
 )["sobol"]
 ```
 

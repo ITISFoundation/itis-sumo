@@ -17,9 +17,9 @@ Live results as of the last run of the ported V&V suite:
 
 | Suite | Tests | Result |
 |---|---|---|
-| Full standalone suite (`uv run pytest`) | 365 | **all passing** |
-| Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 30 | **all passing** |
-| Sobol' / Ishigami acceptance gate (`test_sobol_indices.py`) | 4 | **all passing** |
+| Full standalone suite (`uv run pytest`) | 387 | **all passing** |
+| Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 26 | **all passing** |
+| Sobol' / Ishigami acceptance gate (`test_sobol_indices.py`) | 14 | **all passing** |
 
 The analytical tier spawns a real `itis-dakota` (6.24.7)
 process per test — nothing here is mocked. Re-run locally with:
@@ -150,10 +150,11 @@ breaks with `TypeError`, it can never silently default.
 | I4 | UQ propagation: log inputs drawn log-uniform (response skews low vs linear, directionally asserted); log⊗normal drawn lognormal — ln-space μ/σ, mean shifts high vs linear by Jensen, directionally asserted (V46rn); log+min≤0 / log+constant rejected; log response ⇒ multiplicative (not additive) spread | ✅ |
 | I5 | CV accuracy metrics: inherit log through `cross_validate` (metrics differ from linear); reject non-positive log responses | ✅ |
 | I6 | MOGA: log variable explored in ln-space (domain mapped, positivity-guarded); log objective exp-restored for **both** minimize and maximize (sign-after-log inverse order verified) | ✅ |
-| I7 | Sobol: log input shifts the variance decomposition in the expected direction (compressed variable explains less; a log⊗normal widens the lognormal tail so it explains more, V46rn); mixed log+constant partition | ✅ |
-| I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log, ∀ 3 `distributions`-taking entry points also move when a NORMAL column turns log (V46rn) — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
+| I7 | Sobol: log input shifts the variance decomposition in the expected direction (log-uniform box draws compress toward the low end, so the variable explains less); a DECLARED narrow box concentrates sensitivity onto the other variable — the decomposition follows the sampled domain, not the training spread (V26dd) | ✅ |
+| I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log, ∀ 2 `distributions`-taking entry points also move when a NORMAL column turns log (V46rn; Sobol's box is domain-only after V26dd, so its flip rides on DOMAIN boxes and it has no NORMAL matrix row) — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
 | I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
 | I10 | Boundary input guards (V47st): `DomainSpec`/`DistributionSpec` reject inverted/degenerate bounds at construction; unused `preprocessing` overrides rejected by the table-mode + sampler entry points (not just the session path); log-uniform upper bound required ∧ ordered at the api boundary; a variable missing from the correlator's `input_scales` raises instead of defaulting to linear | ✅ |
+| I11 | Domain⊥distribution split (V26dd): `evaluate_sobol` samples the exploration DOMAIN (explicit `DomainSpec` boxes echoed verbatim ∧ auto-inferred from observed bounds when omitted), ⊥ modeller distributions ∧ ⊥ a box re-derived from `mean±3σ`; a column constant in the samples is pinned (reports in `fixed`, indices zero, ⊥ a fabricated box); unknown domain names rejected; log-scale domain non-positive rejected at the boundary | ✅ |
 
 Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
 `TestScaleAwareSamplers`, `TestScaleFlipMatrix`),
@@ -162,11 +163,12 @@ Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
 
 ## Ishigami analytical acceptance gate
 
-`SPEC.md` §R1 — the acceptance test for the entire Sobol' sensitivity
-pipeline (`evaluate_sobol_indices`). Bypasses the GP surrogate entirely and
-evaluates the Ishigami function analytically on Saltelli/QMC samples
-(n=2¹⁴), so it isolates "is the sampling → scipy → closed-form second-order
-math correct" from surrogate accuracy.
+`SPEC.md` §R1 — the acceptance tests for the Sobol' sensitivity pipeline
+(`evaluate_sobol_indices`). They bypass the GP surrogate entirely and evaluate
+the Ishigami function analytically on designs built with the PRODUCTION
+sampling, pair-design and algebra helpers (n=2¹⁴), so they isolate "is the
+sampling → splitting → pair-design → algebra math correct" from surrogate
+accuracy.
 
 | Index | Reference value | Tolerance | Status |
 |---|---|---|---|
@@ -179,12 +181,33 @@ math correct" from surrogate accuracy.
 | S_12 (second-order) | 0.0 | ±0.05 | ✅ |
 | S_13 (second-order) | 0.244 | ±0.05 | ✅ |
 | S_23 (second-order) | 0.0 | ±0.05 | ✅ |
+| M1 (order mass, ΣᵢSᵢ) | 0.756 | ±0.05 | ✅ |
+| M2 (order mass, Σ_{i<j}S_ij) | 0.244 | ±0.05 | ✅ |
 
 x3's zero first-order-but-nonzero total-order index is the point of the
 benchmark: it has no *main* effect on its own, but a real interaction
 effect through the `0.1·x3⁴·sin(x1)` term — a surrogate/sensitivity
 pipeline that got the interaction term wrong would still pass a
 first-order-only check and fail this one.
+
+### Estimator tier (T31rb port, V48tr)
+
+Same production helpers, more analytic benchmarks — all tolerances scaled by
+the shared-bootstrap CI half-width, never hand-tuned floors:
+
+- **Additive d=8** — every pair estimate inside 3× its own CI (no false
+  interactions); **pair-interaction d=5** and **pair-quadratic d=10** — the
+  one true pair recovered at its analytic value, the other pairs silent.
+- **B26nc degeneracy regression** — the retired first/total-gap identity
+  assigns a NON-interacting pair S_45 ≈ −0.244 (mass leak) on a fixture where
+  the exact joint-pair estimator returns ≈0; the test pins both directions.
+- **scipy parity** — `_sobol_algebra` first/total equal
+  `scipy.stats.sobol_indices` (`saltelli_2010`) to 1e-9: the algebra is the
+  single runtime source, the parity test is what pins it.
+- **Translation invariance** — adding a constant offset (~100× the output
+  std, the "stress in Pa" regime) moves no index, mass or CI bound.
+- **Zero-variance flag** — constant samples set `var_zero` (the api turns
+  that into null order contributions, never fake `(0, 0, 0)` masses).
 
 ## Known limitations
 

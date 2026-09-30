@@ -96,16 +96,16 @@ full recipe including R² and convergence checks.
 ```python
 from itis_sumo.evaluate.funs_evaluate import evaluate_sobol_indices
 
-distributions = {
-    "length": {"distribution": "uniform", "min": 0.0, "max": 1.0},
-    "width": {"distribution": "uniform", "min": 0.0, "max": 1.0},
+sampling = {
+    "length": {"minimum": 0.0, "maximum": 1.0},
+    "width": {"minimum": 0.0, "maximum": 1.0},
 }
 sobol = evaluate_sobol_indices(
     run_dir,
     training_file,
     ["length", "width"],
     "y1",
-    distributions,
+    sampling,
     preprocessor,
     seed=42,
 )["sobol"]
