@@ -11,6 +11,7 @@ Nothing in this module is public API.
 from __future__ import annotations
 
 import logging
+import math
 import shutil
 import sys
 import tempfile
@@ -424,6 +425,7 @@ class SumoSession:
         self,
         *,
         domains: Mapping[str, DomainSpec] | None = None,
+        fixed: Mapping[str, float] | None = None,
         seed: int,
     ) -> SobolResult:
         """Compute sensitivity indices over the exploration DOMAIN (V26dd).
@@ -431,21 +433,47 @@ class SumoSession:
         The Saltelli sampling box comes from the domain, never from modeller
         distributions: ``domains`` boxes are optional (unknown names are
         rejected), anything not given is auto-inferred from the observed sample
-        bounds, and a column constant in the samples stays fixed. Draws are
-        uniform across the box -- log-uniform under a log-scale override
-        (V44ls), which also requires a strictly positive box.
+        bounds, and a column constant in the samples stays fixed. Explicitly
+        ``fixed`` values pin a factor at a caller-stated value (the
+        domain-vocabulary way to freeze a factor; ⊥ a distribution's
+        ``constant`` parameter). Draws are uniform across the box -- log-uniform
+        under a log-scale override (V44ls), which also requires a strictly
+        positive box or pin.
         """
         given = domains or {}
+        given_fixed = fixed or {}
         unknown = sorted(set(given) - set(self._variables))
         if unknown:
             raise SumoInputError(
                 f"Domains given for variables that are not in play: {unknown}"
             )
+        unknown_fixed = sorted(set(given_fixed) - set(self._variables))
+        if unknown_fixed:
+            raise SumoInputError(
+                f"Fixed values given for variables that are not in play: "
+                f"{unknown_fixed}"
+            )
+        overlap = sorted(set(given_fixed) & set(given))
+        if overlap:
+            raise SumoInputError(f"Variables cannot be both boxed and fixed: {overlap}")
         sampling: dict[str, dict[str, float | bool]] = {}
         effective_boxes: dict[str, DomainSpec] = {}
-        fixed: dict[str, float] = {}
+        fixed_map: dict[str, float] = {}
         for variable in self._variables:
             log_scale = self._scale_of(variable) == "log"
+            if variable in given_fixed:
+                value = float(given_fixed[variable])
+                if not math.isfinite(value):
+                    raise SumoInputError(
+                        f"Fixed value for '{variable}' must be finite, got {value}"
+                    )
+                if log_scale and value <= 0:
+                    raise SumoInputError(
+                        f"Log-scale '{variable}' fixed values must be strictly positive"
+                    )
+                fixed_map[variable] = value
+                sampling[variable] = {"value": value}
+                continue
             dom = given.get(variable)
             if dom is None:
                 column = self._samples[variable]
@@ -454,7 +482,7 @@ class SumoSession:
                     # Constant in the samples -> fixed factor; a DomainSpec
                     # cannot express it (V47st requires minimum < maximum), and
                     # inventing a box around it would fabricate sensitivity.
-                    fixed[variable] = lo
+                    fixed_map[variable] = lo
                     sampling[variable] = {"value": lo}
                     continue
                 dom = DomainSpec(minimum=lo, maximum=hi)
@@ -493,7 +521,7 @@ class SumoSession:
             order_contributions=OrderMasses(**masses) if masses is not None else None,
             seed=seed,
             domains=effective_boxes,
-            fixed=dict(fixed),
+            fixed=fixed_map,
             effective_config=self.effective_config,
         )
 

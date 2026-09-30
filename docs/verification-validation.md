@@ -17,7 +17,7 @@ Live results as of the last run of the ported V&V suite:
 
 | Suite | Tests | Result |
 |---|---|---|
-| Full standalone suite (`uv run pytest`) | 387 | **all passing** |
+| Full standalone suite (`uv run pytest`) | 390 | **all passing** |
 | Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 26 | **all passing** |
 | Sobol' / Ishigami acceptance gate (`test_sobol_indices.py`) | 14 | **all passing** |
 
@@ -154,7 +154,7 @@ breaks with `TypeError`, it can never silently default.
 | I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log, ∀ 2 `distributions`-taking entry points also move when a NORMAL column turns log (V46rn; Sobol's box is domain-only after V26dd, so its flip rides on DOMAIN boxes and it has no NORMAL matrix row) — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
 | I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
 | I10 | Boundary input guards (V47st): `DomainSpec`/`DistributionSpec` reject inverted/degenerate bounds at construction; unused `preprocessing` overrides rejected by the table-mode + sampler entry points (not just the session path); log-uniform upper bound required ∧ ordered at the api boundary; a variable missing from the correlator's `input_scales` raises instead of defaulting to linear | ✅ |
-| I11 | Domain⊥distribution split (V26dd): `evaluate_sobol` samples the exploration DOMAIN (explicit `DomainSpec` boxes echoed verbatim ∧ auto-inferred from observed bounds when omitted), ⊥ modeller distributions ∧ ⊥ a box re-derived from `mean±3σ`; a column constant in the samples is pinned (reports in `fixed`, indices zero, ⊥ a fabricated box); unknown domain names rejected; log-scale domain non-positive rejected at the boundary | ✅ |
+| I11 | Domain⊥distribution split (V26dd): `evaluate_sobol` samples the exploration DOMAIN (explicit `DomainSpec` boxes echoed verbatim ∧ auto-inferred from observed bounds when omitted), ⊥ modeller distributions ∧ ⊥ a box re-derived from `mean±3σ`; a column constant in the samples is pinned (reports in `fixed`, indices zero, ⊥ a fabricated box); explicitly `fixed` factors pin at the caller's value (zero indices, ⊥ boxed∧fixed overlap); unknown domain names rejected; log-scale domain non-positive rejected at the boundary | ✅ |
 
 Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
 `TestScaleAwareSamplers`, `TestScaleFlipMatrix`),
