@@ -405,12 +405,21 @@ class SumoSession:
         original_names = self._preprocessor.get_inverse_mapping()
         converted: dict[str, list[float] | list[list[float]]] = {}
         for mapped_name, values in results.items():
-            original_name = original_names.get(mapped_name, mapped_name)
             if mapped_name == self._mapped_response:
-                converted[original_name] = self._inverse_nested_values(
+                converted[self._response] = self._inverse_nested_values(
+                    mapped_name, values
+                )
+            elif mapped_name.startswith(f"{self._mapped_response}_"):
+                # Companion series (the predicted-std column) hang off the
+                # MAPPED response name (y1_std); V21pf requires the ORIGINAL
+                # name with the suffix kept -- a mapped-name leak gets
+                # camelCased by consumers and the frontend cannot look it up.
+                suffix = mapped_name[len(self._mapped_response) :]
+                converted[f"{self._response}{suffix}"] = self._inverse_nested_values(
                     mapped_name, values
                 )
             else:
+                original_name = original_names.get(mapped_name, mapped_name)
                 converted[original_name] = self._inverse_nested_values(
                     mapped_name, values
                 )

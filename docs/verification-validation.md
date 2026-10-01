@@ -17,7 +17,7 @@ Live results as of the last run of the ported V&V suite:
 
 | Suite | Tests | Result |
 |---|---|---|
-| Full standalone suite (`uv run pytest`) | 390 | **all passing** |
+| Full standalone suite (`uv run pytest`) | 391 | **all passing** |
 | Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 26 | **all passing** |
 | Sobol' / Ishigami acceptance gate (`test_sobol_indices.py`) | 14 | **all passing** |
 
