@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import curve_fit
+from scipy.special import erfinv
 from scipy.stats import ttest_rel
 from sklearn.model_selection import KFold
 
@@ -36,6 +38,7 @@ from itis_sumo.data.funs_data_processing import (
     sanitize_varnames,
     scale_distribution,
 )
+from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
 _logger = logging.getLogger(__name__)
 
@@ -175,7 +178,7 @@ def propagate_manual_uq_with_uncertainty(
     input_vars: list[str],
     output_response: str,
     distributions: dict[str, dict[str, float | str]],
-    preprocessor,
+    preprocessor: DataPreprocessor | None,
     num_samples: int,
     n_histograms: int = 100,
     seed: int = 42,
@@ -192,6 +195,13 @@ def propagate_manual_uq_with_uncertainty(
     This mirrors the historical ``/manual_uq_propagation_with_uncertainty``
     Flask route rather than ``propagate_uq`` (Dakota-native, normal-only, no
     predictive-uncertainty injection) -- see test_metamodeling_analytical.py.
+
+    If ``preprocessor`` is given, samples are drawn/transformed/evaluated in
+    the preprocessor's mapped space and results are mapped back via
+    ``inverse_transform``; if omitted, ``input_vars``/``output_response`` are
+    used directly (sanitized for Dakota) and the returned samples live in the
+    file's own space -- the pathway the NIH worked example uses to propagate
+    in a hand-built log-transformed space without a ``DataPreprocessor``.
 
     Returns:
         A ``(n_histograms, num_samples)`` array of propagated output samples,
@@ -212,14 +222,21 @@ def propagate_manual_uq_with_uncertainty(
     SAMPLES_FILE = run_dir / "manual_uq_samples.csv"
     df_samples.to_csv(SAMPLES_FILE, index=False)
 
-    df_samples_transformed = preprocessor.transform(df_samples)
+    if preprocessor is not None:
+        df_samples_transformed = preprocessor.transform(df_samples)
+        mapped_input_vars = [
+            preprocessor.input_variables[var].mapped_name for var in input_vars
+        ]
+        mapped_response = preprocessor.output_variables[output_response].mapped_name
+    else:
+        # No preprocessor: the caller's units ARE the training file's space,
+        # so the samples pass through untransformed (NIH-worked-example path).
+        df_samples_transformed = df_samples
+        mapped_input_vars = sanitize_varnames(input_vars)
+        mapped_response = sanitize_varnames(output_response)
     PROCESSED_SAMPLES_FILE = run_dir / "manual_uq_samples_processed.csv"
     df_samples_transformed.to_csv(PROCESSED_SAMPLES_FILE, sep=" ", index=False)
 
-    mapped_input_vars = [
-        preprocessor.input_variables[var].mapped_name for var in input_vars
-    ]
-    mapped_response = preprocessor.output_variables[output_response].mapped_name
     results = evaluate_sumo(
         run_dir,
         PROCESSED_TRAINING_FILE,
@@ -245,6 +262,8 @@ def propagate_manual_uq_with_uncertainty(
         r = np.sqrt(2) * erfinv(rng.uniform(-1 + 1e-10, 1 - 1e-10, size=num_samples))
         all_results_transformed[i, :] = prediction + r * uncertainty
 
+    if preprocessor is None:
+        return all_results_transformed
     all_samples_dict = {mapped_response: all_results_transformed.flatten().tolist()}
     all_samples_original = preprocessor.inverse_transform(all_samples_dict)
     return np.asarray(all_samples_original[output_response]).reshape(
@@ -592,12 +611,16 @@ def evaluate_sumo_manual_crossvalidation(
 def compute_cv_accuracy_metrics(
     actual: list[float] | np.ndarray, predicted: list[float] | np.ndarray
 ) -> dict[str, float]:
-    """Compute RMSE/MAE/sum-abs/max-abs directly from paired CV actual/predicted values.
+    """Compute RMSE/MAE/sum-abs/max-abs/bias directly from paired CV actual/predicted values.
 
     Unlike `_parse_crossvalidation_outputlogs`, this does not depend on parsing Dakota's
     stdout (which `evaluate_sumo_crossvalidation` no longer captures) - it derives the
     same metrics straight from the actual/predicted arrays already produced by
     `evaluate_sumo_manual_crossvalidation`.
+
+    `mean_signed_error` (bias) is `mean(actual - predicted)`, signed rather than
+    absolute - a systematic over/under-prediction can net out near zero in `mean_abs`
+    if it isn't consistent in sign, so this is a distinct diagnostic, not a duplicate.
     """
     actual_arr = np.asarray(actual, dtype=float)
     predicted_arr = np.asarray(predicted, dtype=float)
@@ -622,6 +645,7 @@ def compute_cv_accuracy_metrics(
             "sum_abs": float("nan"),
             "mean_abs": float("nan"),
             "max_abs": float("nan"),
+            "mean_signed_error": float("nan"),
         }
     residuals = actual_arr - predicted_arr
     abs_residuals = np.abs(residuals)
@@ -630,6 +654,7 @@ def compute_cv_accuracy_metrics(
         "sum_abs": float(np.sum(abs_residuals)),
         "mean_abs": float(np.mean(abs_residuals)),
         "max_abs": float(np.max(abs_residuals)),
+        "mean_signed_error": float(np.mean(residuals)),
     }
 
 
@@ -676,6 +701,201 @@ def _convergence_subset_sizes(
     return unique_sizes
 
 
+def _tukey_outlier_mask(residuals: np.ndarray) -> np.ndarray:
+    """Boolean mask, True where `residuals` fall outside the Tukey IQR fence
+    (Q1 - 1.5*IQR, Q3 + 1.5*IQR). Flags, does not drop -- see `compute_cv_diagnostics`
+    and V17kb: unfiltered MAE stays the primary metric, this only feeds
+    `mean_abs_filtered`/`n_outliers` (a secondary diagnostic).
+    """
+    q1, q3 = np.percentile(residuals, [25, 75])
+    iqr = q3 - q1
+    lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    return (residuals < lower) | (residuals > upper)
+
+
+def _paired_cohens_d(actual: np.ndarray, predicted: np.ndarray) -> float:
+    """Standardized paired-difference effect size (Cohen's dz) for actual vs. predicted.
+
+    dz = mean(actual - predicted) / std(actual - predicted, ddof=1). Unlike the
+    paired t-test's p-value, dz is not confounded by sample size -- it is the
+    convergence-stabilization signal V17kb designates as primary, with p-value
+    evolution kept as a secondary diagnostic (power grows with N regardless of
+    whether the underlying bias is shrinking).
+    """
+    diff = actual - predicted
+    diff_std = np.std(diff, ddof=1)
+    return float(np.mean(diff) / diff_std) if diff_std > 0 else float("nan")
+
+
+def compute_coverage(
+    actual: list[float] | np.ndarray,
+    predicted: list[float] | np.ndarray,
+    predicted_std: list[float] | np.ndarray,
+    levels: tuple[float, ...] = (0.6827, 0.95, 0.9973),
+) -> dict[str, Any]:
+    """Empirical vs. nominal prediction-interval coverage (V19cz): for each
+    `levels` entry (default 1sigma/2sigma/3sigma two-sided Gaussian mass),
+    what fraction of `actual` fall within `predicted +- z*predicted_std`,
+    z = sqrt(2)*erfinv(level) (same two-sided-z convention as `create_manual_uq_samples`).
+    Tests whether the surrogate's OWN reported uncertainty
+    (`{output}_std_hat`, V8df) is trustworthy, not just whether point predictions
+    are close -- a persistent (non-shrinking-with-N) gap between empirical and
+    nominal coverage flags a miscalibrated variance model, not a data-shortage.
+
+    Points with NaN/non-positive `predicted_std` are dropped (Dakota can omit
+    variances.dat for a fold, B23) -- coverage is reported over however many
+    points have a usable std, `n_points` says how many that was.
+    """
+    actual_arr = np.asarray(actual, dtype=float)
+    predicted_arr = np.asarray(predicted, dtype=float)
+    std_arr = np.asarray(predicted_std, dtype=float)
+    if not (actual_arr.shape == predicted_arr.shape == std_arr.shape):
+        raise ValueError(
+            f"actual (shape {actual_arr.shape}), predicted (shape {predicted_arr.shape}), "
+            f"predicted_std (shape {std_arr.shape}) must have the same shape"
+        )
+    valid = (
+        ~np.isnan(actual_arr)
+        & ~np.isnan(predicted_arr)
+        & ~np.isnan(std_arr)
+        & (std_arr > 0)
+    )
+    actual_arr = actual_arr[valid]
+    predicted_arr = predicted_arr[valid]
+    std_arr = std_arr[valid]
+
+    n_points = int(actual_arr.size)
+    if n_points == 0:
+        return {
+            "levels": list(levels),
+            "empirical": [float("nan")] * len(levels),
+            "n_points": 0,
+        }
+
+    z_scores = (actual_arr - predicted_arr) / std_arr
+    empirical = []
+    for level in levels:
+        z_crit = np.sqrt(2) * erfinv(level)
+        empirical.append(float(np.mean(np.abs(z_scores) <= z_crit)))
+    return {"levels": list(levels), "empirical": empirical, "n_points": n_points}
+
+
+def compute_cv_diagnostics(
+    actual: list[float] | np.ndarray,
+    predicted: list[float] | np.ndarray,
+    predicted_std: list[float] | np.ndarray | None = None,
+) -> dict[str, Any]:
+    """One-pass statistical bundle for a CV subset (V16wq): everything
+    `_cv_subset_diagnostics` needs from a single Dakota CV rerun -- accuracy metrics,
+    Tukey-flagged outlier count + filtered MAE, paired t-test, and Cohen's dz effect
+    size -- so a caller never has to rerun CV just to derive a different metric.
+    Also returns the NaN-filtered `actual`/`predicted` pairs themselves so downstream
+    N=50 diagnostic plots (QQ, diagonal, error-vs-mean) can reuse them without a
+    second CV rerun.
+
+    `predicted_std` (V19cz), if given, is the per-point GP predictive std
+    (`{output}_std_hat`) aligned with `actual`/`predicted` before NaN-filtering;
+    it is filtered by the same actual/predicted validity mask and returned
+    verbatim (it may still carry its own NaNs from folds that never wrote
+    variances.dat -- `compute_coverage` drops those independently) so a caller
+    can pool it across bootstrap draws for coverage without a second CV rerun.
+    """
+    actual_arr = np.asarray(actual, dtype=float)
+    predicted_arr = np.asarray(predicted, dtype=float)
+    if actual_arr.shape != predicted_arr.shape:
+        raise ValueError(
+            f"actual (shape {actual_arr.shape}) and predicted (shape {predicted_arr.shape}) "
+            "must have the same shape"
+        )
+    std_arr = (
+        np.asarray(predicted_std, dtype=float)
+        if predicted_std is not None
+        else np.full(actual_arr.shape, np.nan)
+    )
+    if std_arr.shape != actual_arr.shape:
+        raise ValueError(
+            f"predicted_std (shape {std_arr.shape}) must match actual (shape {actual_arr.shape})"
+        )
+    # See compute_cv_accuracy_metrics: NaN entries are dropped CV rows (B22), not real data.
+    valid = ~np.isnan(actual_arr) & ~np.isnan(predicted_arr)
+    actual_arr = actual_arr[valid]
+    predicted_arr = predicted_arr[valid]
+    std_arr = std_arr[valid]
+
+    metrics = compute_cv_accuracy_metrics(actual_arr, predicted_arr)
+    base = {
+        **metrics,
+        "mean_abs_filtered": float("nan"),
+        "n_outliers": 0,
+        "ttest_statistic": float("nan"),
+        "ttest_p_value": float("nan"),
+        "cohens_d": float("nan"),
+        "actual": actual_arr.tolist(),
+        "predicted": predicted_arr.tolist(),
+        "predicted_std": std_arr.tolist(),
+    }
+    # paired t-test/effect-size/outlier-fence all need >=2 points; below that,
+    # leave them NaN rather than raise (compute_paired_ttest requires >=2) --
+    # matches compute_cv_accuracy_metrics's own NaN-over-crash convention.
+    if actual_arr.size < 2:
+        return base
+
+    residuals = actual_arr - predicted_arr
+    outlier_mask = _tukey_outlier_mask(residuals)
+    kept = ~outlier_mask
+    ttest = compute_paired_ttest(actual_arr, predicted_arr)
+    return {
+        **base,
+        "mean_abs_filtered": float(np.mean(np.abs(residuals[kept])))
+        if kept.any()
+        else float("nan"),
+        "n_outliers": int(np.sum(outlier_mask)),
+        "ttest_statistic": ttest["statistic"],
+        "ttest_p_value": ttest["p_value"],
+        "cohens_d": _paired_cohens_d(actual_arr, predicted_arr),
+    }
+
+
+def _cv_subset_diagnostics(
+    run_dir: Path,
+    training_file: Path,
+    input_vars: list[str],
+    output_response: str,
+    N_CROSS_VALIDATION: int,
+    n: int,
+    keep_idxs: list[int] | None,
+    tag: str,
+) -> dict[str, Any]:
+    if keep_idxs is not None:
+        subset_file = process_input_file(
+            training_file,
+            columns_to_keep=input_vars + [output_response],
+            suffix=f"convergence_{tag}",
+            keep_idxs=keep_idxs,
+        )
+    else:
+        subset_file = process_input_file(
+            training_file,
+            columns_to_keep=input_vars + [output_response],
+            suffix=f"convergence_{tag}",
+            filter_N_samples=n,
+        )
+    subset_run_dir = run_dir / f"convergence_{tag}"
+    os.makedirs(subset_run_dir, exist_ok=True)
+    result = evaluate_sumo_manual_crossvalidation(
+        subset_run_dir,
+        subset_file,
+        input_vars,
+        output_response,
+        N_CROSS_VALIDATION=min(N_CROSS_VALIDATION, n),
+    )
+    return compute_cv_diagnostics(
+        result[output_response],
+        result[output_response + "_hat"],
+        result[output_response + "_std_hat"],
+    )
+
+
 def compute_cv_convergence(
     run_dir: Path,
     training_file: Path,
@@ -684,43 +904,171 @@ def compute_cv_convergence(
     N_CROSS_VALIDATION: int = 5,
     min_samples: int = 5,
     max_points: int = 5,
-) -> list[dict[str, float]]:
+    n_bootstrap: int = 1,
+    seed: int = 42,
+) -> list[dict[str, Any]]:
     """Rerun manual K-fold CV at increasing training-sample-count subsets.
 
     Reuses `evaluate_sumo_manual_crossvalidation` (the same compute path
-    `/sumo_cross_validation` already runs) on the first `n` rows of `training_file` for
-    each subset size, deriving RMSE via `compute_cv_accuracy_metrics` at each step.
-    Subset sizes are evenly spaced between `min_samples` and the full sample count,
-    capped at `max_points` to bound the number of extra Dakota reruns (⊥ single-N
-    snapshot only). Returns a `{n_samples, metric}` series for accuracy-vs-N plotting.
+    `/sumo_cross_validation` already runs), deriving RMSE via
+    `compute_cv_accuracy_metrics` at each step. Subset sizes are evenly spaced
+    between `min_samples` and the full sample count, capped at `max_points` to
+    bound the number of extra Dakota reruns. Returns a
+    `{n_samples, metric, metric_std, n_bootstrap, draws, diagnostics}` series for
+    accuracy-vs-N plotting -- `draws` is the raw (pre-aggregation) RMSE per
+    bootstrap draw at that size (length 1 when `n_bootstrap<=1` or at the
+    full-sample point), for callers that want the individual points rather
+    than just the mean/std (e.g. fitting a trend across the pooled draws).
+    `diagnostics` is the full `compute_cv_diagnostics` bundle per draw (V16wq) --
+    MAE/Tukey-outlier-count/paired-ttest/Cohen's-d/raw actual+predicted -- so a
+    caller wanting a different metric never needs a second CV rerun.
+
+    `n_bootstrap` (default 1, i.e. a single deterministic first-`n`-rows
+    subset per size) draws that many *distinct* random subsets (no
+    replacement) of each subset size below the full sample count and reports
+    the mean/std RMSE across them via a seeded `np.random.Generator` -- one
+    arbitrary subset is a noisy point estimate of "does more data help";
+    bootstrapping estimates the trend with its own spread. The full-sample
+    point always runs once (`metric_std=0.0`): there is only one subset of
+    that size, so bootstrapping it is meaningless.
     """
     n_total = len(load_data(training_file))
     subset_sizes = _convergence_subset_sizes(n_total, min_samples, max_points)
+    rng = np.random.default_rng(seed)
 
     series = []
     for n in subset_sizes:
-        subset_file = process_input_file(
-            training_file,
-            columns_to_keep=input_vars + [output_response],
-            filter_N_samples=n,
-            suffix=f"convergence_{n}",
+        if n >= n_total or n_bootstrap <= 1:
+            diag = _cv_subset_diagnostics(
+                run_dir,
+                training_file,
+                input_vars,
+                output_response,
+                N_CROSS_VALIDATION,
+                n,
+                None,
+                str(n),
+            )
+            rmse = diag["root_mean_squared"]
+            series.append(
+                {
+                    "n_samples": n,
+                    "metric": rmse,
+                    "metric_std": 0.0,
+                    "n_bootstrap": 1,
+                    "draws": [rmse],
+                    "diagnostics": [diag],
+                }
+            )
+            continue
+
+        draw_diagnostics = [
+            _cv_subset_diagnostics(
+                run_dir,
+                training_file,
+                input_vars,
+                output_response,
+                N_CROSS_VALIDATION,
+                n,
+                rng.choice(n_total, size=n, replace=False).tolist(),
+                f"{n}_draw{draw}",
+            )
+            for draw in range(n_bootstrap)
+        ]
+        draw_rmses = [diag["root_mean_squared"] for diag in draw_diagnostics]
+        # every draw can come back NaN (e.g. too few points/fold for the surrogate to
+        # train at all) -- nanmean/nanstd on an all-NaN slice warn but still return NaN,
+        # so short-circuit instead of letting that warning through on an expected case.
+        valid_rmses = [r for r in draw_rmses if not np.isnan(r)]
+        series.append(
+            {
+                "n_samples": n,
+                "metric": float(np.mean(valid_rmses)) if valid_rmses else float("nan"),
+                "metric_std": float(np.std(valid_rmses))
+                if valid_rmses
+                else float("nan"),
+                "n_bootstrap": n_bootstrap,
+                "draws": draw_rmses,
+                "diagnostics": draw_diagnostics,
+            }
         )
-        subset_run_dir = run_dir / f"convergence_{n}"
-        os.makedirs(subset_run_dir, exist_ok=True)
-        n_folds = min(N_CROSS_VALIDATION, n)
-        result = evaluate_sumo_manual_crossvalidation(
-            subset_run_dir,
-            subset_file,
-            input_vars,
-            output_response,
-            N_CROSS_VALIDATION=n_folds,
-        )
-        metrics = compute_cv_accuracy_metrics(
-            result[output_response], result[output_response + "_hat"]
-        )
-        series.append({"n_samples": n, "metric": metrics["root_mean_squared"]})
 
     return series
+
+
+def fit_convergence_exponential(
+    n_samples: list[float], values: list[float]
+) -> dict[str, float]:
+    """Fit `y = a * exp(-b * n)` to pooled convergence data via nonlinear least
+    squares, reporting the fit's `r_squared`.
+
+    Meant to run on every individual bootstrap draw as its own `(n, value)`
+    pair (e.g. `compute_cv_convergence`'s `draws` per size, flattened; see
+    NIH worked example § convergence), not just the per-size mean -- pooling
+    the raw draws means `r_squared` reflects fit quality against the actual
+    spread, not an already-smoothed curve. `nan` entries in `values` (e.g. an
+    all-NaN bootstrap draw) are dropped before fitting.
+    """
+    n_arr = np.asarray(n_samples, dtype=float)
+    y_arr = np.asarray(values, dtype=float)
+    mask = ~np.isnan(y_arr)
+    n_arr, y_arr = n_arr[mask], y_arr[mask]
+    if n_arr.size < 3:
+        raise ValueError(
+            "Need at least 3 valid (n_samples, value) pairs to fit a 2-parameter exponential"
+        )
+
+    def model(n: np.ndarray, a: float, b: float) -> np.ndarray:
+        return a * np.exp(-b * n)
+
+    a0 = y_arr[np.argmin(n_arr)]
+    p0 = (a0 if a0 != 0 else 1.0, 1.0 / max(float(n_arr.max()), 1.0))
+    (a, b), _ = curve_fit(model, n_arr, y_arr, p0=p0, maxfev=10000)
+
+    y_pred = model(n_arr, a, b)
+    ss_res = float(np.sum((y_arr - y_pred) ** 2))
+    ss_tot = float(np.sum((y_arr - np.mean(y_arr)) ** 2))
+    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+    return {"a": float(a), "b": float(b), "r_squared": r_squared}
+
+
+def fit_convergence_exponential_asymptotic(
+    n_samples: list[float], values: list[float]
+) -> dict[str, float]:
+    """Fit `y = a * exp(-b * n) + c` to pooled convergence data (V18wp).
+
+    `fit_convergence_exponential`'s 2-parameter `a*exp(-b*n)` model decays to
+    a ZERO asymptote, which is the right shape for a quantity defined to be 0
+    at the reference point (e.g. % deviation from a final value) but the
+    WRONG shape for a raw error metric (MAE/RMSE in physical units): even at
+    N->infinity a surrogate keeps some irreducible error, so the curve should
+    flatten at a positive floor `c`, not at 0. Otherwise identical to
+    `fit_convergence_exponential` (nonlinear least squares, `nan` values
+    dropped, needs >=3 points -- one more than the 2-param fit since there
+    are 3 parameters to identify).
+    """
+    n_arr = np.asarray(n_samples, dtype=float)
+    y_arr = np.asarray(values, dtype=float)
+    mask = ~np.isnan(y_arr)
+    n_arr, y_arr = n_arr[mask], y_arr[mask]
+    if n_arr.size < 4:
+        raise ValueError(
+            "Need at least 4 valid (n_samples, value) pairs to fit a 3-parameter exponential"
+        )
+
+    def model(n: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
+        return a * np.exp(-b * n) + c
+
+    c0 = y_arr[np.argmax(n_arr)]
+    a0 = y_arr[np.argmin(n_arr)] - c0
+    p0 = (a0 if a0 != 0 else 1.0, 1.0 / max(float(n_arr.max()), 1.0), c0)
+    (a, b, c), _ = curve_fit(model, n_arr, y_arr, p0=p0, maxfev=10000)
+
+    y_pred = model(n_arr, a, b, c)
+    ss_res = float(np.sum((y_arr - y_pred) ** 2))
+    ss_tot = float(np.sum((y_arr - np.mean(y_arr)) ** 2))
+    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+    return {"a": float(a), "b": float(b), "c": float(c), "r_squared": r_squared}
 
 
 def evaluate_sumo(

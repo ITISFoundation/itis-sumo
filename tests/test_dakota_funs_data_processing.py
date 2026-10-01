@@ -9,6 +9,7 @@ import pytest
 from itis_sumo.data.funs_data_processing import (
     _filter_data,
     _parse_data,
+    auto_select_distributions,
     create_manual_uq_samples,
     get_bounds_uniform_distribution,
     get_bounds_uniform_distributions,
@@ -18,6 +19,7 @@ from itis_sumo.data.funs_data_processing import (
     is_dominated,
     load_data,
     sanitize_varnames,
+    select_variable_scale,
 )
 
 # --- sanitize_varnames -------------------------------------------------------
@@ -505,3 +507,92 @@ def test_filter_data_both_filters_raises():
     df = pd.DataFrame({"a": [1, 2, 3]})
     with pytest.raises(AssertionError, match="only one of"):
         _filter_data(df, filter_highest_N=1, filter_N_samples=1)
+
+
+# --- select_variable_scale / auto_select_distributions -----------------------
+
+
+class TestSelectVariableScale:
+    def test_constant_short_circuits_without_running_tests(self):
+        result = select_variable_scale([5.0] * 20)
+        assert result == {
+            "scale": "linear",
+            "distribution": "constant",
+            "value": 5.0,
+            "confident": True,
+            "candidates": {},
+        }
+
+    def test_recovers_normal_linear_on_normal_data(self):
+        rng = np.random.default_rng(2)
+        values = rng.normal(loc=10.0, scale=2.0, size=100)
+        result = select_variable_scale(values)
+        assert result["scale"] == "linear"
+        assert result["distribution"] == "normal"
+        assert result["confident"]
+        assert set(result["candidates"]) == {
+            "linear_normal",
+            "linear_uniform",
+            "log_normal",
+            "log_uniform",
+        }
+
+    def test_recovers_uniform_linear_on_uniform_data(self):
+        rng = np.random.default_rng(1)
+        values = rng.uniform(low=1.0, high=2.0, size=500)
+        result = select_variable_scale(values)
+        assert result["scale"] == "linear"
+        assert result["distribution"] == "uniform"
+
+    def test_recovers_normal_log_on_lognormal_data(self):
+        rng = np.random.default_rng(2)
+        values = rng.lognormal(mean=0.0, sigma=0.5, size=500)
+        result = select_variable_scale(values)
+        assert result["scale"] == "log"
+        assert result["distribution"] == "normal"
+
+    def test_log_candidates_omitted_when_values_nonpositive(self):
+        values = np.array([-1.0, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0])
+        result = select_variable_scale(values)
+        assert "log_normal" not in result["candidates"]
+        assert "log_uniform" not in result["candidates"]
+        assert result["scale"] == "linear"
+
+    def test_p_value_matches_best_candidate(self):
+        rng = np.random.default_rng(3)
+        values = rng.normal(loc=0.0, scale=1.0, size=200)
+        result = select_variable_scale(values)
+        best_key = f"{result['scale']}_{result['distribution']}"
+        assert result["p_value"] == result["candidates"][best_key]["p_value"]
+
+
+class TestAutoSelectDistributions:
+    def test_builds_usable_distributions_dict_with_log_prefix(self):
+        rng = np.random.default_rng(4)
+        df = pd.DataFrame(
+            {
+                "x_normal": rng.normal(10.0, 2.0, 300),
+                "x_lognormal": rng.lognormal(0.0, 0.5, 300),
+                "x_constant": [3.0] * 300,
+            }
+        )
+        distributions, diagnostics = auto_select_distributions(df, list(df.columns))
+
+        assert distributions["x_normal"]["distribution"] == "normal"
+        assert "log_x_lognormal" in distributions
+        assert distributions["log_x_lognormal"]["distribution"] == "normal"
+        assert distributions["x_constant"] == {"distribution": "constant", "value": 3.0}
+        assert set(diagnostics) == {"x_normal", "x_lognormal", "x_constant"}
+
+        # the resulting dict must be directly usable by create_manual_uq_samples
+        samples = create_manual_uq_samples(
+            list(distributions.keys()), distributions, num_samples=5, seed=1
+        )
+        assert set(samples) == set(distributions)
+
+    def test_diagnostics_carry_confidence_and_p_value_per_variable(self):
+        rng = np.random.default_rng(5)
+        df = pd.DataFrame({"x": rng.normal(0.0, 1.0, 200)})
+        _, diagnostics = auto_select_distributions(df, ["x"])
+        assert "confident" in diagnostics["x"]
+        assert "p_value" in diagnostics["x"]
