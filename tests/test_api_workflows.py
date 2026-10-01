@@ -165,6 +165,24 @@ class TestGrid:
         assert len(result.data["stress"]) == 5
         assert len(cast("dict[str, list[list[float]]]", result.data)["stress"][0]) == 5
 
+    def test_companion_series_keeps_the_original_response_name(self, samples):
+        """V21pf regression: the engine hangs the std series off the MAPPED
+        response name (y1_std). It must come back under the ORIGINAL response
+        name with the suffix kept (max_abs_stress_std); a mapped-name leak is
+        camelCased consumer-side and becomes an FE lookup miss."""
+        renamed = samples.rename(columns={RESPONSE: "max_abs_stress"})
+        result = evaluate_grid(
+            renamed,
+            VARIABLES,
+            "max_abs_stress",
+            grid_variables=["width", "height"],
+            points_per_variable=5,
+        )
+        assert "max_abs_stress" in result.data
+        std_keys = {key for key in result.data if key.endswith("_std")}
+        assert std_keys <= {"max_abs_stress_std"}
+        assert not any(key.startswith("y1") for key in result.data)
+
 
 class TestSobol:
     """V26dd: the sampling box is the exploration DOMAIN, not modeller
