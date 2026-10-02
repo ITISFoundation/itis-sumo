@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from itis_sumo.core.dakota_object import DakotaObject
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     _parse_crossvalidation_outputlogs,
     evaluate_sumo_crossvalidation,
     retrieve_csv_result,

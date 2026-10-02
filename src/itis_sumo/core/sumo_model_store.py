@@ -64,7 +64,7 @@ def _metadata_path(models_dir: Path, sumo_model_id: str) -> Path:
 
 def _training_file_name(sumo_model_id: str) -> str:
     # Must keep the substring "processed" in the name: `add_surrogate_model`
-    # (funs_create_dakota_conf.py) infers whether the file carries an eval_id
+    # (nidr.py) infers whether the file carries an eval_id
     # column from this filename convention, not from an explicit flag.
     return f"{sumo_model_id}.processed_training.dat"
 

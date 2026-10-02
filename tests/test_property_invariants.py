@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.tabular import (
     create_grid_samples,
     create_samples_along_axes,
     get_non_dominated_indices,

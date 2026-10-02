@@ -1,6 +1,6 @@
 """NIDR (Dakota input) configuration block builders."""
 
-from itis_sumo.config.funs_create_dakota_conf import (
+from itis_sumo.config.nidr import (
     add_adaptive_sampling,
     add_continuous_variables,
     add_evaluation_method,

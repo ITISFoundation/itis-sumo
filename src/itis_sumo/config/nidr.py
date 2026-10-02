@@ -443,7 +443,7 @@ def create_sumo_crossvalidation_conffile(
             else infer_has_eval_id_column_from_filename(training_samples_file)
         ),
     )
-    from itis_sumo.data.funs_data_processing import process_input_file
+    from itis_sumo.data.tabular import process_input_file
 
     JUST_INPUTS_FILE = process_input_file(
         build_file,
@@ -473,7 +473,7 @@ def create_sumo_manual_crossvalidation_conffile(
     dakota_conf_file: str | Path | None = None,
     has_eval_id_column: bool | None = None,
 ):
-    from itis_sumo.data.funs_data_processing import load_data, process_input_file
+    from itis_sumo.data.tabular import load_data, process_input_file
 
     dakota_conf = start_dakota_file()
     n_samples = len(load_data(build_file))

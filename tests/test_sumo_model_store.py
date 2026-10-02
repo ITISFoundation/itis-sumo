@@ -30,7 +30,7 @@ from itis_sumo.core.sumo_model_store import (
     stage_model_for_import,
     store_exported_model,
 )
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     evaluate_sumo,
     export_sumo_model,
     import_sumo_model,

@@ -2,7 +2,7 @@
 
 import os
 
-from itis_sumo.core.wiofiles import capture_to_file
+from itis_sumo.core.capture import capture_to_file
 
 
 def test_capture_to_file_captures_real_fd_stdout_and_stderr(tmp_path):

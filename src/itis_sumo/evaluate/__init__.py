@@ -1,6 +1,6 @@
 """End-to-end evaluations on top of Dakota runs."""
 
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     compute_coverage,
     compute_cv_accuracy_metrics,
     compute_cv_convergence,

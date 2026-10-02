@@ -18,7 +18,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from itis_sumo.data.funs_data_processing import auto_select_distributions
+from itis_sumo.data.tabular import auto_select_distributions
 
 Scale = Literal["linear", "log"]
 Distribution = Literal["constant", "uniform", "normal"]

@@ -907,7 +907,7 @@ class TestEvaluateCorrelations:
 
     def test_producer_requires_scales(self):
         """V45ls structural tripwire on the new value-producing entry point."""
-        from itis_sumo.evaluate.funs_evaluate import correlate_manual_uq_samples
+        from itis_sumo.evaluate.sumo_evaluation import correlate_manual_uq_samples
 
         with pytest.raises(TypeError):
             correlate_manual_uq_samples(  # ty: ignore[missing-argument]

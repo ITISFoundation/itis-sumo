@@ -13,7 +13,7 @@ from scipy.special import erfinv
 from scipy.stats import ttest_rel
 from sklearn.model_selection import KFold
 
-from itis_sumo.config.funs_create_dakota_conf import (
+from itis_sumo.config.nidr import (
     add_surrogate_model,
     create_moga_optimization_conffile,
     create_sumo_crossvalidation_conffile,
@@ -24,7 +24,7 @@ from itis_sumo.config.funs_create_dakota_conf import (
 )
 from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.core.sumo_model_store import stage_model_for_import, store_exported_model
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.tabular import (
     compute_correlation_indices,
     create_grid_samples,
     create_manual_uq_samples,

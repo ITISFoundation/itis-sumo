@@ -7,7 +7,7 @@ from pathlib import Path
 
 import dakota.environment as dakenv
 
-from itis_sumo.core import wiofiles as wio
+from itis_sumo.core.capture import capture_to_file
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _dak_exec_static(conf: str) -> tuple[str | None, str | None]:
     study = None
     stdoutstr, stderrstr = None, None
     exec_error: Exception | None = None
-    with wio.capture_to_file(stdout="./stdout", stderr="./stderr") as (stdout, stderr):
+    with capture_to_file(stdout="./stdout", stderr="./stderr") as (stdout, stderr):
         try:
             # NIDR input-file parsing (e.g. rejecting `seed = 0`) happens during
             # study construction, not just study.execute() - construct it inside

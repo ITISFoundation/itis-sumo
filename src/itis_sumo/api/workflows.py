@@ -43,13 +43,13 @@ from itis_sumo.api.types import (
     SobolResult,
     UncertaintyResult,
 )
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.tabular import (
     compute_correlation_indices,
     create_grid_samples,
     load_data,
     scale_distribution,
 )
-from itis_sumo.evaluate.funs_evaluate import compute_cv_accuracy_metrics
+from itis_sumo.evaluate.sumo_evaluation import compute_cv_accuracy_metrics
 from itis_sumo.sampling.lhs import lhs as _lhs
 from itis_sumo.utils.helpers import create_run_dir
 

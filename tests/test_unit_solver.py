@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from scipy import spatial
 
-from itis_sumo.config.funs_create_dakota_conf import (
+from itis_sumo.config.nidr import (
     add_continuous_variables,
     add_responses,
     add_surrogate_model,
@@ -16,7 +16,7 @@ from itis_sumo.config.funs_create_dakota_conf import (
     create_uq_propagation_conffile,
     start_dakota_file,
 )
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.tabular import (
     _filter_data,
     create_grid_samples,
     create_manual_uq_samples,
@@ -26,7 +26,7 @@ from itis_sumo.data.funs_data_processing import (
     get_non_dominated_indices,
     is_dominated,
 )
-from itis_sumo.evaluate.funs_evaluate import _parse_crossvalidation_outputlogs
+from itis_sumo.evaluate.sumo_evaluation import _parse_crossvalidation_outputlogs
 from itis_sumo.sampling.lhs import lhs
 
 

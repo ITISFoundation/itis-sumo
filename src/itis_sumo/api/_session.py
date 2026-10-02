@@ -44,7 +44,7 @@ from itis_sumo.api.types import (
     UncertaintyResult,
     VariableSpec,
 )
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     correlate_manual_uq_samples,
     evaluate_sobol_indices,
     evaluate_sumo_along_axes,

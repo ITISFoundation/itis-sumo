@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     evaluate_sobol_indices,
     evaluate_sumo,
     evaluate_sumo_crossvalidation,

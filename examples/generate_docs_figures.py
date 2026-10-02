@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from itis_sumo.evaluate.funs_evaluate import evaluate_sobol_indices, evaluate_sumo
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sobol_indices, evaluate_sumo
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 from itis_sumo.sampling.lhs import lhs
 from itis_sumo.utils.helpers import create_run_dir
