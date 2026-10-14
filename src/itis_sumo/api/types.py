@@ -228,7 +228,6 @@ class CVAccuracyMetrics:
     sum_abs: float
     mean_abs: float
     max_abs: float
-    mean_signed_error: float
     seed: int
 
 
