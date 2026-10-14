@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Literal, overload
+from typing import Literal, overload
 
 import numpy as np
 import pandas as pd
@@ -585,8 +585,6 @@ def create_manual_uq_samples(
         else:
             raise ValueError(f"Unsupported distribution type: {dist_type}")
     return samples
-
-
 
 
 @overload
