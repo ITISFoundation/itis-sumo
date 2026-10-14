@@ -110,7 +110,7 @@ jobs:
 
       # ty is version-aware (resolves stdlib/typing symbols against
       # requires-python's floor), so it catches the class of bug the
-      # 3.10-3.13 test matrix below would otherwise be the only thing to
+      # 3.12-3.14 test matrix below would otherwise be the only thing to
       # catch (SPEC V41hp). Blocking now that the repo is diagnostic-clean.
       - name: Run ty
         run: uv run ty check
@@ -123,8 +123,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Keep 3.13 visible: it should become green when itis-dakota gains cp313 wheels.
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # Engine wheel matrix (itis-dakota 6.24.13) = cp312-cp314, same as
+        # requires-python: EVERY leg must resolve — a broken lock goes RED here,
+        # no warning-skip (that mechanism existed for engine-unsupported legs,
+        # retired with T55kd).
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -139,35 +142,16 @@ jobs:
         uses: astral-sh/setup-uv@v10.0.1
 
       - name: Resolve dependencies
-        id: resolve
-        continue-on-error: true
-        shell: bash
-        run: |
-          set +e
-          uv sync --all-extras --dev --python "${{ matrix.python-version }}"
-          status=$?
-          if [[ $status -ne 0 ]]; then
-            echo "::warning title=Python ${{ matrix.python-version }} not tested::Dependencies do not currently resolve; test steps were skipped."
-            {
-              echo "### Python ${{ matrix.python-version }}: tests skipped"
-              echo
-              echo "Dependencies do not currently resolve for this interpreter, so the test steps were skipped."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "compatible=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "compatible=true" >> "$GITHUB_OUTPUT"
+        run: uv sync --all-extras --dev --python "${{ matrix.python-version }}"
 
       # Coverage is enforced on the combined result of both suites (below), not
       # on unit tests alone: much of the surrogate/preprocess code is only
       # exercised by the integration/analytical suite, so a unit-only gate can
       # never reach the real threshold.
       - name: Run unit tests
-        if: steps.resolve.outputs.compatible == 'true'
         run: uv run --python "${{ matrix.python-version }}" pytest -m "not integration and not analytical" --cov=src/itis_sumo --cov-report=
 
       - name: Run integration and analytical tests
-        if: steps.resolve.outputs.compatible == 'true'
         run: uv run --python "${{ matrix.python-version }}" pytest -m "integration or analytical" --cov=src/itis_sumo --cov-append --cov-report=term-missing --cov-report=xml --cov-fail-under=70
 
       # Disabled: tokenless Codecov upload fails with "Token required because
@@ -175,12 +159,40 @@ jobs:
       # CODECOV_TOKEN can only be provisioned by an ITISFoundation org admin.
       # Re-enable once CODECOV_TOKEN is added as a repo secret (see issue).
       # - name: Upload coverage to Codecov
-      #   if: steps.resolve.outputs.compatible == 'true' && matrix.python-version == '3.11'
+      #   if: matrix.python-version == '3.13'
       #   uses: codecov/codecov-action@v5
       #   with:
       #     files: ./coverage.xml
       #     fail_ci_if_error: true
       #     disable_search: true
+
+  # Windows platform proof (T55kd): 6.24.13 is the first itis-dakota release
+  # shipping win_amd64 wheels. Single 3.14 leg — doubles as proof the cp314
+  # win wheel installs AND the py3.14 spawn-default path works (fork-only mock
+  # runner tests self-skip there, V50gm). Coverage gate stays on Linux.
+  tests-windows:
+    runs-on: windows-latest
+    needs:
+      - detect_changes
+      - prek
+    if: needs.detect_changes.outputs.py == 'true' || needs.detect_changes.outputs.ci == 'true'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Resolve dependencies
+        run: uv sync --all-extras --dev --python 3.14
+
+      - name: Run unit tests
+        run: uv run --python 3.14 pytest -m "not integration and not analytical"
+
+      - name: Run integration and analytical tests
+        run: uv run --python 3.14 pytest -m "integration or analytical"
 
   docs:
     runs-on: ubuntu-latest

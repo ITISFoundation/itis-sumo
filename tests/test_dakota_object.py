@@ -6,6 +6,7 @@ without ever reading back the captured stdout/stderr, discarding the real
 diagnostic message that explains *why* Dakota aborted.
 """
 
+import multiprocessing
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -17,6 +18,16 @@ from itis_sumo.core.dakota_object import (
     DakotaObject,
     _dak_exec_static,
     working_directory,
+)
+
+# V50gm/B22wk: the future_exec tests mock `dakenv.study` in the pytest process;
+# under fork the mock reaches the engine worker (pickling ships a reference, the
+# child's inheritance carries the mock). Without fork (Windows, or a future
+# interpreter default change) the worker re-imports real modules, the mock never
+# crosses, and the REAL engine would parse the dummy conf — skip honestly.
+requires_fork = pytest.mark.skipif(
+    "fork" not in multiprocessing.get_all_start_methods(),
+    reason="future_exec mock-injection contract holds only under fork (V50gm)",
 )
 
 
@@ -104,6 +115,7 @@ def _fake_study_constructor_failure(callback, input_string):
     raise RuntimeError("Dakota aborted: Unknown error 254")
 
 
+@requires_fork
 def test_dak_exec_static_success_returns_captured_stdout(monkeypatch, tmp_path, capfd):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
@@ -120,6 +132,7 @@ def test_dak_exec_static_success_returns_captured_stdout(monkeypatch, tmp_path, 
     assert stderr == ""
 
 
+@requires_fork
 def test_dak_exec_static_failure_raises_with_captured_diagnostics(
     monkeypatch, tmp_path, capfd
 ):
@@ -136,6 +149,7 @@ def test_dak_exec_static_failure_raises_with_captured_diagnostics(
     assert "Dakota aborted: Unknown error 254" in message
 
 
+@requires_fork
 def test_dak_exec_static_construction_failure_raises_with_captured_diagnostics(
     monkeypatch, tmp_path, capfd
 ):

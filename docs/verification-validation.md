@@ -21,7 +21,7 @@ Live results as of the last run of the ported V&V suite:
 | Analytical/integration tier (`-m analytical`, real Dakota subprocess, no mocking) | 26 | **all passing** |
 | Sobol' / Ishigami acceptance gate (`test_sobol_indices.py`) | 14 | **all passing** |
 
-The analytical tier spawns a real `itis-dakota` (6.24.7)
+The analytical tier spawns a real `itis-dakota` (6.24.13)
 process per test — nothing here is mocked. Re-run locally with:
 
 ```sh
@@ -212,7 +212,7 @@ the shared-bootstrap CI half-width, never hand-tuned floors:
 ## Known limitations
 
 Carried over from the original test plan, still true of the pinned engine
-(`itis-dakota==6.24.7`):
+(`itis-dakota==6.24.13`):
 
 - **Built-in Dakota CV parsing is unreliable** — `log_output` comes back
   hardcoded empty on some study configurations, which is why

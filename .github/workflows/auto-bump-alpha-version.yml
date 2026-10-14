@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin --tags --force
-          version="$(uv run --no-project --with packaging --with tomli python scripts/bump_alpha_version.py --write)"
+          version="$(uv run --no-project --with packaging python scripts/bump_alpha_version.py --write)"
           if git diff --quiet -- pyproject.toml; then
             echo "no bump needed (already $version)"
             exit 0

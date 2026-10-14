@@ -1,6 +1,7 @@
 import concurrent.futures
 import contextlib
 import logging
+import multiprocessing
 import os
 from pathlib import Path
 
@@ -9,6 +10,19 @@ import dakota.environment as dakenv
 from itis_sumo.core import wiofiles as wio
 
 logger = logging.getLogger(__name__)
+
+# V50gm/B22wk: pin the start method explicitly — Python 3.14 changed the Linux
+# default fork->forkserver, so a bare ProcessPoolExecutor child started silently
+# re-importing modules fresh and in-process state (test monkeypatches, engine
+# bindings) stopped crossing. Where fork exists (POSIX) pin it: process
+# isolation for engine containment is unchanged, inheritance semantics become
+# interpreter-version-independent. Windows has no fork; its default (spawn) is
+# already stable across versions, but take it EXPLICITLY — never the ambient
+# default (forkserver on 3.14+ Linux must never be reachable from here).
+_START_METHODS = multiprocessing.get_all_start_methods()
+_ENGINE_MP_CONTEXT = multiprocessing.get_context(
+    "fork" if "fork" in _START_METHODS else "spawn"
+)
 
 
 @contextlib.contextmanager
@@ -80,6 +94,8 @@ class DakotaObject:
 
     def future_exec(self, conf):
         # Use the static function directly rather than the instance method
-        with concurrent.futures.ProcessPoolExecutor(1) as pool:
+        with concurrent.futures.ProcessPoolExecutor(
+            1, mp_context=_ENGINE_MP_CONTEXT
+        ) as pool:
             future = pool.submit(_dak_exec_static, conf)
         return future.result()

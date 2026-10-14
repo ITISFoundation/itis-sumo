@@ -13,12 +13,9 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
-try:
-    import tomllib  # ty: ignore[unresolved-import]
-except ModuleNotFoundError:  # Python < 3.11
-    import tomli as tomllib
 from packaging.version import InvalidVersion, Version
 
 PROJECT_FILE = Path("pyproject.toml")

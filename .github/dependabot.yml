@@ -25,6 +25,8 @@ updates:
       python-dependencies:
         patterns:
           - "*"
-    # Keep pinned until T16mo resolves the Dakota 6.23+ interface-cache regression.
+    # Engine bumps are a wheel-matrix decision (py floor, platform wheels,
+    # R5-shim re-verification on the real wheel — SPEC V20qx), not a bot
+    # auto-bump. Active engine task: T55kd.
     ignore:
       - dependency-name: "itis-dakota"

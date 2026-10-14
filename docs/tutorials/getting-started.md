@@ -8,8 +8,8 @@ runs as a CI smoke test.
 ## 1. Install
 
 ```sh
-uv sync                          # Python 3.10-3.12 currently resolve itis-dakota==1.5.9
-uv run itis-sumo validate        # engine probe (expect: Version 1.5.9)
+uv sync                          # Python 3.12-3.14; resolves itis-dakota==6.24.13
+uv run itis-sumo validate        # engine probe (expect: Version 6.24.13)
 ```
 
 !!! warning "Engine gate"
