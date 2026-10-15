@@ -13,15 +13,30 @@ from typing import IO
 
 _logger = logging.getLogger(__name__)
 
-# copied from wurlitzer
-libc = ctypes.CDLL(None)
-try:
-    c_stdout_p = ctypes.c_void_p.in_dll(libc, "stdout")
-    c_stderr_p = ctypes.c_void_p.in_dll(libc, "stderr")
-except ValueError:
-    # libc.stdout has a funny name on macOS
-    c_stdout_p = ctypes.c_void_p.in_dll(libc, "__stdoutp")
-    c_stderr_p = ctypes.c_void_p.in_dll(libc, "__stderrp")
+# libc bindings (wurlitzer pattern). POSIX: CDLL(None) = the main program's
+# already-loaded libc, which exports the `stdout`/`stderr` FILE* symbols.
+# win32: CDLL(None) raises (LoadLibrary requires a str) — bind the UCRT
+# (`ucrtbase.dll`), the CRT the interpreter AND the dakota extension share,
+# which exports `fflush` and `__acrt_iob_func(0/1/2)` -> the process FILE*s.
+# Same FILE* state the extension's printf/C-writes flush through, so the
+# dup2 capture below (fd-level, works on both) is flanked by real flushes.
+if sys.platform == "win32":
+    libc = ctypes.CDLL("ucrtbase.dll")
+    _iob = getattr(libc, "__acrt_iob_func")
+    _iob.restype = ctypes.c_void_p
+    _iob.argtypes = [ctypes.c_int]
+    c_stdout_p = ctypes.c_void_p(_iob(1))
+    c_stderr_p = ctypes.c_void_p(_iob(2))
+else:
+    # copied from wurlitzer
+    libc = ctypes.CDLL(None)
+    try:
+        c_stdout_p = ctypes.c_void_p.in_dll(libc, "stdout")
+        c_stderr_p = ctypes.c_void_p.in_dll(libc, "stderr")
+    except ValueError:
+        # libc.stdout has a funny name on macOS
+        c_stdout_p = ctypes.c_void_p.in_dll(libc, "__stdoutp")
+        c_stderr_p = ctypes.c_void_p.in_dll(libc, "__stderrp")
 
 
 @contextmanager
@@ -67,7 +82,8 @@ def capture_to_file(stdout="./stdout", stderr="./stderr"):
 # calls via PyDLL hold the GIL,
 # which blocks when using wurlitzer with pipes
 # if the message size exceeds max-pipe-size
-pylibc = ctypes.PyDLL(None)
+# win32: PyDLL(None) fails like CDLL(None); the example's printf lives in the CRT.
+pylibc = ctypes.CDLL("ucrtbase.dll") if sys.platform == "win32" else ctypes.PyDLL(None)
 
 
 def main():  # pragma: no cover
