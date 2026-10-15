@@ -1,0 +1,60 @@
+"""Regression tests for SPEC.md V19nd/V20qx: Dependabot policy is explicit.
+
+Each ecosystem must produce one grouped weekly update on Monday at 03:00 in
+the repository's explicit timezone. `itis-dakota` stays permanently ignored —
+engine bumps are a human wheel-matrix decision (V20qx), tracked by the
+currently active engine task.
+"""
+
+import re
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.unit
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CONFIG = REPO_ROOT / ".github" / "dependabot.yml"
+
+
+def _update_blocks() -> list[str]:
+    content = CONFIG.read_text()
+    return re.findall(
+        r"(?ms)^  - package-ecosystem:.*?(?=^  - package-ecosystem:|\Z)", content
+    )
+
+
+def test_v19nd_dependabot_updates_are_grouped_and_scheduled():
+    blocks = _update_blocks()
+
+    assert len(blocks) == 2
+    ecosystems = set()
+    for block in blocks:
+        # _update_blocks only yields blocks anchored on this key, but ty needs
+        # the Optional narrowed -- assert rather than silently skip a block.
+        ecosystem = re.search(r"package-ecosystem: (\S+)", block)
+        assert ecosystem is not None
+        ecosystems.add(ecosystem.group(1))
+    assert ecosystems == {"github-actions", "uv"}
+
+    for block in blocks:
+        assert "target-branch: develop" in block
+        assert "interval: weekly" in block
+        assert "day: monday" in block
+        assert 'time: "03:00"' in block
+        assert "timezone: Europe/Zurich" in block
+        assert re.search(
+            r"(?m)^    groups:\n      [\w-]+:\n        patterns:\n          - \"\*\"",
+            block,
+        )
+
+
+def test_v20qx_itis_dakota_ignore_is_documented_and_tracked():
+    content = CONFIG.read_text()
+
+    assert 'dependency-name: "itis-dakota"' in content
+    # V20qx (amended T55kd): the reason must name the active constraint (the
+    # wheel-matrix decision) and reference the currently active engine task —
+    # the retired T16mo ladder reference would be a stale tracker.
+    assert "T55kd" in content
+    assert "wheel-matrix" in content

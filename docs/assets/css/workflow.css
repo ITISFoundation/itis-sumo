@@ -1,0 +1,92 @@
+/* itis-sumo workflow diagram — adapted from TIP's .tip-workflow (VitePress) to
+   MkDocs Material CSS variables so it adapts to light/dark automatically. */
+.tip-workflow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 1rem;
+  margin: 1.5rem 0 2.5rem;
+  padding: 1.75rem 2rem;
+  background: var(--md-default-fg-color--lightest);
+  border-radius: 10px;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  overflow-x: auto;
+}
+
+.tip-workflow__step {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: .7rem 1.2rem;
+  min-width: 120px;
+  min-height: 62px;
+  border-radius: 8px;
+  border: 2px solid;
+  text-align: center;
+  font-size: .83rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  flex-shrink: 0;
+  text-decoration: none !important;
+  color: var(--md-typeset-color) !important;
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+  border-color: #0190d0;
+  background: rgba(1, 144, 208, 0.12);
+  box-shadow: 0 2px 8px rgba(1, 144, 208, 0.12);
+}
+
+a.tip-workflow__step:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.2);
+  text-decoration: none !important;
+}
+
+.tip-workflow__step.twf-purple { border-color: #a77bf0; background: rgba(167, 123, 240, 0.12); box-shadow: 0 2px 8px rgba(167, 123, 240, 0.12); }
+a.tip-workflow__step.twf-purple:hover { box-shadow: 0 6px 22px rgba(167, 123, 240, 0.42); }
+.tip-workflow__step.twf-rose { border-color: #f06292; background: rgba(240, 98, 146, 0.12); box-shadow: 0 2px 8px rgba(240, 98, 146, 0.12); }
+a.tip-workflow__step.twf-rose:hover { box-shadow: 0 6px 22px rgba(240, 98, 146, 0.42); }
+.tip-workflow__step.twf-amber { border-color: #f5a623; background: rgba(245, 166, 35, 0.12); box-shadow: 0 2px 8px rgba(245, 166, 35, 0.12); }
+a.tip-workflow__step.twf-amber:hover { box-shadow: 0 6px 22px rgba(245, 166, 35, 0.40); }
+.tip-workflow__step.twf-teal { border-color: #14c4b0; background: rgba(20, 196, 176, 0.12); box-shadow: 0 2px 8px rgba(20, 196, 176, 0.12); }
+a.tip-workflow__step.twf-teal:hover { box-shadow: 0 6px 22px rgba(20, 196, 176, 0.38); }
+.tip-workflow__step.twf-orange { border-color: #f08a35; background: rgba(240, 138, 53, 0.12); box-shadow: 0 2px 8px rgba(240, 138, 53, 0.12); }
+a.tip-workflow__step.twf-orange:hover { box-shadow: 0 6px 22px rgba(240, 138, 53, 0.38); }
+.tip-workflow__step.twf-blue { border-color: #0190d0; background: rgba(1, 144, 208, 0.12); box-shadow: 0 2px 8px rgba(1, 144, 208, 0.12); }
+a.tip-workflow__step.twf-blue:hover { box-shadow: 0 6px 22px rgba(1, 144, 208, 0.42); }
+.tip-workflow__step.twf-indigo { border-color: #7280f5; background: rgba(114, 128, 245, 0.12); box-shadow: 0 2px 8px rgba(114, 128, 245, 0.12); }
+a.tip-workflow__step.twf-indigo:hover { box-shadow: 0 6px 22px rgba(114, 128, 245, 0.40); }
+
+.tip-workflow__step.twf-disabled {
+  border-color: var(--md-default-fg-color--lighter);
+  border-style: dashed;
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color--lighter) !important;
+  cursor: default;
+  pointer-events: none;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.tip-workflow__arrow {
+  color: var(--md-default-fg-color--lighter);
+  font-size: 1.5rem;
+  padding: 0 .55rem;
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 1;
+}
+
+/* Footer link row (overridden copyright.html) */
+.sumo-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  align-items: center;
+  font-size: .64rem;
+}
+.sumo-footer-links a { color: var(--md-footer-fg-color--light); text-decoration: none; }
+.sumo-footer-links a:hover { color: var(--md-footer-fg-color); text-decoration: underline; }
+.sumo-footer-sep { color: var(--md-footer-fg-color--lighter); }

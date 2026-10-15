@@ -33,6 +33,7 @@ class VariableConfig:
     mapped_name: str
     normalize: bool = False
     switch_sign: bool = False
+    log_transform: bool = False
     mean: float | None = None
     std: float | None = None
     min_val: float | None = None
@@ -91,17 +92,20 @@ class DataPreprocessor:
             output_normalizations: Dict mapping output var names to normalization methods
         """
         if input_normalizations:
-            self._configure_normalizations(self.input_variables, input_normalizations, "input")
+            self._configure_normalizations(
+                self.input_variables, input_normalizations, "input"
+            )
             _logger.info(
                 f"Configured normalization for {len(input_normalizations)} input variables"
             )
 
         if output_normalizations:
-            self._configure_normalizations(self.output_variables, output_normalizations, "output")
+            self._configure_normalizations(
+                self.output_variables, output_normalizations, "output"
+            )
             _logger.info(
                 f"Configured normalization for {len(output_normalizations)} output variables"
             )
-
 
     def setup_sign_switching(
         self,
@@ -118,14 +122,61 @@ class DataPreprocessor:
         input_sign_switches = input_sign_switches or []
         output_sign_switches = output_sign_switches or []
 
-        self._configure_sign_switches(self.input_variables, input_sign_switches, "input")
-        self._configure_sign_switches(self.output_variables, output_sign_switches, "output")
+        self._configure_sign_switches(
+            self.input_variables, input_sign_switches, "input"
+        )
+        self._configure_sign_switches(
+            self.output_variables, output_sign_switches, "output"
+        )
 
         _logger.info(
             f"Configured sign switching for {len(input_sign_switches)} input and {len(output_sign_switches)} output variables"
         )
 
-    def _setup_variable_group(self, var_names: list[str], prefix: str) -> dict[str, VariableConfig]:
+    def setup_log_transform(
+        self,
+        input_log_vars: list[str] | None = None,
+        output_log_vars: list[str] | None = None,
+    ) -> None:
+        """
+        Configure natural-log transformation for variables.
+
+        The surrogate then trains on ``log(value)`` and predictions are mapped
+        back through ``exp`` on the way out (with the delta-method rule applied
+        to any accompanying standard deviation -- see
+        :meth:`inverse_transform_output_std`).
+
+        Args:
+            input_log_vars: Input vars the surrogate should train on log(value)
+            output_log_vars: Output vars the surrogate should train on log(value)
+        """
+        input_log_vars = input_log_vars or []
+        output_log_vars = output_log_vars or []
+
+        self._configure_log_transform(self.input_variables, input_log_vars, "input")
+        self._configure_log_transform(self.output_variables, output_log_vars, "output")
+
+        _logger.info(
+            f"Configured log-transform for {len(input_log_vars)} input and {len(output_log_vars)} output variables"
+        )
+
+    def _configure_log_transform(
+        self,
+        variables: dict[str, VariableConfig],
+        log_vars: list[str],
+        var_type: str,
+    ) -> None:
+        for var_name in log_vars:
+            if var_name in variables:
+                variables[var_name].log_transform = True
+            else:
+                _logger.warning(
+                    f"{var_type.capitalize()} variable {var_name} not found in setup variables"
+                )
+
+    def _setup_variable_group(
+        self, var_names: list[str], prefix: str
+    ) -> dict[str, VariableConfig]:
         """
         Helper function to set up a group of variables (inputs or outputs).
         """
@@ -178,10 +229,21 @@ class DataPreprocessor:
     ) -> None:
         for var_name, config in variables.items():
             if var_name not in data.columns:
-                _logger.warning(f"{var_type.capitalize()} variable {var_name} not found in data")
+                _logger.warning(
+                    f"{var_type.capitalize()} variable {var_name} not found in data"
+                )
                 continue
 
             values = np.array(data[var_name].values, dtype=float)
+
+            if config.log_transform:
+                if np.any(values <= 0):
+                    raise ValueError(
+                        f"Cannot apply log_transform to {var_type} variable "
+                        f"'{var_name}': log is undefined for values <= 0"
+                    )
+                values = np.log(values)
+
             if config.switch_sign:
                 values = -values
 
@@ -208,6 +270,14 @@ class DataPreprocessor:
                 continue
 
             values = np.array(data[var_name].values, dtype=float).copy()
+
+            if config.log_transform:
+                if np.any(values <= 0):
+                    raise ValueError(
+                        f"Cannot apply log_transform to {var_type} variable "
+                        f"'{var_name}': log is undefined for values <= 0"
+                    )
+                values = np.log(values)
 
             if config.switch_sign:
                 values = -values
@@ -275,24 +345,32 @@ class DataPreprocessor:
         Inverse transform the data back to original scale and variable names.
         """
         if not self._is_fitted:
-            raise ValueError("Preprocessor must be fitted before inverse transforming data")
+            raise ValueError(
+                "Preprocessor must be fitted before inverse transforming data"
+            )
 
         parsed_data: dict[str, list[float]]
         if isinstance(data, np.ndarray):
-            all_vars = list(self.input_variables.values()) + list(self.output_variables.values())
+            all_vars = list(self.input_variables.values()) + list(
+                self.output_variables.values()
+            )
             parsed_data = self._ndarray_to_variable_dict(data, all_vars)
         elif isinstance(data, pd.DataFrame):
             data_dict: dict[str, list[float]] = {}
             for col in data.columns:
                 col_data = data[col].values
-                if len(col_data) == 1 and not isinstance(col_data[0], (list, np.ndarray)):
+                if len(col_data) == 1 and not isinstance(
+                    col_data[0], (list, np.ndarray)
+                ):
                     data_dict[col] = [float(col_data[0])]
                 elif isinstance(col_data[0], (list, np.ndarray)):
                     data_dict[col] = [
                         float(val)
                         for sublist in col_data
                         for val in (
-                            sublist if isinstance(sublist, (list, np.ndarray)) else [sublist]
+                            sublist
+                            if isinstance(sublist, (list, np.ndarray))
+                            else [sublist]
                         )
                     ]
                 else:
@@ -325,6 +403,9 @@ class DataPreprocessor:
                 if not isinstance(value, list):
                     value = [value]
 
+                if config.log_transform:
+                    value = np.exp(np.array(value, dtype=float)).tolist()
+
                 result[var_name] = value
 
         for var_name, config in self.output_variables.items():
@@ -343,11 +424,74 @@ class DataPreprocessor:
                 if not isinstance(value, list):
                     value = [value]
 
+                if config.log_transform:
+                    value = np.exp(np.array(value, dtype=float)).tolist()
+
                 result[var_name] = value
 
         return result
 
-    def _normalize_values(self, values: np.ndarray, config: VariableConfig) -> np.ndarray:
+    def inverse_transform_output_std(
+        self,
+        std_data: dict[str, list[float]],
+        point_estimates_original: dict[str, list[float]] | None = None,
+    ) -> dict[str, list[float]]:
+        """
+        Inverse-transform output *uncertainty* (standard deviation) values.
+
+        A standard deviation cannot be undone the way a point value can -- mean
+        shifting a std is meaningless. This applies the correct multiplicative
+        rule for each configured transform:
+
+        - ``z_score``: ``std_orig = std_mapped * std`` (no mean shift)
+        - ``min_max``: ``std_orig = std_mapped * (max - min)``
+        - ``log_transform``: ``std_orig ~= y_hat_orig * std_log`` (delta-method /
+          natural-log approximation ``d(exp(x))/dx = exp(x)``, evaluated at the
+          point estimate). Requires the already-inverse-transformed point estimate
+          for that variable in ``point_estimates_original``; when it is missing the
+          log-space std is returned unchanged (with a warning) rather than silently
+          producing a wrong value.
+
+        ``switch_sign`` does not change the magnitude of a std.
+        """
+        point_estimates_original = point_estimates_original or {}
+        result: dict[str, list[float]] = {}
+
+        for var_name, config in self.output_variables.items():
+            if config.mapped_name not in std_data:
+                continue
+
+            values = np.array(std_data[config.mapped_name], dtype=float)
+
+            if config.normalize and config.normalization_method == "z_score":
+                if config.std is not None:
+                    values = values * config.std
+            elif (
+                config.normalize
+                and config.normalization_method == "min_max"
+                and config.max_val is not None
+                and config.min_val is not None
+            ):
+                values = values * (config.max_val - config.min_val)
+
+            if config.log_transform:
+                point_est = point_estimates_original.get(var_name)
+                if point_est is not None and len(point_est) == len(values):
+                    values = values * np.abs(np.array(point_est, dtype=float))
+                else:
+                    _logger.warning(
+                        f"Cannot delta-method inverse-transform std for log-scale "
+                        f"output '{var_name}' without matching point estimates; "
+                        "returning log-space std unchanged"
+                    )
+
+            result[var_name] = values.tolist()
+
+        return result
+
+    def _normalize_values(
+        self, values: np.ndarray, config: VariableConfig
+    ) -> np.ndarray:
         if config.normalization_method == "z_score":
             if config.std is None or config.mean is None or config.std == 0:
                 _logger.warning(
@@ -357,12 +501,18 @@ class DataPreprocessor:
             normalized_values = (values - config.mean) / config.std
             return normalized_values
         if config.normalization_method == "min_max":
-            if config.max_val is None or config.min_val is None or config.max_val == config.min_val:
+            if (
+                config.max_val is None
+                or config.min_val is None
+                or config.max_val == config.min_val
+            ):
                 _logger.warning(
                     f"Invalid parameters min = {config.min_val} and max = {config.max_val} for min_max normalization of {config.original_name}, skipping normalization"
                 )
                 return values
-            normalized_values = (values - config.min_val) / (config.max_val - config.min_val)
+            normalized_values = (values - config.min_val) / (
+                config.max_val - config.min_val
+            )
             return normalized_values
         return values
 
@@ -403,7 +553,9 @@ class DataPreprocessor:
                     f"Invalid parameters for min_max denormalization of {config.original_name}"
                 )
                 return values_array.tolist()
-            denormalized = values_array * (config.max_val - config.min_val) + config.min_val
+            denormalized = (
+                values_array * (config.max_val - config.min_val) + config.min_val
+            )
         else:
             denormalized = values_array
 
@@ -432,8 +584,12 @@ class DataPreprocessor:
         from datetime import UTC, datetime
 
         config = PreprocessorConfig(
-            input_variables={name: config for name, config in self.input_variables.items()},
-            output_variables={name: config for name, config in self.output_variables.items()},
+            input_variables={
+                name: config for name, config in self.input_variables.items()
+            },
+            output_variables={
+                name: config for name, config in self.output_variables.items()
+            },
             created_timestamp=datetime.now(UTC).isoformat(),
         )
 
@@ -537,7 +693,9 @@ class DataPreprocessor:
                 should_include = var_name not in exclude_list
 
             if should_include and patterns is not None:
-                pattern_match = any(re.search(pattern, var_name) for pattern in patterns)
+                pattern_match = any(
+                    re.search(pattern, var_name) for pattern in patterns
+                )
                 should_include = pattern_match
 
             if should_include and predicate is not None:
@@ -564,15 +722,21 @@ class DataPreprocessor:
         exclude: bool = False,
     ) -> "DataPreprocessor":
         if exclude:
-            return self.filter_variables(exclude_inputs=input_names, exclude_outputs=output_names)
-        return self.filter_variables(include_inputs=input_names, include_outputs=output_names)
+            return self.filter_variables(
+                exclude_inputs=input_names, exclude_outputs=output_names
+            )
+        return self.filter_variables(
+            include_inputs=input_names, include_outputs=output_names
+        )
 
     def filter_by_patterns(
         self,
         input_patterns: list[str] | None = None,
         output_patterns: list[str] | None = None,
     ) -> "DataPreprocessor":
-        return self.filter_variables(input_patterns=input_patterns, output_patterns=output_patterns)
+        return self.filter_variables(
+            input_patterns=input_patterns, output_patterns=output_patterns
+        )
 
     def filter_normalized_only(self) -> "DataPreprocessor":
         return self.filter_variables(
@@ -607,6 +771,7 @@ class DataPreprocessor:
                 "normalize": config.normalize,
                 "normalization_method": config.normalization_method,
                 "switch_sign": config.switch_sign,
+                "log_transform": config.log_transform,
             }
 
         for name, config in self.output_variables.items():
@@ -615,6 +780,7 @@ class DataPreprocessor:
                 "normalize": config.normalize,
                 "normalization_method": config.normalization_method,
                 "switch_sign": config.switch_sign,
+                "log_transform": config.log_transform,
             }
 
         return summary

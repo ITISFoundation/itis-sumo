@@ -7,6 +7,32 @@ from typing import Literal
 _logger = logging.getLogger(__name__)
 
 
+def add_r5_interface_cache_workaround() -> str:
+    """T16mo rung 2 / SPEC §R5: itis-dakota 6.24's `study()` ctor unconditionally
+    calls `Interface::interface_cache(problem_db)` and throws `map::at`
+    ("called with nonexistent study!") when the study constructed no Interface --
+    which is exactly the case for itis-sumo's pure data-fit surrogate confs
+    (`import_build_points_file`, no interface). The cache is only populated when an
+    Interface is constructed. This appends an otherwise-unused `single` model backed
+    by a no-op `fork` interface so the cache gets an entry and the ctor succeeds. The
+    dummy model is never referenced by any method/iterator, so the interface is never
+    executed. Upstream's own fix is a get-or-create (`operator[]`) in `interface_cache`
+    (pending in itis-dakota); this is the itis-sumo-side shim until then.
+    """
+    return """
+        model
+            id_model = 'R5_WA_MODEL'
+            single
+                interface_pointer = 'R5_WA_INTERFACE'
+                variables_pointer = 'VARIABLES'
+                responses_pointer = 'RESPONSES'
+        interface
+            id_interface = 'R5_WA_INTERFACE'
+            fork
+                analysis_drivers = 'true'
+    """
+
+
 def start_dakota_file(
     top_method_pointer: str | None = None,
     results_file_name: str | None = None,
@@ -20,7 +46,7 @@ def start_dakota_file(
         tabular_data
             tabular_data_file = '{results_file_name}'
         {f"top_method_pointer = '{top_method_pointer}'" if top_method_pointer is not None else ""}
-    """
+    """ + add_r5_interface_cache_workaround()
 
 
 def add_adaptive_sampling(
@@ -130,6 +156,7 @@ def add_surrogate_model(
     conf = f"""
         model
             id_model '{id_model}'
+            truth_model_pointer = 'R5_WA_MODEL'
             surrogate global
                 {surrogate_type}
         """

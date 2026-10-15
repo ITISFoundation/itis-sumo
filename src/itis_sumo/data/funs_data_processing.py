@@ -3,9 +3,9 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal, TypeVar, overload
+from typing import Literal, overload
 
 import numpy as np
 import pandas as pd
@@ -30,7 +30,9 @@ def _parse_data(file: str | Path) -> list[list[str]]:
 
 
 def _parse_json_dict(file: str | Path):
-    _logger.warning("DEPRECATED! _parse_json_dict was used with the old ParallelRunner input files")
+    _logger.warning(
+        "DEPRECATED! _parse_json_dict was used with the old ParallelRunner input files"
+    )
     with open(file) as f:
         data_dict = json.load(f)["tasks"]
 
@@ -147,9 +149,19 @@ def load_data(
                     # (e.g. unusually long or short) is the evidence needed to confirm it,
                     # and it's otherwise lost once the offending run dir gets cleaned up.
                     raw_lines = file.read_text().splitlines()
-                    prev_raw = raw_lines[line_num - 2] if line_num - 2 < len(raw_lines) else "<n/a>"
-                    curr_raw = raw_lines[line_num - 1] if line_num - 1 < len(raw_lines) else "<n/a>"
-                    next_raw = raw_lines[line_num] if line_num < len(raw_lines) else "<n/a>"
+                    prev_raw = (
+                        raw_lines[line_num - 2]
+                        if line_num - 2 < len(raw_lines)
+                        else "<n/a>"
+                    )
+                    curr_raw = (
+                        raw_lines[line_num - 1]
+                        if line_num - 1 < len(raw_lines)
+                        else "<n/a>"
+                    )
+                    next_raw = (
+                        raw_lines[line_num] if line_num < len(raw_lines) else "<n/a>"
+                    )
                     raise ValueError(
                         f"Malformed data file {file}: header (line 1) has {len(header)} "
                         f"columns {header} but line {line_num} has {len(row)} columns: {row!r}. "
@@ -159,7 +171,9 @@ def load_data(
                         f"line {line_num + 1}: {next_raw!r}"
                     )
             if rows_to_drop:
-                data_lines = [r for i, r in enumerate(data_lines) if i not in rows_to_drop]
+                data_lines = [
+                    r for i, r in enumerate(data_lines) if i not in rows_to_drop
+                ]
             dfs.append(pd.DataFrame(data_lines, columns=pd.Index(header)))
         elif ext == ".json":
             columns, data = _parse_json_dict(file)
@@ -235,7 +249,9 @@ def process_input_file(
                 df[var] = np.log(df[var])
                 df.rename(columns={var: "log_" + var}, inplace=True)
 
-    processed_file = Path("_".join([os.path.splitext(f)[0] for f in files] + [suffix]) + ".txt")
+    processed_file = Path(
+        "_".join([os.path.splitext(f)[0] for f in files] + [suffix]) + ".txt"
+    )
     df.to_csv(processed_file, sep=" ", index=False)
     return processed_file
 
@@ -261,9 +277,13 @@ def _filter_data(
             "only one of 'filter_highest_N' or 'filter_N_samples' is allowed"
         )
         filter_highest_N_variable = (
-            str(df.columns[-1]) if filter_highest_N_variable is None else filter_highest_N_variable
+            str(df.columns[-1])
+            if filter_highest_N_variable is None
+            else filter_highest_N_variable
         )
-        df = df.sort_values(by=filter_highest_N_variable, ascending=False).iloc[filter_highest_N:]
+        df = df.sort_values(by=filter_highest_N_variable, ascending=False).iloc[
+            filter_highest_N:
+        ]
 
     # allows to only take the first N rows
     if filter_N_samples is not None:
@@ -308,11 +328,17 @@ def create_samples_along_axes(
     data = sanitize_varnames_df(data)
     input_vars = sanitize_varnames(input_vars)
 
-    assert np.all([var in data.columns for var in input_vars]), "Input variables not found in data"
+    assert np.all([var in data.columns for var in input_vars]), (
+        "Input variables not found in data"
+    )
     data = data[input_vars]
-    assert len(data.columns) == len(input_vars), "Data columns do not match input variables"
+    assert len(data.columns) == len(input_vars), (
+        "Data columns do not match input variables"
+    )
     mins, maxs = data.min().values, data.max().values
-    cut_value_list = [cut_values[var] for var in input_vars] if cut_values else data.mean().values
+    cut_value_list = (
+        [cut_values[var] for var in input_vars] if cut_values else data.mean().values
+    )
 
     sample_list = []
     for i, var in enumerate(input_vars):
@@ -343,7 +369,9 @@ def extract_predictions_along_axes(
     """
     y_hat = get_results(run_dir / "predictions.dat", RESPONSE)
     if (run_dir / "variances.dat").is_file():
-        std_hat = np.sqrt(get_results(run_dir / "variances.dat", RESPONSE + "_variance"))
+        std_hat = np.sqrt(
+            get_results(run_dir / "variances.dat", RESPONSE + "_variance")
+        )
     input_vars = sanitize_varnames(input_vars)
 
     results = {}
@@ -355,7 +383,11 @@ def extract_predictions_along_axes(
         }
         if (run_dir / "variances.dat").is_file():
             results[variable].update(
-                {"std_hat": list(std_hat[i * NSAMPLESPERVAR : (i + 1) * NSAMPLESPERVAR])}
+                {
+                    "std_hat": list(
+                        std_hat[i * NSAMPLESPERVAR : (i + 1) * NSAMPLESPERVAR]
+                    )
+                }
             )
 
     return results
@@ -375,7 +407,9 @@ def create_grid_samples(
     """Generate grid points (either for sampling, or to evaluate the SuMo upon and display)"""
     GRIDPOINTS_INPUT_FILE = run_dir / gridpoints_file_name
     if len(input_vars) != len(n_points_per_dimension):
-        raise ValueError("Number of variables must match number of points per dimension.")
+        raise ValueError(
+            "Number of variables must match number of points per dimension."
+        )
     if len(input_vars) != len(mins):
         raise ValueError("Number of variables must match number of mins.")
     if len(input_vars) != len(maxs):
@@ -437,59 +471,120 @@ def extract_predictions_gridpoints(
     results = {var: predictions_df[var].astype(float).tolist() for var in input_vars}
     results[RESPONSE] = y_hat.astype(float).tolist()
     if (run_dir / "variances.dat").is_file():
-        std_hat = np.sqrt(get_results(run_dir / "variances.dat", RESPONSE + "_variance"))
+        std_hat = np.sqrt(
+            get_results(run_dir / "variances.dat", RESPONSE + "_variance")
+        )
         results[RESPONSE + "_std"] = std_hat.astype(float).tolist()
 
     return results
 
 
+def resolve_log_scale(var: str, dist_info: dict[str, float | str]) -> bool:
+    """Validate a sampler distribution entry's optional ``log_scale`` flag.
+
+    Log scale composes with a strictly-positive ``uniform`` (log-uniform draw)
+    and with a ``normal`` whose μ/σ parameterize the ln-space distribution
+    (V46rn); ``constant`` carries no shape to bend. V45ls/V46rn guards, enforced
+    at the api boundary as ``SumoInputError`` and again here so direct users of
+    this layer cannot drift past them silently.
+    """
+    log_scale = bool(dist_info.get("log_scale", False))
+    if log_scale and dist_info["distribution"] not in ("uniform", "normal"):
+        raise ValueError(
+            f"log_scale is only supported for uniform and normal distributions: {var}"
+        )
+    return log_scale
+
+
+def scale_distribution(minimum: float, maximum: float, *, scale: str):
+    """The frozen distribution mapping unit probability -> value on ``scale``.
+
+    One home for the unit->value map every value producer shares (LHS and grid
+    samplers, UQ draws, Sobol ppfs): linear fills the interval uniformly, log
+    fills it log-uniformly (``scipy.stats.loguniform``, base-agnostic since
+    ``ln(10^u)`` is affine in ``u``). ``scale`` is a REQUIRED argument --
+    V45ls' structural tripwire: code producing values without deciding a scale
+    breaks at call with ``TypeError``, never silently defaults to linear.
+    """
+    from scipy.stats import loguniform, uniform
+
+    if scale == "log":
+        lo, hi = float(minimum), float(maximum)
+        if lo <= 0 or hi <= lo:
+            raise ValueError(
+                f"Log-scale bounds must be strictly positive and increasing, "
+                f"got [{lo}, {hi}]"
+            )
+        return loguniform(a=lo, b=hi)
+    if scale == "linear":
+        return uniform(loc=minimum, scale=maximum - minimum)
+    raise ValueError(f"Unknown scale: {scale!r}")
+
+
+def scale_values(values: Sequence[float] | np.ndarray, *, scale: str) -> np.ndarray:
+    """Map raw column values onto the scale the model treats them on."""
+    array = np.asarray(values, dtype=float)
+    if scale == "log":
+        if (array <= 0).any():
+            raise ValueError("log scale is undefined for values <= 0")
+        return np.log(array)
+    if scale == "linear":
+        return array
+    raise ValueError(f"Unknown scale: {scale!r}")
+
+
 def create_manual_uq_samples(
     input_vars: list[str],
-    distributions: dict[str, dict[str, float]],
+    distributions: dict[str, dict[str, float | str]],
     num_samples: int,
     seed: int | None = None,
 ):
     """
     Generate samples for manual UQ propagation based on user-specified distributions.
     Returns a list of dictionaries, each representing a sample.
-    """
-    input_vars = sanitize_varnames(input_vars)
-    distributions = {
-        sanitize_varname(k): sanitize_varnames_dict(v) for k, v in distributions.items()
-    }
 
-    from scipy.stats import norm, uniform
+    input_vars/distributions must stay in the caller's original (unsanitized)
+    form -- the returned samples become DataFrame columns that downstream get
+    matched against a preprocessor fit on original names.
+    """
+
+    from scipy.stats import norm
 
     rng = np.random.default_rng(seed=seed)
     samples = {}
     for var in input_vars:
         dist_info = distributions[var]
         dist_type = dist_info["distribution"]
+        log_scale = resolve_log_scale(var, dist_info)
         if dist_type == "normal":
-            mean = dist_info["mean"]
-            std = dist_info["std"]
-            samples[var] = norm.rvs(
-                size=num_samples, loc=mean, scale=std, random_state=rng
-            ).tolist()
+            mean = float(dist_info["mean"])
+            std = float(dist_info["std"])
+            draws = norm.rvs(size=num_samples, loc=mean, scale=std, random_state=rng)
+            # A log-scale normal keeps μ/σ in ln space (V46rn): ln(x) ~ N(μ,σ),
+            # so the raw draws are lognormal in the caller's original units --
+            # positive by construction, and what the surrogate's preprocessor
+            # re-logs is exactly N(μ,σ). Same "distribution describes what the
+            # model sees" contract as the log-uniform branch below.
+            samples[var] = (np.exp(draws) if log_scale else draws).tolist()
         elif dist_type == "uniform":
-            min_val = dist_info["min"]
-            max_val = dist_info["max"]
-            samples[var] = uniform.rvs(
-                size=num_samples, loc=min_val, scale=max_val - min_val, random_state=rng
-            ).tolist()
+            # A log-scale uniform is drawn log-uniform in the caller's original
+            # units -- the surrogate's preprocessor re-applies the log, so what
+            # reaches it is uniform-in-log (V44ls).
+            samples[var] = (
+                scale_distribution(
+                    float(dist_info["min"]),
+                    float(dist_info["max"]),
+                    scale="log" if log_scale else "linear",
+                )
+                .rvs(size=num_samples, random_state=rng)
+                .tolist()
+            )
         elif dist_type == "constant":
             value = dist_info["value"]
             samples[var] = [float(value)] * num_samples
-        # elif dist_type == "lognormal":
-        #     mean = dist_info["mean"]
-        #     std = dist_info["std"]
-        #     samples[var] = float(rng.lognormal(mean, std, (num_samples,)))
         else:
             raise ValueError(f"Unsupported distribution type: {dist_type}")
     return samples
-
-
-T = TypeVar("T")
 
 
 @overload
@@ -501,7 +596,7 @@ def sanitize_varnames(input_data: list[str]) -> list[str]: ...
 
 
 @overload
-def sanitize_varnames(input_data: dict[str, T]) -> dict[str, T]: ...
+def sanitize_varnames[T](input_data: dict[str, T]) -> dict[str, T]: ...
 
 
 @overload
@@ -536,7 +631,9 @@ def sanitize_varnames(input_data):
     if isinstance(input_data, str):
         return _sanitize_single(input_data)
     elif isinstance(input_data, pd.DataFrame):
-        df = input_data.copy()  # Create a copy to avoid modifying the original DataFrame
+        df = (
+            input_data.copy()
+        )  # Create a copy to avoid modifying the original DataFrame
         df.columns = [_sanitize_single(col) for col in df.columns]
         return df
     elif isinstance(input_data, dict):
@@ -561,7 +658,7 @@ sanitize_varnames_dict = sanitize_varnames  # For dictionary input
 sanitize_varnames_df = sanitize_varnames  # For DataFrame input
 
 
-def is_dominated(point: np.ndarray, other_points: np.ndarray):
+def is_dominated(point: np.ndarray, other_points: Sequence[np.ndarray] | np.ndarray):
     return any(all(point >= other) for other in other_points)
 
 
@@ -579,7 +676,9 @@ def get_non_dominated_indices(
     ## extract to separate function; unify with interface of MinimizationModel
     if optimization_modes:
         if len(optimized_vars) != len(optimization_modes):
-            raise ValueError("The number of optimized variables and optimization modes must match")
+            raise ValueError(
+                "The number of optimized variables and optimization modes must match"
+            )
         for var, mode in zip(optimized_vars, optimization_modes):
             if mode == "max":
                 data[var] = -data[var]
@@ -596,14 +695,16 @@ def get_non_dominated_indices(
             non_dominated_indices.append(i)
 
     if sort_by_column:
-        sorted_indices = data.loc[non_dominated_indices].sort_values(by=sort_by_column).index.values
+        sorted_indices = (
+            data.loc[non_dominated_indices].sort_values(by=sort_by_column).index.values
+        )
         return list(sorted_indices)
     else:
         return non_dominated_indices
 
 
 def get_bounds_uniform_distributions(
-    input_vars: list[str], distributions: dict[str, dict[str, float]]
+    input_vars: list[str], distributions: dict[str, dict[str, float | str]]
 ) -> tuple[list[float], list[float]]:
     lower_bounds = []
     upper_bounds = []
@@ -617,7 +718,9 @@ def get_bounds_uniform_distributions(
     return lower_bounds, upper_bounds
 
 
-def get_bounds_uniform_distribution(var: str, dist: dict[str, float]) -> tuple[float, float]:
+def get_bounds_uniform_distribution(
+    var: str, dist: dict[str, float | str]
+) -> tuple[float, float]:
     """
     Extracts the lower and upper bounds from a uniform distribution specification.
     Parameters:
@@ -630,19 +733,26 @@ def get_bounds_uniform_distribution(var: str, dist: dict[str, float]) -> tuple[f
         ValueError: If the distribution is not uniform, if the bounds are not defined, or if min >= max.
     """
     if dist["distribution"] != "uniform":
-        raise ValueError(f"Non-uniform distribution for variable '{var}' is not supported.")
+        raise ValueError(
+            f"Non-uniform distribution for variable '{var}' is not supported."
+        )
     if "min" not in dist or "max" not in dist:
         raise ValueError(f"Bounds for variable '{var}' are not defined.")
-    if dist["min"] >= dist["max"]:
+    min_val = float(dist["min"])
+    max_val = float(dist["max"])
+    if min_val >= max_val:
         raise ValueError(f"Invalid bounds for variable '{var}': min >= max.")
 
-    return dist["min"], dist["max"]
+    return min_val, max_val
 
 
 def compute_correlation_indices(
     input_samples: pd.DataFrame | dict[str, list[float]],
     output_samples: list[float] | np.ndarray,
     input_vars: list[str],
+    *,
+    input_scales: Mapping[str, str],
+    output_scale: str,
 ) -> dict[str, dict[str, float]]:
     """
     Compute per-input <-> output Pearson and Spearman correlation coefficients.
@@ -659,13 +769,19 @@ def compute_correlation_indices(
         output_samples: Sample values of the output QoI, paired index-for-index with
             each input variable's samples (i.e. same Monte Carlo run).
         input_vars: Input variable names to compute correlations for.
+        input_scales: Per-variable ``"linear"``/``"log"`` scale; correlations run
+            on values mapped onto that scale (V45ls -- Pearson is not invariant to
+            log, so honouring scale changes it; Spearman is monotone-invariant and
+            therefore provably unaffected). REQUIRED, never defaulted.
+        output_scale: Scale of ``output_samples``. REQUIRED, never defaulted.
 
     Returns:
         Dict mapping each input variable name to `{"pearson": float, "spearman": float}`.
 
     Raises:
         ValueError: If `input_vars` is empty, a variable is missing from
-            `input_samples`, or sample lengths are mismatched.
+            `input_samples`, sample lengths are mismatched, or a log-scaled
+            column holds a value <= 0.
     """
     from scipy.stats import pearsonr, spearmanr
 
@@ -673,15 +789,22 @@ def compute_correlation_indices(
         raise ValueError("input_vars cannot be empty")
 
     if isinstance(input_samples, pd.DataFrame):
-        input_samples = {col: input_samples[col].tolist() for col in input_samples.columns}
+        input_samples = {
+            col: input_samples[col].tolist() for col in input_samples.columns
+        }
 
-    output_array = np.asarray(output_samples, dtype=float)
+    output_array = scale_values(output_samples, scale=output_scale)
 
     correlations: dict[str, dict[str, float]] = {}
     for var in input_vars:
         if var not in input_samples:
             raise ValueError(f"Input variable '{var}' not found in input samples.")
-        input_array = np.asarray(input_samples[var], dtype=float)
+        if var not in input_scales:
+            raise ValueError(
+                f"Input variable '{var}' has no entry in input_scales -- every "
+                "correlated variable's scale is required, never defaulted (V45ls)"
+            )
+        input_array = scale_values(input_samples[var], scale=input_scales[var])
         if len(input_array) != len(output_array):
             raise ValueError(
                 f"Sample length mismatch for variable '{var}': "

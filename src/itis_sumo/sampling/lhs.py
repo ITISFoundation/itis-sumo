@@ -183,7 +183,7 @@ def _lhsmu(n, k, corr=None, seed=None):
     rdpoints = seed.uniform(size=(n_candidates, n))
 
     dist = spatial.distance.cdist(rdpoints, rdpoints, metric="euclidean")
-    D_ij = ma.masked_array(dist, mask=np.identity(n_candidates))
+    D_ij = ma.masked_array(dist, mask=np.identity(n_candidates, dtype=bool))
 
     index_rm = np.zeros(n_candidates - k, dtype=int)
     i = 0
@@ -210,7 +210,9 @@ def _lhsmu(n, k, corr=None, seed=None):
         if corr.shape[0] != corr.shape[1]:
             raise ValueError("Correlation matrix must be square")
         if corr.shape[0] != n:
-            raise ValueError("Correlation matrix dimensions must match number of variables")
+            raise ValueError(
+                "Correlation matrix dimensions must match number of variables"
+            )
 
         norm_u = stats.norm().ppf(rdpoints)
         L = linalg.cholesky(corr, lower=True)

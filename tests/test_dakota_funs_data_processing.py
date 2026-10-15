@@ -62,7 +62,7 @@ def test_sanitize_varnames_dataframe():
 
 def test_sanitize_varnames_unsupported_type_raises():
     with pytest.raises(TypeError, match="Unsupported input type"):
-        sanitize_varnames(12345)
+        sanitize_varnames(12345)  # ty: ignore[no-matching-overload]
 
 
 # --- get_bounds_uniform_distribution(s) --------------------------------------
@@ -133,14 +133,16 @@ def test_get_non_dominated_indices_with_optimization_modes():
     # minimize a, maximize b -> point 2 (a=3,b=3) is best on b but worst on a;
     # point 0 (a=1,b=1) is best on a but worst on b -> both on the Pareto front,
     # point 1 (a=2,b=2) is dominated by neither too since a min/b max create a trade-off
-    indices = get_non_dominated_indices(df, ["a", "b"], optimization_modes=["min", "max"])
+    indices = get_non_dominated_indices(
+        df, ["a", "b"], optimization_modes=["min", "max"]
+    )
     assert set(indices) == {0, 1, 2}
 
 
 def test_get_non_dominated_indices_invalid_mode_raises():
     df = pd.DataFrame({"a": [1, 2]})
     with pytest.raises(ValueError, match="not recognized"):
-        get_non_dominated_indices(df, ["a"], optimization_modes=["bogus"])
+        get_non_dominated_indices(df, ["a"], optimization_modes=["bogus"])  # ty: ignore[invalid-argument-type]
 
 
 def test_get_non_dominated_indices_mismatched_modes_length_raises():
@@ -154,14 +156,20 @@ def test_get_non_dominated_indices_mismatched_modes_length_raises():
 
 def test_create_manual_uq_samples_normal():
     samples = create_manual_uq_samples(
-        ["x"], {"x": {"distribution": "normal", "mean": 0.0, "std": 1.0}}, num_samples=5, seed=1
+        ["x"],
+        {"x": {"distribution": "normal", "mean": 0.0, "std": 1.0}},
+        num_samples=5,
+        seed=1,
     )
     assert len(samples["x"]) == 5
 
 
 def test_create_manual_uq_samples_uniform():
     samples = create_manual_uq_samples(
-        ["x"], {"x": {"distribution": "uniform", "min": 0.0, "max": 1.0}}, num_samples=5, seed=1
+        ["x"],
+        {"x": {"distribution": "uniform", "min": 0.0, "max": 1.0}},
+        num_samples=5,
+        seed=1,
     )
     assert len(samples["x"]) == 5
     assert all(0.0 <= v <= 1.0 for v in samples["x"])
@@ -176,7 +184,68 @@ def test_create_manual_uq_samples_constant():
 
 def test_create_manual_uq_samples_unsupported_distribution_raises():
     with pytest.raises(ValueError, match="Unsupported distribution type"):
-        create_manual_uq_samples(["x"], {"x": {"distribution": "lognormal"}}, num_samples=3, seed=1)
+        create_manual_uq_samples(
+            ["x"], {"x": {"distribution": "lognormal"}}, num_samples=3, seed=1
+        )
+
+
+def test_create_manual_uq_samples_log_scale_is_log_uniform_in_original_units():
+    samples = create_manual_uq_samples(
+        ["x"],
+        {"x": {"distribution": "uniform", "min": 1.0, "max": 100.0, "log_scale": True}},
+        num_samples=2000,
+        seed=3,
+    )
+    values = np.asarray(samples["x"])
+    # Returned in the caller's original units, but uniform in log10 space: the
+    # geometric mean sits at the midpoint of the log range (~10), well below the
+    # arithmetic midpoint (~50.5) a linear draw would centre on.
+    assert values.min() >= 1.0 and values.max() <= 100.0
+    geometric_mean = float(np.exp(np.log(values).mean()))
+    assert geometric_mean == pytest.approx(10.0, rel=0.15)
+    assert float(values.mean()) < 50.0  # skewed toward the low end, unlike linear
+
+
+def test_create_manual_uq_samples_log_scale_normal_draws_lognormal():
+    # Flipped by B19ps/V46rn: log+normal used to be rejected; now mu/sigma
+    # parameterize the ln-space distribution -- raw draws are lognormal and
+    # positive, and ln(draws) recovers N(mu, sigma).
+    values = np.array(
+        create_manual_uq_samples(
+            ["x"],
+            {
+                "x": {
+                    "distribution": "normal",
+                    "mean": 1.0,
+                    "std": 0.1,
+                    "log_scale": True,
+                }
+            },
+            num_samples=2000,
+            seed=1,
+        )["x"]
+    )
+    assert (values > 0.0).all()
+    ln_values = np.log(values)
+    assert abs(float(ln_values.mean()) - 1.0) < 0.05
+    assert abs(float(ln_values.std()) - 0.1) < 0.05
+
+
+def test_create_manual_uq_samples_log_scale_rejects_non_positive_bound():
+    with pytest.raises(ValueError, match="strictly positive"):
+        create_manual_uq_samples(
+            ["x"],
+            {
+                "x": {
+                    "distribution": "uniform",
+                    "min": 0.0,
+                    "max": 5.0,
+                    "log_scale": True,
+                }
+            },
+            num_samples=5,
+            seed=1,
+        )
 
 
 class TestCreateManualUqSamplesSeedReproducibility:
@@ -184,20 +253,32 @@ class TestCreateManualUqSamplesSeedReproducibility:
 
     def test_same_seed_produces_identical_samples_normal(self):
         distributions = {"x1": {"distribution": "normal", "mean": 0.0, "std": 1.0}}
-        samples_a = create_manual_uq_samples(["x1"], distributions, num_samples=50, seed=123)
-        samples_b = create_manual_uq_samples(["x1"], distributions, num_samples=50, seed=123)
+        samples_a = create_manual_uq_samples(
+            ["x1"], distributions, num_samples=50, seed=123
+        )
+        samples_b = create_manual_uq_samples(
+            ["x1"], distributions, num_samples=50, seed=123
+        )
         assert samples_a["x1"] == samples_b["x1"]
 
     def test_same_seed_produces_identical_samples_uniform(self):
         distributions = {"x1": {"distribution": "uniform", "min": -1.0, "max": 1.0}}
-        samples_a = create_manual_uq_samples(["x1"], distributions, num_samples=50, seed=7)
-        samples_b = create_manual_uq_samples(["x1"], distributions, num_samples=50, seed=7)
+        samples_a = create_manual_uq_samples(
+            ["x1"], distributions, num_samples=50, seed=7
+        )
+        samples_b = create_manual_uq_samples(
+            ["x1"], distributions, num_samples=50, seed=7
+        )
         assert samples_a["x1"] == samples_b["x1"]
 
     def test_different_seeds_produce_different_samples(self):
         distributions = {"x1": {"distribution": "normal", "mean": 0.0, "std": 1.0}}
-        samples_a = create_manual_uq_samples(["x1"], distributions, num_samples=50, seed=1)
-        samples_b = create_manual_uq_samples(["x1"], distributions, num_samples=50, seed=2)
+        samples_a = create_manual_uq_samples(
+            ["x1"], distributions, num_samples=50, seed=1
+        )
+        samples_b = create_manual_uq_samples(
+            ["x1"], distributions, num_samples=50, seed=2
+        )
         assert samples_a["x1"] != samples_b["x1"]
 
     def test_same_seed_produces_identical_samples_mixed_distributions(self):
@@ -207,8 +288,12 @@ class TestCreateManualUqSamplesSeedReproducibility:
             "x1": {"distribution": "normal", "mean": 0.0, "std": 1.0},
             "x2": {"distribution": "uniform", "min": -1.0, "max": 1.0},
         }
-        samples_a = create_manual_uq_samples(["x1", "x2"], distributions, num_samples=50, seed=42)
-        samples_b = create_manual_uq_samples(["x1", "x2"], distributions, num_samples=50, seed=42)
+        samples_a = create_manual_uq_samples(
+            ["x1", "x2"], distributions, num_samples=50, seed=42
+        )
+        samples_b = create_manual_uq_samples(
+            ["x1", "x2"], distributions, num_samples=50, seed=42
+        )
         assert samples_a["x1"] == samples_b["x1"]
         assert samples_a["x2"] == samples_b["x2"]
 
@@ -246,7 +331,9 @@ class TestLoadDataMalformedFile:
         )
         with pytest.raises(ValueError, match=r"Raw context \(total 4 lines\)"):
             load_data(malformed_file)
-        with pytest.raises(ValueError, match=re.escape("line 3 (offending): '2 NO_ID 0.4 0.5'")):
+        with pytest.raises(
+            ValueError, match=re.escape("line 3 (offending): '2 NO_ID 0.4 0.5'")
+        ):
             load_data(malformed_file)
 
     def test_well_formed_file_still_loads_correctly(self, tmp_path):
@@ -286,7 +373,9 @@ class TestLoadDataHealOrDropMalformedRow:
         assert len(df) == 1
         assert df.iloc[0]["_eval_id"] == "1"
         assert df.iloc[0]["interface"] == "APPROX_INTERFACE_1"
-        assert float(df.iloc[0]["x9"]) == pytest.approx(0.554525)  # 2nd (final) write wins
+        assert float(df.iloc[0]["x9"]) == pytest.approx(
+            0.554525
+        )  # 2nd (final) write wins
         assert float(df.iloc[0]["x10"]) == pytest.approx(0.174912)
         assert float(df.iloc[0]["x11"]) == pytest.approx(488.687)
         assert float(df.iloc[0]["y1"]) == pytest.approx(0.3218000105)
@@ -294,7 +383,9 @@ class TestLoadDataHealOrDropMalformedRow:
 
     def test_drops_unhealable_row_and_warns_instead_of_raising(self, tmp_path):
         f = tmp_path / "predictions.dat"
-        f.write_text(self.HEADER + "1 APPROX_INTERFACE_1 0.1 0.2 0.3\n")  # too short to heal
+        f.write_text(
+            self.HEADER + "1 APPROX_INTERFACE_1 0.1 0.2 0.3\n"
+        )  # too short to heal
         warnings: list[str] = []
         df = load_data(f, on_malformed_row="heal_or_drop", warnings=warnings)
         assert len(df) == 0
@@ -309,7 +400,8 @@ class TestLoadDataHealOrDropMalformedRow:
     def test_well_formed_rows_unaffected_by_heal_or_drop_mode(self, tmp_path):
         f = tmp_path / "predictions.dat"
         f.write_text(
-            self.HEADER + "1 APPROX_INTERFACE_1 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2\n"
+            self.HEADER
+            + "1 APPROX_INTERFACE_1 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2\n"
         )
         df = load_data(f, on_malformed_row="heal_or_drop")
         assert len(df) == 1
@@ -389,7 +481,7 @@ def test_get_variable_names_missing_file_raises(tmp_path):
 
 
 def test_filter_data_keep_idxs():
-    df = pd.DataFrame({"a": [1, 2, 3]}, index=[0, 1, 2])
+    df = pd.DataFrame({"a": [1, 2, 3]})
     result = _filter_data(df, keep_idxs=[0, 2])
     assert list(result.index) == [0, 2]
 

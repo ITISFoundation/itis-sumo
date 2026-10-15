@@ -34,7 +34,9 @@ class TestComputeCvAccuracyMetrics:
         assert metrics["sum_abs"] == pytest.approx(5.0)
         assert metrics["mean_abs"] == pytest.approx(1.25)
         assert metrics["max_abs"] == pytest.approx(4.0)
-        assert metrics["root_mean_squared"] == pytest.approx(np.sqrt((1 + 0 + 0 + 16) / 4))
+        assert metrics["root_mean_squared"] == pytest.approx(
+            np.sqrt((1 + 0 + 0 + 16) / 4)
+        )
 
     def test_shape_mismatch_raises(self):
         with pytest.raises(ValueError, match="same shape"):
@@ -74,7 +76,12 @@ class TestComputePairedTtest:
 
     def test_symmetric_residuals_zero_statistic(self):
         actual = [1.0, 2.0, 3.0, 4.0]
-        predicted = [2.0, 1.0, 4.0, 3.0]  # residuals -1,+1,-1,+1 -> mean 0, non-zero variance
+        predicted = [
+            2.0,
+            1.0,
+            4.0,
+            3.0,
+        ]  # residuals -1,+1,-1,+1 -> mean 0, non-zero variance
         result = compute_paired_ttest(actual, predicted)
         assert result["statistic"] == pytest.approx(0.0)
         assert result["p_value"] == pytest.approx(1.0)
@@ -132,7 +139,9 @@ class TestComputeCvConvergence:
 
         call_sizes = []
 
-        def fake_manual_cv(run_dir, subset_file, input_vars, output_response, N_CROSS_VALIDATION=5):
+        def fake_manual_cv(
+            run_dir, subset_file, input_vars, output_response, N_CROSS_VALIDATION=5
+        ):
             import pandas as pd
 
             df = pd.read_csv(subset_file, sep=" ")
@@ -168,5 +177,7 @@ class TestComputeCvConvergence:
             f.write("0.1 0.2\n")
             f.write("0.2 0.4\n")
 
-        series = compute_cv_convergence(tmp_path, training_file, ["x1"], "y", min_samples=5)
+        series = compute_cv_convergence(
+            tmp_path, training_file, ["x1"], "y", min_samples=5
+        )
         assert series == []

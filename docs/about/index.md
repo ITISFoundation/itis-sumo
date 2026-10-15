@@ -6,17 +6,19 @@ For what itis-sumo is and who it's for, see the [landing page](../index.md). Thi
 
 ## Engine
 
-- Runtime engine = the **PyPI wheel `itis-dakota==1.5.9`** (Dakota 6.20),
-  pinned for exact parity with the mmux/vite flaskapi engine, on
-  **Python 3.11**.
+- Runtime engine = the **PyPI wheel `itis-dakota==6.24.13`** (Dakota 6.24), on
+  **Python 3.12-3.14**, Linux, macOS and Windows (first `itis-dakota` release with
+  `win_amd64` wheels).
 - The in-repo `itis-dakota/` checkout is the IT'IS Dakota fork, kept **for
   reference only** — this package consumes the pre-built wheels published to
   PyPI and does not build the fork itself.
 - Engine calls happen through `dakota.environment.study(input_string=...)`
-  executed inside a `ProcessPoolExecutor`; the package never shells out to a
+  executed inside a `ProcessPoolExecutor` with an explicit start-method context
+  (fork on POSIX, spawn on Windows — SPEC V50gm); the package never shells out to a
   `dakota` binary.
 - Engine caveats, the wheel-build process, and the Dakota 6.23+
-  `Interface::interface_cache` regression (why the pin stays at 1.5.9) are
+  `Interface::interface_cache` regression (still upstream; shimmed in-repo via
+  `add_r5_interface_cache_workaround()`) are
   documented in [`DAKOTA-STUBS.md`](https://github.com/ITISFoundation/itis-sumo/blob/main/DAKOTA-STUBS.md).
 
 ## Package layout

@@ -167,6 +167,7 @@ class TestAxisSweepInvariants:
         data = pd.DataFrame(
             {"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)}
         )
+
         NSP = 15
         path = create_samples_along_axes(tmp_path, data, ["x1", "x2"], NSP)
         result = load_data(path)
@@ -182,6 +183,7 @@ class TestAxisSweepInvariants:
         data = pd.DataFrame(
             {"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)}
         )
+
         NSP = 10
         path = create_samples_along_axes(tmp_path, data, ["x1", "x2"], NSP)
         result = load_data(path)
@@ -199,6 +201,7 @@ class TestAxisSweepInvariants:
         data = pd.DataFrame(
             {"x1": np.linspace(0, 10, 50), "x2": np.linspace(-5, 5, 50)}
         )
+
         NSP = 12
         path = create_samples_along_axes(tmp_path, data, ["x1", "x2"], NSP)
         result = load_data(path)
@@ -266,6 +269,7 @@ class TestDataPreprocessorRoundtrip:
         pp.setup_sign_switching(
             input_sign_switches=["width"], output_sign_switches=["stress"]
         )
+
         pp.fit(df)
         transformed = pp.transform(df)
         restored = pp.inverse_transform(transformed)
@@ -412,6 +416,7 @@ class TestParetoDominance:
         df = pd.DataFrame(
             {"x": [1.0, 2.0, 3.0, 0.5, 1.5], "y": [3.0, 2.0, 1.0, 0.5, 2.5]}
         )
+
         indices = get_non_dominated_indices(df, ["x", "y"], ["min", "min"])
         nd_points = df.loc[indices, ["x", "y"]].values
         for i, p in enumerate(nd_points):

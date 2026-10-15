@@ -8,13 +8,13 @@ runs as a CI smoke test.
 ## 1. Install
 
 ```sh
-uv sync                          # Python 3.11, resolves itis-dakota==1.5.9
-uv run itis-sumo validate        # engine probe (expect: Version 1.5.9)
+uv sync                          # Python 3.12-3.14; resolves itis-dakota==6.24.13
+uv run itis-sumo validate        # engine probe (expect: Version 6.24.13)
 ```
 
-If `validate` fails, the Dakota engine wheel didn't resolve correctly — that's
-an install problem, not a itis-sumo problem; nothing below will work until
-`validate` passes.
+!!! warning "Engine gate"
+    If `validate` fails, the Dakota engine wheel didn't resolve — an install
+    problem, not an itis-sumo problem. Nothing below works until it passes.
 
 ## 2. Some training data
 
@@ -30,7 +30,12 @@ import pandas as pd
 rng = np.random.default_rng(42)
 length = rng.uniform(0.0, 1.0, size=30)
 width = rng.uniform(0.0, 1.0, size=30)
-stress = 3.0 * length + 2.0 * width**2 + 0.5 * np.sin(10.0 * length) + rng.normal(0, 0.05, 30)
+stress = (
+    3.0 * length
+    + 2.0 * width**2
+    + 0.5 * np.sin(10.0 * length)
+    + rng.normal(0, 0.05, 30)
+)
 train_raw = pd.DataFrame({"length": length, "width": width, "stress": stress})
 ```
 
@@ -75,7 +80,9 @@ why itis-sumo uses one: [How Gaussian Processes work](../explanation/gaussian-pr
 ```python
 from itis_sumo.evaluate.funs_evaluate import evaluate_sumo_crossvalidation
 
-cv_metrics = evaluate_sumo_crossvalidation(run_dir, training_file, ["x1", "x2"], "y1", N_CROSS_VALIDATION=5)
+cv_metrics = evaluate_sumo_crossvalidation(
+    run_dir, training_file, ["x1", "x2"], "y1", N_CROSS_VALIDATION=5
+)
 print(cv_metrics["y1"]["root_mean_squared"])
 ```
 
@@ -89,12 +96,18 @@ full recipe including R² and convergence checks.
 ```python
 from itis_sumo.evaluate.funs_evaluate import evaluate_sobol_indices
 
-distributions = {
-    "length": {"distribution": "uniform", "min": 0.0, "max": 1.0},
-    "width": {"distribution": "uniform", "min": 0.0, "max": 1.0},
+sampling = {
+    "length": {"minimum": 0.0, "maximum": 1.0},
+    "width": {"minimum": 0.0, "maximum": 1.0},
 }
 sobol = evaluate_sobol_indices(
-    run_dir, training_file, ["length", "width"], "y1", distributions, preprocessor, seed=42
+    run_dir,
+    training_file,
+    ["length", "width"],
+    "y1",
+    sampling,
+    preprocessor,
+    seed=42,
 )["sobol"]
 for var, indices in sobol.items():
     print(var, indices["main"], indices["total"])

@@ -375,6 +375,7 @@ class TestCrossValidationConfigGeneration:
     def test_create_sumo_manual_crossvalidation_splits_training_and_validation(
         self, tmp_path
     ):
+
         build_file = self._make_build_file(tmp_path)
         fold_dir = tmp_path / "fold_0"
         fold_dir.mkdir()
@@ -409,6 +410,44 @@ class TestCreateManualUqSamples:
         assert len(samples["x"]) == 10_000
         assert np.isclose(np.mean(samples["x"]), 5.0, atol=0.05)
         assert np.isclose(np.std(samples["x"]), 1.0, atol=0.05)
+
+    def test_log_scale_normal_draws_are_lognormal(self):
+        # V46rn: for a log-scale normal the μ/σ parameterize the ln-space
+        # distribution, so raw draws are lognormal and positive, and ln(draws)
+        # recovers N(μ,σ) -- exactly what the surrogate preprocessor re-logs.
+        samples = create_manual_uq_samples(
+            input_vars=["x"],
+            distributions={
+                "x": {
+                    "distribution": "normal",
+                    "mean": 1.0,
+                    "std": 0.5,
+                    "log_scale": True,
+                }
+            },
+            num_samples=10_000,
+            seed=42,
+        )
+        draws = np.array(samples["x"])
+        assert np.all(draws > 0.0)
+        ln_draws = np.log(draws)
+        assert np.isclose(ln_draws.mean(), 1.0, atol=0.05)
+        assert np.isclose(ln_draws.std(), 0.5, atol=0.05)
+
+    def test_log_scale_constant_is_rejected(self):
+        with pytest.raises(ValueError, match="only supported for uniform and normal"):
+            create_manual_uq_samples(
+                input_vars=["x"],
+                distributions={
+                    "x": {
+                        "distribution": "constant",
+                        "value": 3.0,
+                        "log_scale": True,
+                    }
+                },
+                num_samples=10,
+                seed=42,
+            )
 
     def test_uniform_distribution_range(self):
         samples = create_manual_uq_samples(
@@ -461,12 +500,12 @@ class TestGetBoundsUniformDistributions:
         assert hi == 5.0
 
     def test_get_bounds_non_uniform_raises(self):
-        dist = {"distribution": "normal", "mean": 0, "std": 1}
+        dist: dict[str, float | str] = {"distribution": "normal", "mean": 0, "std": 1}
         with pytest.raises(ValueError, match="Non-uniform"):
             get_bounds_uniform_distribution("x", dist)
 
     def test_get_bounds_missing_keys_raises(self):
-        dist = {"distribution": "uniform"}
+        dist: dict[str, float | str] = {"distribution": "uniform"}
         with pytest.raises(ValueError, match="not defined"):
             get_bounds_uniform_distribution("x", dist)
 
@@ -619,6 +658,7 @@ class TestGetNonDominatedIndices:
         result = get_non_dominated_indices(
             df, ["f1", "f2"], ["min", "min"], sort_by_column="f1"
         )
+
         assert list(result) == [0, 1]
 
     def test_mismatched_modes_raises(self):
@@ -629,7 +669,7 @@ class TestGetNonDominatedIndices:
     def test_invalid_mode_raises(self):
         df = pd.DataFrame({"f1": [1], "f2": [2]})
         with pytest.raises(ValueError, match="not recognized"):
-            get_non_dominated_indices(df, ["f1", "f2"], ["min", "invalid"])
+            get_non_dominated_indices(df, ["f1", "f2"], ["min", "invalid"])  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.unit

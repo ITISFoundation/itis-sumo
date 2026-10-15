@@ -61,11 +61,12 @@ Deliberately dropped composers (dead / web- or S4L-specific / superseded):
 - The Flask web layer: `app.py`, all `blueprints/` routes, `utils/json_serializer.py`,
   `utils/local_job_store.py`, `utils/logger.py`, `utils/webserver_config.py`.
 
-### E1 export/import — IMPLEMENTED on branch `feat/sumo-model-export-import` (not merged into main)
-- **Where:** worktree `.claude/worktrees/feat+sumo-model-export-import` (branch
-  `feat/sumo-model-export-import`, based on main `955ec99`). The implementation
-  is **committed** on that branch as `cad02c5` ("feat: add SuMo model
-  export/import (E1)") — it has NOT been merged into `main`.
+### E1 export/import — IMPLEMENTED and MERGED into `main`
+- **Where:** originally developed on branch `feat/sumo-model-export-import`
+  (worktree `.claude/worktrees/feat+sumo-model-export-import`, based on main
+  `955ec99`) as `cad02c5` ("feat: add SuMo model export/import (E1)"). That
+  commit reached `main` via PR #1 (2026-08-18) and is now part of the released
+  baseline — the earlier "not merged into main" note is obsolete.
 - **What:** `src/itis_sumo/core/sumo_model_store.py` (148 lines, V12 uuid keying /
   V13 single `ITIS_SUMO_MODELS_DIR` env source / V10 metadata sidecar),
   `evaluate/funs_evaluate.py::export_sumo_model` / `import_sumo_model`,
@@ -95,10 +96,11 @@ Deliberately dropped composers (dead / web- or S4L-specific / superseded):
 | `jgo/uq-uncertainty-propagation` | `15cafc4` (2026-07-09) | UQ propagation — already inside ported code |
 | `jgo/osparc-backend-resilience` | `75ae50b` (2026-08-04) | oSPARC graceful-degradation (web) — NOT ported |
 | `jgo/download_uq_samples` | `a3b8739` (2026-07-08) | UQ sample download endpoint (web) — NOT ported |
-| `jgo/fullstack-logscale` | `4aebe7b` (2026-08-06) | log-scale inputs/outputs (backend+frontend) — NOT ported |
+| `jgo/fullstack-logscale` | `4aebe7b` (2026-08-06) | log-scale inputs/outputs (backend+frontend) — backend half **absorbed on `develop`** (T27fr: log-space surrogate+sampling+guards, V44ls/V45ls/V46rn/V47st); frontend consumer migration remains in mmux_vite |
 | `jgo/stack-04-csv-download` | `ea69222` (2026-07-08) | CSV download endpoint (web) — NOT ported |
 | `jgo/docs-migration` | `fe4ca60` (2026-07-13) | docs migration — NOT ported |
 | `DO-NOT-MERGE-feature/local-functions` | `b8cf7b3` (2026-07-08) | local-functions experiment — NOT ported |
+| `upstream/develop` (mmux trunk, post-rebase) | `6eda782d` (2026-09-30, PR#649) | **PORTED increment (T51pq)**: exact arbitrary-d 2nd-order Sobol' pairs + order masses + shared bootstrap + scipy-pinned algebra → `evaluate/funs_evaluate.py` + `api/{types,_session,workflows}.py`; remaining trunk deltas still to port: §V.47pk response-key preservation (PR#652), `#616` ResponseModel (web-side, stays) |
 
 ### More to port from mmux_vite?
 - **E1 export/import → already implemented** in-repo on `feat/sumo-model-export-import`

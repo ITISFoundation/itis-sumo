@@ -53,3 +53,22 @@ B5tz|2026-08-14|no visuals anywhere on the landing page despite `docs/assets/exa
 B6vb|2026-08-14|the "is this for me?" scope statement (headless core, no Flask/oSPARC/UI dependency) sat only on `docs/about/index.md`, several clicks from the front door, instead of on first screen where a visitor decides whether to keep reading|TD7qr (165a9e9) + TD9uv (913bdde): copied the scope statement to the top of `docs/index.md`; trimmed `about/index.md`'s now-redundant restatement to a 1-line pointer back; §C
 B7sm|2026-08-14|V&V trust signal (pipeline verified against known analytical solutions) was the closing sentence of the page, phrased defensively as a negation ("not just 'didn't crash'") instead of a direct positive claim — a proof point buried where fewest visitors scroll to it|TD8st (d08c25b): promoted the line to just below the opening/scope block, reframed as a direct positive statement; §C
 B8ry|2026-08-15|Haiku subagent executing TD7qr fabricated an external GitHub URL for `mmux_documentation` (`https://github.com/ITISFoundation/mmux_documentation`) that appears nowhere in any source file — `about/index.md`'s own text only ever named it as unlinked plain text. `mkdocs --strict` built clean anyway since strict mode checks internal links/images only, never external URL existence, so the fabricated link would have shipped undetected without a manual diff review|caught in parent-thread review before task close-out, corrected in 0910343 (link removed, plain text kept, matching source); V4lc (new invariant: forbid subagent URL invention, require parent diff-check on new external links)
+
+## §W (visual identity)
+W-G: docs ! read as IT'IS family w/ TIP + S4L — shared workflow-diagram lang, card-grid landing, IT'IS footer, Inter font.
+W-C: logo in nav (diamond mark + "SuMo" wordmark, `assets/logo.svg`); favicon `assets/favicon.svg`; primary = TIP blue `#0190d0`, accent = TIP indigo `#7280f5` (custom palette in `assets/css/fonts.css`); Inter font; footer via `overrides/partials/copyright.html` override (⊥ YAML `footer.links` — key does not exist); workflow component reused via `assets/css/workflow.css` + documented snippet (⊥ raw CSS per page); admonition ≤3 sentences + fixed vocab.
+W-V:
+W1ab: footer URLs ! invented/changed w/o verifying they resolve — reuse TIP's `itis.swiss` set (`/who-we-are/contact/`, ``, `/who-we-are/`), re-check on change (extends V4lc to the footer)
+W2cd: every shipped page ! reachable from `docs/index.md` nav, directly or via section index (V3hd)
+W3ef: workflow diagram / card grid ! hand-rolled per page — use the shared `.tip-workflow` component + Material `.grid.cards` (⊥ paste raw HTML/CSS)
+W4gh: admonition ! exceed 3 sentences; type ! outside the 6-vocab set (info/warning/note/tip/example/danger)
+W-T:
+TW1ab|x|create `docs/overrides/` + wire `custom_dir`; add `overrides/partials/copyright.html` (TIP-style 3-link footer)|W-C,W1ab
+TW2cd|x|create `assets/css/workflow.css` (.tip-workflow adapted from TIP VitePress CSS to Material vars); create `assets/css/fonts.css` (Inter + custom blue/indigo palette)|W-C
+TW3ef|x|create `assets/logo.svg` (diamond + "SuMo") + `assets/favicon.svg` (S monogram)|W-C
+TW4gh|x|`mkdocs.yml`: logo/favicon, custom primary/accent, features (navigation.tabs/footer, search.suggest/highlight, content.tabs.link, content.code.annotate), plugins: search, extra_css, rename nav → Quick Start/Workflows/Background/Reference/About|W-C
+TW5ij|x|`docs/index.md` rewrite as card-grid hero (capability cards, 2 CTAs, embedded gp figure, scope, V&V line)|W-C,W3ef
+TW6kl|x|`docs/reference/index.md`: replace ASCII pipeline w/ `.tip-workflow` component (Sampling→Config→Core→Evaluate + side branches)|W3ef
+TW7mn|x|`docs/about/style-guide.md` (dev-facing, unlinked): documents workflow snippet, card grid, admonition vocab, Diátaxis rename|W-C
+TW8op|x|apply admonition vocab to top pages; add §W to DOCS_SPEC|W4gh
+TW9qr|x|build + `mkdocs build --strict` to verify (no broken links/assets)|W2cd,W1ab

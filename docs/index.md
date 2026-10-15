@@ -1,26 +1,62 @@
+---
+hide:
+  - navigation
+  - toc
+---
+
 # itis-sumo
 
-Running complex simulations across design spaces is slow and expensive, but itis-sumo lets you train a fast surrogate model that captures the simulation's behavior—enabling you to sweep parameters, optimize designs, and quantify sensitivity with honest uncertainty bars. It provides uncertainty quantification (Sobol' indices, propagation), sampling strategies (LHS, grid, manual-UQ), MOGA optimization, and tools to build, cross-validate, and interrogate your surrogate models, all as an importable Python package.
+## Headless surrogate-modeling core for design-space exploration
 
-![A trained surrogate (blue) with 95% prediction-interval uncertainty bands tracking the true response (black).](assets/examples/gp_fit_uncertainty.png)
+Running complex simulations across design spaces is slow and expensive.
+itis-sumo lets you train a fast surrogate model that captures the
+simulation's behavior — so you can sweep parameters, optimize designs, and
+quantify sensitivity with honest uncertainty bars.
 
-**Scope:** itis-sumo is a headless computational core with no Flask, oSPARC, or web-UI dependency. For the web UI, see the separate `mmux_documentation` site.
+[Quick Start :material-rocket-launch:](tutorials/getting-started.md){ .md-button .md-button--primary }
+[Workflows :material-sitemap:](how-to/cross-validate.md){ .md-button }
 
-**New to itis-sumo?** Start with the [Getting started](tutorials/getting-started.md) guide to install, verify the engine, and build your first surrogate.
+---
 
-A full Verification & Validation report — the pipeline checked against known analytical solutions — is available on request: see the [current report](verification-validation.md).
+![A trained surrogate (blue) with 95% prediction-interval uncertainty bands
+tracking the true response (black).](assets/examples/gp_fit_uncertainty.png)
 
-## Where to go
+**Scope:** itis-sumo is a headless computational core with no Flask, oSPARC,
+or web-UI dependency. For the web UI, see the separate `mmux_documentation`
+site.
 
-- **New here?** [Getting started](tutorials/getting-started.md) — build,
-  cross-validate, and interrogate one surrogate end to end, real runnable
-  code throughout.
-- **Need to do something specific?** How-to guides —
-  task recipes for [cross-validation](how-to/cross-validate.md), [sensitivity/UQ](how-to/sensitivity-analysis.md), [MOGA optimization](how-to/moga.md), and
-  [data preprocessing](how-to/preprocess.md).
-- **Want the why, not just the how?** Why [surrogate modeling](explanation/surrogate-modeling.md) and how [Gaussian Processes](explanation/gaussian-processes.md) work — worked examples included.
-- **Want proof it actually works?** [Worked examples](tutorials/examples.md) — real Dakota fits validated against closed-form analytical solutions, with figures.
-- **Looking up an exact function signature?** [Reference](reference/index.md) —
-  module-by-module API and the design invariants behind it.
-- **Curious about the engine pin, fork provenance, or how this fits into
-  MMUX?** [About](about/index.md).
+---
+
+## What you can do
+
+<div class="grid cards" markdown>
+
+- :material-flask-outline: __Train surrogates__
+  Build GP / polynomial surrogates on simulation data — in-process via the
+  Dakota wheel, no shell-outs.
+
+- :material-chart-line: __Quantify sensitivity__
+  Sobol' indices and UQ propagation with `scipy.stats`, on top of your
+  already-built surrogate.
+
+- :material-check-all: __Cross-validate__
+  Rigorous surrogate evaluation with explicit-seed sampling and honest
+  error metrics (RMSE, R²).
+
+- :material-dna: __Multi-objective optimization__
+  Find Pareto fronts with MOGA without leaving the Python API.
+
+- :material-filter: __Preprocess__
+  Normalize / rename training variables before fit and inverse-transform
+  after, via `DataPreprocessor`.
+
+- :material-book-open-page-variant: __Worked examples__
+  Real Dakota fits validated against closed-form analytical solutions, with
+  figures.
+
+</div>
+
+---
+
+**Verification & Validation:** the full pipeline is verified against known
+analytical solutions — available on request: [current report](verification-validation.md).

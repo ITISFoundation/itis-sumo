@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" role="img" aria-label="itis-sumo">
+  <g transform="translate(20,20)">
+    <ellipse rx="12" ry="5.5" fill="#0190d0" opacity="0.9" transform="rotate(0)"/>
+    <ellipse rx="12" ry="5.5" fill="#7280f5" opacity="0.9" transform="rotate(45)"/>
+    <ellipse rx="12" ry="5.5" fill="#0190d0" opacity="0.9" transform="rotate(90)"/>
+    <ellipse rx="12" ry="5.5" fill="#7280f5" opacity="0.9" transform="rotate(135)"/>
+    <circle r="3.2" fill="#ffffff"/>
+  </g>
+  <text x="46" y="27" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="700" fill="#0190d0">Su<tspan fill="#7280f5">Mo</tspan></text>
+</svg>

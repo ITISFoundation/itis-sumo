@@ -118,7 +118,7 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
 
     rng = np.random.default_rng(SEED)
     x_train = rng.uniform(-np.pi, np.pi, size=(300, 3))
-    train_raw = pd.DataFrame(x_train, columns=["x1", "x2", "x3"])
+    train_raw = pd.DataFrame(x_train, columns=pd.Index(["x1", "x2", "x3"]))
     train_raw["y"] = ishigami(x_train)
 
     preprocessor = DataPreprocessor()
@@ -128,17 +128,17 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
         preprocessor.transform(train_raw), run_dir / "sobol_train_processed.txt"
     )
 
-    distributions = {
-        "x1": {"distribution": "uniform", "min": -np.pi, "max": np.pi},
-        "x2": {"distribution": "uniform", "min": -np.pi, "max": np.pi},
-        "x3": {"distribution": "uniform", "min": -np.pi, "max": np.pi},
+    sampling = {
+        "x1": {"minimum": -np.pi, "maximum": np.pi},
+        "x2": {"minimum": -np.pi, "maximum": np.pi},
+        "x3": {"minimum": -np.pi, "maximum": np.pi},
     }
     sobol = evaluate_sobol_indices(
         run_dir,
         train_file,
         ["x1", "x2", "x3"],
         "y1",
-        distributions,
+        sampling,
         preprocessor,
         seed=SEED,
     )["sobol"]

@@ -3,6 +3,10 @@
 **Goal:** find out which inputs actually drive an output's variance, so you
 know where to spend sampling budget and which variables are safe to fix.
 
+!!! info "Key concept"
+    Sobol' indices decompose output variance into per-input contributions —
+    so you know where to spend sampling budget and which variables are safe to fix.
+
 Assumes a fitted preprocessor and a training file in the shape
 [Getting started](../tutorials/getting-started.md) builds.
 
@@ -11,33 +15,43 @@ Assumes a fitted preprocessor and a training file in the shape
 ```python
 from itis_sumo.evaluate.funs_evaluate import evaluate_sobol_indices
 
-distributions = {
-    "length": {"distribution": "uniform", "min": 0.0, "max": 1.0},
-    "width": {"distribution": "uniform", "min": 0.0, "max": 1.0},
+sampling = {
+    "length": {"minimum": 0.0, "maximum": 1.0},
+    "width": {"minimum": 0.0, "maximum": 1.0},
 }
 result = evaluate_sobol_indices(
-    run_dir, training_file, ["length", "width"], "y1", distributions, preprocessor, seed=42,
+    run_dir,
+    training_file,
+    ["length", "width"],
+    "y1",
+    sampling,
+    preprocessor,
+    seed=42,
 )
-sobol = result["sobol"]              # {var: {"main", "total", "main_ci_low", ...}}
+sobol = result["sobol"]  # {var: {"main", "total", "main_ci_low", ...}}
 second_order = result["sobolSecondOrder"]  # {varA: {varB: float}}
+masses = result["sobolOrderContributions"]  # M1/M2/R order masses or None
 
 for var, indices in sobol.items():
     print(var, indices["main"], indices["total"])
 ```
 
-`distributions` needs one entry per name in `input_vars`, each shaped as one
-of:
+`sampling` needs one entry per name in `input_vars`, each shaped as one
+of (domain vocabulary only — V26dd: the sensitivity box is a DOMAIN, modeller
+distributions belong to `evaluate_uncertainty`, never here):
 
-- `{"distribution": "uniform", "min": ..., "max": ...}`
-- `{"distribution": "normal", "mean": ..., "std": ...}`
-- `{"distribution": "constant", "value": ...}` — held fixed; contributes zero
-  variance and is excluded from the sampling budget
+- `{"minimum": ..., "maximum": ...}` — sampled uniformly across the box
+- `{"minimum": ..., "maximum": ..., "log_scale": True}` — log-uniform draw
+  (box must be strictly positive)
+- `{"value": ...}` — held fixed; contributes zero variance and is excluded
+  from the sampling budget
 
-Costs `SOBOL_BASE_SAMPLES * (d_varying + 2)` surrogate evaluations
-(`SOBOL_BASE_SAMPLES = 1024`), where `d_varying` is the number of
-non-constant inputs — set variables you don't care about to `"constant"`
-rather than leaving them `"uniform"` with a narrow range, since that cost
-scales with count, not width.
+Costs `SOBOL_BASE_SAMPLES * (2 + d + d·(d−1))` surrogate evaluations
+(`SOBOL_BASE_SAMPLES = 1024`), where `d` is the number of varying inputs —
+the `d·(d−1)` term is the exact joint-pair second-order design, the
+documented price of interactions that are EXACT for any input count. Set
+variables you don't care about to `{"value": ...}` rather than leaving them
+as boxes with a narrow range, since cost scales with count, not width.
 
 ## Reading the indices
 
@@ -56,9 +70,15 @@ scales with count, not width.
   evaluations (no extra surrogate cost). Treat a `main` index as
   indistinguishable from zero if its CI straddles zero.
 - **`sobolSecondOrder`** — pairwise interaction variance between two
-  variables, `{varA: {varB: value}}`. Useful once `total - main` flags a
+  variables, `{varA: {varB: value}}`, from the EXACT joint-pair estimator
+  (valid for any input count). Useful once `total - main` flags a
   variable as interaction-driven and you want to know *with which other
   variable*.
+- **`sobolOrderContributions`** — the unique ANOVA order masses
+  `first_order` (M1), `second_order` (M2) and the closure residual
+  `third_and_higher` (R = 1 − M1 − M2), each with a shared-bootstrap CI and a
+  rough `heuristic_noise_floor`; `None` when the output variance is zero
+  (there is no partition to report).
 
 ## Propagate input uncertainty to output uncertainty
 

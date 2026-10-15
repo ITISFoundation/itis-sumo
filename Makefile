@@ -1,4 +1,4 @@
-.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck validate clean
+.PHONY: help sync docs-serve docs-serve-docker docs-build docs-figures docs-forward test lint format typecheck prek pre-commit validate publish-testpypi-dev clean
 
 DOCS_PORT := 7777
 
@@ -14,7 +14,9 @@ help:
 	@echo "  lint          - run ruff check"
 	@echo "  format        - run ruff format"
 	@echo "  typecheck     - run ty check"
+	@echo "  prek          - run all commit-time hooks (ruff + ty + file hygiene) on the whole repo"
 	@echo "  validate      - run itis-sumo's Dakota engine probe"
+	@echo "  publish-testpypi-dev - create and upload next .devN release to TestPyPI"
 	@echo "  clean         - remove build artifacts (site/, dist/, __pycache__)"
 
 sync:
@@ -64,8 +66,29 @@ format:
 typecheck:
 	uv run ty check
 
+prek:
+	uvx prek run --all-files
+
+pre-commit: prek ## backward-compatible alias for prek
+
 validate:
 	uv run itis-sumo validate
+
+
+publish-testpypi-dev:
+	@test -f .env || { echo "Create .env with TESTPYPI_TOKEN=pypi-..."; exit 1; }
+	@test -z "$$(git status --porcelain)" || { echo "Commit or stash changes before publishing"; exit 1; }
+	@set -e; \
+	 backup=$$(mktemp); \
+	 cp pyproject.toml "$$backup"; \
+	 trap 'status=$$?; cp "$$backup" pyproject.toml; rm -f "$$backup"; exit "$$status"' EXIT; \
+	 set -a; . ./.env; set +a; test -n "$$TESTPYPI_TOKEN" || { echo "Set TESTPYPI_TOKEN in .env"; exit 1; }; \
+		 version=$$(uv run --no-project --with packaging python scripts/dev_version.py --write); \
+	 echo "Publishing $$version to TestPyPI"; \
+	 rm -rf dist/; \
+	 uv build; \
+	 uvx twine check dist/*; \
+	 uv publish --index testpypi -t $$TESTPYPI_TOKEN
 
 clean:
 	rm -rf site/ dist/

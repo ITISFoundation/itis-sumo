@@ -20,7 +20,9 @@ Examples:
         """,
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    validate_parser = subparsers.add_parser("validate", help="Validate Dakota installation")
+    validate_parser = subparsers.add_parser(
+        "validate", help="Validate Dakota installation"
+    )
     validate_parser.add_argument(
         "--config",
         metavar="PATH",

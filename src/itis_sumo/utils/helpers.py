@@ -75,7 +75,7 @@ def get_dakota_version() -> str | None:
         import itis_dakota
 
         if hasattr(itis_dakota, "__version__"):
-            return itis_dakota.__version__  # type: ignore
+            return itis_dakota.__version__
         else:
             # Try to get version using importlib.metadata
             try:

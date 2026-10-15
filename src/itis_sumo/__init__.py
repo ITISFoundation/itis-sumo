@@ -5,7 +5,9 @@ modules plus recycled utilities from previous trials, as a standalone,
 importable, headless package.
 """
 
-from itis_sumo._version import __version__
+from importlib.metadata import version as package_version
+
+__version__ = package_version("itis-sumo")
 from itis_sumo.core.dakota_object import DakotaObject, working_directory
 from itis_sumo.core.wiofiles import capture_to_file
 

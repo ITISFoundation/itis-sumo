@@ -2,8 +2,12 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: develop
     schedule:
       interval: weekly
+      day: monday
+      time: "03:00"
+      timezone: Europe/Zurich
     groups:
       github-actions:
         patterns:
@@ -11,12 +15,18 @@ updates:
 
   - package-ecosystem: uv
     directory: "/"
+    target-branch: develop
     schedule:
       interval: weekly
+      day: monday
+      time: "03:00"
+      timezone: Europe/Zurich
     groups:
       python-dependencies:
         patterns:
           - "*"
-    # Temporary: remove once the dependency is up to date and verified.
+    # Engine bumps are a wheel-matrix decision (py floor, platform wheels,
+    # R5-shim re-verification on the real wheel — SPEC V20qx), not a bot
+    # auto-bump. Active engine task: T55kd.
     ignore:
       - dependency-name: "itis-dakota"
