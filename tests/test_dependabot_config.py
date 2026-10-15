@@ -1,8 +1,9 @@
 """Regression tests for SPEC.md V19nd/V20qx: Dependabot policy is explicit.
 
 Each ecosystem must produce one grouped weekly update on Monday at 03:00 in
-the repository's explicit timezone. The known itis-dakota incompatibility
-must remain ignored and tracked until the modernization task resolves it.
+the repository's explicit timezone. `itis-dakota` stays permanently ignored —
+engine bumps are a human wheel-matrix decision (V20qx), tracked by the
+currently active engine task.
 """
 
 import re
@@ -52,5 +53,8 @@ def test_v20qx_itis_dakota_ignore_is_documented_and_tracked():
     content = CONFIG.read_text()
 
     assert 'dependency-name: "itis-dakota"' in content
-    assert "T16mo" in content
-    assert "interface-cache regression" in content
+    # V20qx (amended T55kd): the reason must name the active constraint (the
+    # wheel-matrix decision) and reference the currently active engine task —
+    # the retired T16mo ladder reference would be a stale tracker.
+    assert "T55kd" in content
+    assert "wheel-matrix" in content

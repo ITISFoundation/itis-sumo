@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Literal, TypeVar, overload
+from typing import Any, Literal, overload
 
 import numpy as np
 import pandas as pd
@@ -751,9 +751,6 @@ def auto_select_distributions(
     return distributions, diagnostics
 
 
-T = TypeVar("T")
-
-
 @overload
 def sanitize_varnames(input_data: str) -> str: ...
 
@@ -763,7 +760,7 @@ def sanitize_varnames(input_data: list[str]) -> list[str]: ...
 
 
 @overload
-def sanitize_varnames(input_data: dict[str, T]) -> dict[str, T]: ...
+def sanitize_varnames[T](input_data: dict[str, T]) -> dict[str, T]: ...
 
 
 @overload

@@ -11,16 +11,19 @@ pure computation on top of the Dakota wheel.
 
 ## Engine
 
-- Runtime engine = the **PyPI wheel `itis-dakota==1.5.9`** (Dakota 6.20), pinned for
-  exact parity with the mmux/vite flaskapi engine, on **Python 3.10-3.13** (3.10-3.12 currently install; 3.13 is exercised as a compatibility warning until itis-dakota publishes cp313 wheels).
+- Runtime engine = the **PyPI wheel `itis-dakota==6.24.13`** (Dakota 6.24), on
+  **Python 3.12-3.14**, Linux, macOS **and Windows** (first `itis-dakota` release with
+  `win_amd64` wheels; engine parity with mmux/vite is now a process, not a version — the
+  consumer may anchor on 1.5.11, see SPEC §C py).
 - The in-repo `itis-dakota/` checkout is the IT'IS Dakota fork, kept **for reference
   only** — this package consumes the pre-built wheels published to PyPI and
   **does not build the fork**.
 - Engine calls happen through `dakota.environment.study(input_string=...)` executed
-  inside a `ProcessPoolExecutor`; the package never shells out to a `dakota` binary.
+  inside a `ProcessPoolExecutor` with an explicit start-method context (fork on POSIX,
+  spawn on Windows — SPEC V50gm); the package never shells out to a `dakota` binary.
 - Engine caveats, the wheel-build process, and the 6.23+ `Interface::interface_cache`
-  regression (why we stay on 1.5.9) are documented in
-  [`DAKOTA-STUBS.md`](DAKOTA-STUBS.md), including the T16mo upgrade ladder.
+  regression (still upstream; shimmed in-repo via `add_r5_interface_cache_workaround()`)
+  are documented in [`DAKOTA-STUBS.md`](DAKOTA-STUBS.md).
 
 ## Provenance
 
@@ -37,8 +40,8 @@ deliberately not ported, and what remains as porting candidates — is in
 ## Install & verify
 
 ```sh
-uv sync                          # Python 3.10-3.12 currently resolve itis-dakota==1.5.9
-uv run itis-sumo validate        # engine probe (expect: Version 1.5.9)
+uv sync                          # Python 3.12-3.14; resolves itis-dakota==6.24.13
+uv run itis-sumo validate        # engine probe (expect: Version 6.24.13)
 uv run pytest                    # 123 tests, standalone
 uv run python examples/headless_smoke.py   # surrogate -> CV -> Sobol
 ```

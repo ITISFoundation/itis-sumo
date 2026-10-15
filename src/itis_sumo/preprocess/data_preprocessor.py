@@ -581,7 +581,7 @@ class DataPreprocessor:
         if not self._is_fitted:
             raise ValueError("Preprocessor must be fitted before saving config")
 
-        from datetime import datetime, timezone
+        from datetime import UTC, datetime
 
         config = PreprocessorConfig(
             input_variables={
@@ -590,7 +590,7 @@ class DataPreprocessor:
             output_variables={
                 name: config for name, config in self.output_variables.items()
             },
-            created_timestamp=datetime.now(timezone.utc).isoformat(),
+            created_timestamp=datetime.now(UTC).isoformat(),
         )
 
         config_dict = asdict(config)

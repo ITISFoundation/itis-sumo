@@ -4,12 +4,12 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.1.0a11"
+version = "0.1.0a12"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
-# T16mo rung 1 (1.5.9->1.5.11): 1.5.11 ships cp313 wheels, so the <3.13
-# ceiling from the 1.5.9-only wheel matrix no longer applies.
-requires-python = ">=3.10,<3.14"
+# T55kd: the 6.24.13 engine wheel matrix is cp312-cp314 (6.24.8 dropped cp311,
+# cp314 wheels exist only in 6.24.x) -> floor 3.12, ceiling lifted for 3.14.
+requires-python = ">=3.12,<3.15"
 license = { file = "LICENSE" }
 authors = [
     { name = "Javier Garcia Ordonez", email = "ordonez@itis.swiss" },
@@ -19,26 +19,30 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-    # T16mo rung 2: itis-dakota==6.24.7 (Dakota 6.24). The 1.5.x line wrapped
-    # Dakota 6.20; the package renumbered to track Dakota's version. Bumps the
-    # engine a full minor (6.20 -> 6.24). 6.24.7 is the latest 6.24.x that still
-    # ships cp311 wheels, so itis-sumo keeps its Python 3.11 primary (parity
-    # with mmux/vite); 6.24.8+ dropped cp311. The 6.23+ `interface_cache` regression
-    # (SPEC §R5) on pure data-fit surrogate confs is shimmed in itis-sumo via
-    # `add_r5_interface_cache_workaround()` in config/funs_create_dakota_conf.py
-    # (no-op fork interface so the ctor's cache lookup succeeds), rather than
-    # waiting on the upstream get-or-create fix.
-    "itis-dakota==6.24.7",
+    # T55kd: itis-dakota==6.24.7 -> 6.24.13. First 6.24.x shipping win_amd64
+    # wheels (6.24.13, 2026-10-06) -> Windows is a supported platform; same
+    # Dakota 6.24 engine line, packaging/fix releases since .7. Crosses the
+    # 6.24.8 cp311 drop: py floor 3.11 -> 3.12 (SPEC §C py; mmux/vite parity
+    # re-anchored to 1.5.11, owner call 2026-10-14). The 6.23+ `interface_cache`
+    # regression (SPEC §R5) is still upstream in 6.24.13 (`.at()` throw, not the
+    # pending get-or-create fix) and stays shimmed in-repo via
+    # `add_r5_interface_cache_workaround()` in config/funs_create_dakota_conf.py;
+    # shim re-verified on the real wheel: analytical suite 26/26 on py3.14.
+    "itis-dakota==6.24.13",
     "numpy>=2.0,<3.0",
     "pandas>=2.2,<3.0",
     "pydantic>=2.0,<3.0",
     "scikit-learn>=1.6,<2.0",
     "scipy>=1.15,<2.0",
-    "typing-extensions>=4.0; python_version < '3.11'",
 ]
 
 [project.urls]
@@ -58,7 +62,6 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.16.3",
     "ty>=0.0.72",
-    "tomli>=2.0",
 ]
 docs = [
     "mkdocs>=1.6,<2.0",

@@ -1,7 +1,7 @@
 # Algorithms overview
 
-itis-sumo wraps the [Dakota](https://dakota.sandia.gov/) 6.20 engine (via the
-`itis-dakota==1.5.9` PyPI wheel) behind a Python API. Every "algorithm" here
+itis-sumo wraps the [Dakota](https://dakota.sandia.gov/) 6.24 engine (via the
+`itis-dakota==6.24.13` PyPI wheel) behind a Python API. Every "algorithm" here
 is really a **NIDR config composer** (build the Dakota input block as a
 string) paired with a **run + parse** step (execute the wheel, read back its
 tabular/results output as a DataFrame). No Dakota binary is ever shelled
