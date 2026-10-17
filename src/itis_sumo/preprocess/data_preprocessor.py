@@ -548,14 +548,6 @@ class DataPreprocessor:
 
         return denormalized.tolist()
 
-    def get_variable_mapping(self) -> dict[str, str]:
-        mapping = {}
-        for var_name, config in self.input_variables.items():
-            mapping[var_name] = config.mapped_name
-        for var_name, config in self.output_variables.items():
-            mapping[var_name] = config.mapped_name
-        return mapping
-
     def get_inverse_mapping(self) -> dict[str, str]:
         mapping = {}
         for var_name, config in self.input_variables.items():
