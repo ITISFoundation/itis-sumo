@@ -65,29 +65,6 @@ def validate_dakota_installation() -> dict[str, Any]:
     return result
 
 
-def get_dakota_version() -> str | None:
-    """Get the ITIS Dakota version string.
-
-    Returns:
-        ITIS Dakota version string or None if not available
-    """
-    try:
-        import itis_dakota
-
-        if hasattr(itis_dakota, "__version__"):
-            return itis_dakota.__version__
-        else:
-            # Try to get version using importlib.metadata
-            try:
-                import importlib.metadata
-
-                return importlib.metadata.version("itis-dakota")
-            except importlib.metadata.PackageNotFoundError:
-                return None
-    except ImportError:
-        return None
-
-
 def create_run_dir(script_dir: Path, dir_name: str = "sampling"):
     """Create a unique timestamped run directory under ``script_dir/runs``."""
     main_runs_dir = script_dir / "runs"
