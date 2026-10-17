@@ -398,11 +398,9 @@ def create_grid_samples(
     cut_values: list[float],
     maxs: list[float],
     n_points_per_dimension: list[int],
-    downscaling_factor: float | None = None,
-    gridpoints_file_name: str = "grid_input.csv",
 ) -> Path:
     """Generate grid points (either for sampling, or to evaluate the SuMo upon and display)"""
-    GRIDPOINTS_INPUT_FILE = run_dir / gridpoints_file_name
+    GRIDPOINTS_INPUT_FILE = run_dir / "grid_input.csv"
     if len(input_vars) != len(n_points_per_dimension):
         raise ValueError(
             "Number of variables must match number of points per dimension."
@@ -413,11 +411,6 @@ def create_grid_samples(
         raise ValueError("Number of variables must match number of maxs.")
     if len(input_vars) < 1:
         raise ValueError("At least one variable is required to generate a grid.")
-
-    if downscaling_factor is not None:
-        n_points_per_dimension = [
-            int(np.ceil(n / downscaling_factor)) for n in n_points_per_dimension
-        ]
 
     input_vars = sanitize_varnames(input_vars)
     grid_vars = sanitize_varnames(grid_vars)
