@@ -7,8 +7,6 @@ import pytest
 from itis_sumo.data.tabular import (
     create_grid_samples,
     create_samples_along_axes,
-    get_non_dominated_indices,
-    is_dominated,
     load_data,
 )
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
@@ -356,78 +354,3 @@ class TestNormalizationInvariants:
 # DEFERRED: Pareto Dominance Invariants (formerly P1) — not this round,
 # see docs/TIER1_TIER2_UNIT_TESTS_PLAN.md
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
-class TestParetoDominance:
-    def test_irreflexivity_self_dominated(self):
-        """is_dominated uses `>=`, so a point IS dominated by itself (reflexive).
-
-        This is a known behavior of the implementation: `all(a >= a)` is True for
-        any point, meaning the function treats self-comparison as domination.
-        We test the actual (reflexive) behavior here.
-        """
-        a = np.array([1.0, 2.0, 3.0])
-        assert is_dominated(a, [a]) is True
-
-    def test_asymmetry(self):
-        """If a dominates b in the is_dominated sense (a >= b in all dims),
-        then b does NOT dominate a."""
-        a = np.array([2.0, 3.0])
-        b = np.array([1.0, 2.0])
-        # is_dominated(a, [b]) checks a >= b → [True, True] → True
-        assert is_dominated(a, [b]) is True
-        # is_dominated(b, [a]) checks b >= a → [False, False] → False
-        assert is_dominated(b, [a]) is False
-
-    def test_asymmetry_strict(self):
-        """For strictly unequal points where one dominates, the reverse is false."""
-        a = np.array([5.0, 5.0, 5.0])
-        b = np.array([1.0, 1.0, 1.0])
-        assert is_dominated(a, [b]) is True
-        assert is_dominated(b, [a]) is False
-
-    def test_transitivity_on_dominance(self):
-        """If a dominates b and b dominates c, then a dominates c."""
-        a = np.array([3.0, 3.0])
-        b = np.array([2.0, 2.0])
-        c = np.array([1.0, 1.0])
-        assert is_dominated(a, [b]) is True
-        assert is_dominated(b, [c]) is True
-        assert is_dominated(a, [c]) is True
-
-    def test_non_dominated_output_no_dominated_pairs(self):
-        """No two points in the non-dominated set should dominate each other."""
-        df = pd.DataFrame(
-            {"x": [1.0, 2.0, 3.0, 0.5, 1.5], "y": [3.0, 2.0, 1.0, 0.5, 2.5]}
-        )
-
-        indices = get_non_dominated_indices(df, ["x", "y"], ["min", "min"])
-        nd_points = df.loc[indices, ["x", "y"]].values
-        for i, p in enumerate(nd_points):
-            others = [q for j, q in enumerate(nd_points) if j != i]
-            if others:
-                assert not is_dominated(p, others), (
-                    f"Non-dominated point {p} is dominated by another in the set"
-                )
-
-    def test_non_dominated_completeness(self):
-        """All non-dominated points must appear in the output."""
-        df = pd.DataFrame({"x": [1.0, 2.0, 3.0, 10.0], "y": [10.0, 3.0, 2.0, 1.0]})
-        indices = get_non_dominated_indices(df, ["x", "y"], ["min", "min"])
-        nd_set = set(indices)
-        data_np = df[["x", "y"]].values
-        for i, point in enumerate(data_np):
-            others = np.delete(data_np, i, axis=0)
-            if not is_dominated(point, others):
-                assert i in nd_set, (
-                    f"Point {point} at index {i} is truly non-dominated but missing from output"
-                )
-
-    def test_non_dominated_with_max_mode(self):
-        """Non-dominance works correctly when optimization mode is 'max'."""
-        df = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [3.0, 2.0, 1.0]})
-        indices = get_non_dominated_indices(df, ["x", "y"], ["max", "max"])
-        nd_points = df.loc[indices, ["x", "y"]].values
-        for i, p in enumerate(nd_points):
-            others = [q for j, q in enumerate(nd_points) if j != i]
-            if others:
-                assert not is_dominated(p, others)

@@ -23,8 +23,6 @@ from itis_sumo.data.tabular import (
     create_samples_along_axes,
     get_bounds_uniform_distribution,
     get_bounds_uniform_distributions,
-    get_non_dominated_indices,
-    is_dominated,
 )
 from itis_sumo.evaluate.sumo_evaluation import _parse_crossvalidation_outputlogs
 from itis_sumo.sampling.lhs import lhs
@@ -589,89 +587,7 @@ class TestFilterData:
 # DEFERRED: MOGA / Pareto (not this round — see docs/TIER1_TIER2_UNIT_TESTS_PLAN.md)
 # ---------------------------------------------------------------------------
 @pytest.mark.unit
-class TestIsDominated:
-    def test_dominated_returns_true(self):
-        point = np.array([3, 4])
-        others = np.array([[1, 2]])
-        assert is_dominated(point, others) is True
-
-    def test_not_dominated_returns_false(self):
-        point = np.array([1, 2])
-        others = np.array([[3, 4]])
-        assert is_dominated(point, others) is False
-
-    def test_self_dominance_returns_true(self):
-        point = np.array([1, 2])
-        others = np.array([[1, 2]])
-        assert is_dominated(point, others) is True
-
-    def test_multi_objective_dominated(self):
-        point = np.array([2, 3])
-        others = np.array([[1, 1]])
-        assert is_dominated(point, others) is True
-
-    def test_multi_objective_not_dominated(self):
-        point = np.array([1, 5])
-        others = np.array([[5, 1]])
-        assert is_dominated(point, others) is False
-
-    def test_multiple_others_one_dominates(self):
-        point = np.array([3, 4])
-        others = np.array([[5, 5], [1, 2], [4, 1]])
-        assert is_dominated(point, others) is True
-
-    def test_multiple_others_none_dominates(self):
-        point = np.array([1, 3])
-        others = np.array([[3, 1], [2, 2]])
-        assert is_dominated(point, others) is False
-
-
 @pytest.mark.unit
-class TestGetNonDominatedIndices:
-    def test_known_2d_front_minimization(self):
-        df = pd.DataFrame({"f1": [1, 2, 3, 4, 5], "f2": [3, 1, 2, 4, 5]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["min", "min"])
-        assert sorted(result) == [0, 1]
-
-    def test_all_points_on_front(self):
-        df = pd.DataFrame({"f1": [1, 2, 3], "f2": [3, 2, 1]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["min", "min"])
-        assert sorted(result) == [0, 1, 2]
-
-    def test_single_point(self):
-        df = pd.DataFrame({"f1": [1.0], "f2": [2.0]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["min", "min"])
-        assert result == [0]
-
-    def test_maximization_sign_flip(self):
-        df = pd.DataFrame({"f1": [5, 4, 3, 2, 1], "f2": [5, 4, 3, 2, 1]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["max", "max"])
-        assert result == [0]
-
-    def test_sort_by_column(self):
-        df = pd.DataFrame(
-            {
-                "f1": [1, 2, 3, 4, 5],
-                "f2": [3, 1, 2, 4, 5],
-            }
-        )
-        result = get_non_dominated_indices(
-            df, ["f1", "f2"], ["min", "min"], sort_by_column="f1"
-        )
-
-        assert list(result) == [0, 1]
-
-    def test_mismatched_modes_raises(self):
-        df = pd.DataFrame({"f1": [1], "f2": [2]})
-        with pytest.raises(ValueError, match="must match"):
-            get_non_dominated_indices(df, ["f1", "f2"], ["min"])
-
-    def test_invalid_mode_raises(self):
-        df = pd.DataFrame({"f1": [1], "f2": [2]})
-        with pytest.raises(ValueError, match="not recognized"):
-            get_non_dominated_indices(df, ["f1", "f2"], ["min", "invalid"])  # ty: ignore[invalid-argument-type]
-
-
 @pytest.mark.unit
 class TestMogaConfigGeneration:
     def test_create_moga_optimization_has_all_blocks(self, tmp_path):

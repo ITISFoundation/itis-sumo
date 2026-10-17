@@ -819,51 +819,6 @@ sanitize_varnames_dict = sanitize_varnames  # For dictionary input
 sanitize_varnames_df = sanitize_varnames  # For DataFrame input
 
 
-def is_dominated(point: np.ndarray, other_points: Sequence[np.ndarray] | np.ndarray):
-    return any(all(point >= other) for other in other_points)
-
-
-def get_non_dominated_indices(
-    data: pd.DataFrame,
-    optimized_vars: list[str],
-    optimization_modes: list[Literal["min", "max"]] | None = None,
-    sort_by_column: str | None = None,
-) -> list[int]:
-    data = data[optimized_vars].copy()
-    data = data.apply(
-        pd.to_numeric, errors="coerce"
-    )  ## bfr they were "np.object_" and was giving weird comparison results
-
-    ## extract to separate function; unify with interface of MinimizationModel
-    if optimization_modes:
-        if len(optimized_vars) != len(optimization_modes):
-            raise ValueError(
-                "The number of optimized variables and optimization modes must match"
-            )
-        for var, mode in zip(optimized_vars, optimization_modes):
-            if mode == "max":
-                data[var] = -data[var]
-            elif mode == "min":
-                pass
-            else:
-                raise ValueError(
-                    f"Optimization mode {mode} not recognized. Only 'min' and 'max' are allowed"
-                )
-
-    non_dominated_indices = []
-    for i, point in data.iterrows():
-        if not is_dominated(point.values, data.drop(i).values):
-            non_dominated_indices.append(i)
-
-    if sort_by_column:
-        sorted_indices = (
-            data.loc[non_dominated_indices].sort_values(by=sort_by_column).index.values
-        )
-        return list(sorted_indices)
-    else:
-        return non_dominated_indices
-
-
 def get_bounds_uniform_distributions(
     input_vars: list[str], distributions: dict[str, dict[str, float | str]]
 ) -> tuple[list[float], list[float]]:
