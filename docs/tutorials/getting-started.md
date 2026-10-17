@@ -78,12 +78,16 @@ why itis-sumo uses one: [How Gaussian Processes work](../explanation/gaussian-pr
 ## 5. How good is it? Cross-validate
 
 ```python
-from itis_sumo.evaluate.sumo_evaluation import evaluate_sumo_crossvalidation
+from itis_sumo.evaluate.sumo_evaluation import (
+    evaluate_sumo_manual_crossvalidation,
+    compute_cv_accuracy_metrics,
+)
 
-cv_metrics = evaluate_sumo_crossvalidation(
+cv = evaluate_sumo_manual_crossvalidation(
     run_dir, training_file, ["x1", "x2"], "y1", N_CROSS_VALIDATION=5
 )
-print(cv_metrics["y1"]["root_mean_squared"])
+metrics = compute_cv_accuracy_metrics(cv["y1"], cv["y1_hat"])
+print(metrics["root_mean_squared"])
 ```
 
 5-fold CV, held-out RMSE. This is the number that tells you whether to trust

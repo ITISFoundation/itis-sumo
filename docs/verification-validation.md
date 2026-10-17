@@ -229,10 +229,10 @@ Carried over from the original test plan, still true of the pinned engine
 - **Grid reshaping complexity for >2 dimensions** — `evaluate_sumo_on_grid`
   is verified for 2D grids; higher-dimensional grid reshaping is less
   exercised.
-- **`propagate_uq` (Dakota-native UQ)** is implemented and tested but not
-  the pathway actually wired to the web UI — see
+- **No Dakota-native UQ propagation** — the `propagate_uq` chain was dead
+  on every real pathway and has been removed (ponytail A4). UQ for web-UI
+  traffic is the manual composition — see
   [Evaluate § Uncertainty propagation](reference/evaluate.md#uncertainty-propagation).
-  Don't assume it's the one production traffic exercises.
 
 ## Summary
 

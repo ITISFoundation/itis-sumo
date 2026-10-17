@@ -28,10 +28,12 @@ metrics = compute_cv_accuracy_metrics(cv["y1"], cv["y1_hat"])
 print(metrics["root_mean_squared"], metrics["mean_abs"], metrics["max_abs"])
 ```
 
-!!! danger "Use the manual K-fold path"
-    Use `evaluate_sumo_manual_crossvalidation`, not `evaluate_sumo_crossvalidation`
-    (the Dakota-native pathway). Dakota's own CV log parsing has a known gap;
-    the manual K-fold numbers are independently verified end to end.
+!!! danger "The manual K-fold path is the only CV path"
+    The Dakota-native CV chain was removed as dead: its log-parsing had a
+    known gap (see
+    [known limitations](../verification-validation.md#known-limitations))
+    and it had no callers. These manual K-fold numbers are independently
+    verified end to end.
 
 ## Check for systematic bias
 

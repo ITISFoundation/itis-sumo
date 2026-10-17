@@ -56,15 +56,16 @@ for the reference values and current pass status.
 
 ## UQ propagation
 
-Two distinct pathways exist — see
-[Evaluate § Uncertainty propagation](evaluate.md#uncertainty-propagation)
-for which one is actually reachable from the web UI and which this site's
-verification suite exercises:
+One pathway is reachable from the web UI — see
+[Evaluate § Uncertainty propagation](evaluate.md#uncertainty-propagation);
+this site's verification suite exercises it:
 
-- `propagate_uq` — Dakota-native, normal-uncertain variables only.
 - Manual pathway — `create_manual_uq_samples` (normal / uniform / constant
   per variable, seeded) + `evaluate_sumo` + an erfinv-based injection of
   the surrogate's own predictive uncertainty into the propagated samples.
+
+(The Dakota-native `propagate_uq`, normal-uncertain only, was dead on every
+real path and has been removed.)
 
 Both are validated against closed-form output distributions for simple
 transforms (e.g. `y = 2x + 1, x ~ N(0,1) ⟹ y ~ N(1, 4)`;
