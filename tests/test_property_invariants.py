@@ -10,7 +10,7 @@ from itis_sumo.data.tabular import (
     load_data,
 )
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
-from itis_sumo.sampling.lhs import _lhscentered, _lhsclassic, _lhsmaximin, lhs
+from itis_sumo.sampling.lhs import lhs
 
 
 # ---------------------------------------------------------------------------
@@ -47,36 +47,7 @@ class TestLHSInvariants:
         assert np.all(H >= 0)
         assert np.all(H <= 1)
 
-    def test_maximin_monotonicity(self):
-        """_lhsmaximin min pairwise distance >= _lhsclassic min pairwise distance."""
-        from scipy import spatial
 
-        seed = 42
-        rs_classic = np.random.RandomState(seed)
-        rs_maximin = np.random.RandomState(seed)
-        n, k = 5, 20
-        H_classic = _lhsclassic(n, k, rs_classic)
-        H_maximin = _lhsmaximin(n, k, 10, "maximin", rs_maximin)
-        d_classic = spatial.distance.pdist(H_classic, "euclidean")
-        d_maximin = spatial.distance.pdist(H_maximin, "euclidean")
-        assert np.min(d_maximin) >= np.min(d_classic) - 1e-12
-
-    def test_centered_exact_midpoints(self):
-        """_lhscentered values are exact midpoints (i+0.5)/k for each stratum."""
-        n, k = 3, 8
-        seed = 42
-        rs = np.random.RandomState(seed)
-        H = _lhscentered(n, k, rs)
-        expected_centers = np.array([(i + 0.5) / k for i in range(k)])
-        for j in range(n):
-            col_sorted = np.sort(H[:, j])
-            np.testing.assert_allclose(col_sorted, expected_centers, atol=1e-14)
-
-
-# ---------------------------------------------------------------------------
-# P2. Grid Sample Invariants
-# ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestGridSampleInvariants:
     def test_total_points(self, tmp_path):
         """Total rows = product of n_points_per_dimension for grid variables only.

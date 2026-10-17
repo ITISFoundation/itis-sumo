@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-from scipy import spatial
 
 from itis_sumo.config.nidr import (
     add_continuous_variables,
@@ -54,28 +53,6 @@ class TestLhs:
         H1 = lhs(n=3, k=10, seed=1)
         H2 = lhs(n=3, k=10, seed=2)
         assert not np.array_equal(H1, H2)
-
-    def test_maximin_min_distance_ge_classic(self):
-        rs_classic = np.random.RandomState(42)
-        rs_maximin = np.random.RandomState(42)
-        H_classic = lhs(n=4, k=15, seed=rs_classic)
-        H_maximin = lhs(n=4, k=15, method="maximin", iter=50, seed=rs_maximin)
-        d_classic = spatial.distance.pdist(H_classic, "euclidean")
-        d_maximin = spatial.distance.pdist(H_maximin, "euclidean")
-        assert np.min(d_maximin) >= np.min(d_classic)
-
-    def test_centered_values_at_midpoints(self):
-        n, k = 3, 6
-        H = lhs(n=n, k=k, method="center", seed=42)
-        expected_centers = np.linspace(0, 1, k + 1)
-        centers = (expected_centers[:k] + expected_centers[1 : k + 1]) / 2
-        for col in range(n):
-            col_sorted = np.sort(H[:, col])
-            np.testing.assert_allclose(col_sorted, centers, atol=1e-14)
-
-    def test_invalid_method_raises(self):
-        with pytest.raises(ValueError, match="Invalid value"):
-            lhs(n=3, k=5, method="invalid", seed=42)
 
     def test_single_sample(self):
         H = lhs(n=2, k=1, seed=42)

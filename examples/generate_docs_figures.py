@@ -78,7 +78,7 @@ def fig_lhs_vs_random() -> None:
     """LHS vs. plain uniform random: LHS covers each 1D marginal stratum exactly once."""
     n = 25
     rng = np.random.default_rng(SEED)
-    lhs_pts = lhs(2, n, method="maximin", seed=SEED)
+    lhs_pts = lhs(2, n, seed=SEED)
     rand_pts = rng.uniform(0.0, 1.0, size=(n, 2))
 
     fig, axes = plt.subplots(1, 2, figsize=(8.5, 4.2), sharex=True, sharey=True)
