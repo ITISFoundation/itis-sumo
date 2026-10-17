@@ -1,6 +1,6 @@
 # Sampling
 
-`itis_sumo.sampling.lhs` and parts of `itis_sumo.data.funs_data_processing`
+`itis_sumo.sampling.lhs` and parts of `itis_sumo.data.tabular`
 generate the input points a surrogate is trained or evaluated on.
 
 ## Latin Hypercube Sampling (`sampling/lhs.py`)
@@ -32,7 +32,7 @@ stratification, value range, seed-reproducibility, and that the
 `maximin`/`correlate` variants actually improve on the classic baseline by
 their respective criteria.
 
-## Other sample generators (`data/funs_data_processing.py`)
+## Other sample generators (`data/tabular.py`)
 
 - `create_manual_uq_samples` — draws per-variable UQ samples (normal /
   uniform / constant distributions) via a seeded `np.random.Generator`;

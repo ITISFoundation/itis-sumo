@@ -103,7 +103,7 @@ This temporarily writes the next `.devN` version for the build, checks the packa
 
 ```
 src/itis_sumo/
-  core/       Dakota execution primitives (DakotaObject, wiofiles)
+  core/       Dakota execution primitives (DakotaObject, capture)
   config/     NIDR string composers (surrogate/MOGA/UQ confs)
   data/       data processing (healing, bounds, correlation, dominance)
   sampling/   LHS / manual-UQ / grid sampling

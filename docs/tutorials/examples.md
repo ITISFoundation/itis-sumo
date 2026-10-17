@@ -24,7 +24,7 @@ here is the actual shape of it. Nine training points sampled from
 `evaluate_sumo`, evaluated on a dense grid:
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sumo
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sumo
 
 # x_train: 9 points, y_train = sin(x_train), written as a Dakota training file
 result = evaluate_sumo(run_dir, train_file, eval_file, ["x"], "y")

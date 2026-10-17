@@ -55,8 +55,6 @@ Pure-Python, no Dakota involved — verifies the LHS implementation itself
 | Stratification | every 1D projection has exactly one sample per `[i/k, (i+1)/k)` | ✅ |
 | Value range | all values in `[0, 1]` | ✅ |
 | Reproducibility | same seed ⟹ identical output | ✅ |
-| Maximin | `_lhsmaximin` min pairwise distance ≥ `_lhsclassic` | ✅ |
-| Correlation | `_lhscorrelate` max off-diagonal correlation ≤ `_lhsclassic` | ✅ |
 | Marginal uniformity | empirical CDF ≈ uniform (KS test) for large k | ✅ |
 
 ## Category B: Surrogate Model Accuracy
@@ -86,11 +84,12 @@ Axis sweep, grid evaluation, and cross-validation — see
 | D — Grid evaluation | 2D grid predictions, dimension-consistency, fixed non-grid variables | ✅ |
 | E — Cross-validation | Manual K-fold CV metrics, convergence with more data, ~95% prediction-interval coverage | ✅ |
 
-**E4** (manual vs. built-in Dakota CV) documents a known discrepancy: the
-two pathways agree only to within ~20%, not exactly — this is the observed
-signature of the built-in-CV parsing gap in [known limitations](#known-limitations),
-not a bug in the manual path (which is the one whose absolute accuracy is
-independently verified by B1-B8-style checks).
+**E4** (manual vs. built-in Dakota CV) and the built-in pathway itself
+were retired together (ponytail A2): the ~20%-only agreement between the
+two was the observed signature of the built-in-CV parsing gap in
+[known limitations](#known-limitations), no src caller used the built-in
+chain, and the manual path's absolute accuracy is independently verified
+by B1-B8-style checks — so the comparison lost both inputs at once.
 
 ## Category F: UQ Propagation
 
@@ -215,10 +214,11 @@ Carried over from the original test plan, still true of the pinned engine
 (`itis-dakota==6.24.13`):
 
 - **Built-in Dakota CV parsing is unreliable** — `log_output` comes back
-  hardcoded empty on some study configurations, which is why
-  `evaluate_sumo_manual_crossvalidation` (Python-side K-fold) is the
-  correctness-verified cross-validation pathway, not
-  `evaluate_sumo_crossvalidation`.
+  hardcoded empty on some study configurations. The package's only CV
+  pathway is therefore `evaluate_sumo_manual_crossvalidation` (Python-side
+  K-fold, seeded-permutation folds); the built-in chain that parsed those
+  logs never had a src caller and was removed (ponytail A2), so the engine
+  quirk is recorded here for anyone tempted to reintroduce it.
 - **MOGA `max_function_evaluations` is not enforced** — deprecated
   parameter on the Dakota side; use iteration/generation controls instead.
 - **GP interpolation vs. approximation tradeoffs** — surrogate accuracy

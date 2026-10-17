@@ -63,7 +63,7 @@ makes one for you with a timestamp-scoped name.
 ## 4. Fit a surrogate and evaluate it
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sumo
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sumo
 
 preds = evaluate_sumo(run_dir, training_file, eval_samples_file, ["x1", "x2"], "y1")
 y_hat = preds["y1_hat"]  # posterior mean prediction at each eval point
@@ -78,7 +78,7 @@ why itis-sumo uses one: [How Gaussian Processes work](../explanation/gaussian-pr
 ## 5. How good is it? Cross-validate
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sumo_crossvalidation
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sumo_crossvalidation
 
 cv_metrics = evaluate_sumo_crossvalidation(
     run_dir, training_file, ["x1", "x2"], "y1", N_CROSS_VALIDATION=5
@@ -94,7 +94,7 @@ full recipe including R² and convergence checks.
 ## 6. Which inputs actually matter? Sobol' sensitivity
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sobol_indices
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sobol_indices
 
 sampling = {
     "length": {"minimum": 0.0, "maximum": 1.0},

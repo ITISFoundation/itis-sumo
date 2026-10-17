@@ -1,6 +1,6 @@
 # Config — NIDR string composers
 
-`itis_sumo.config.funs_create_dakota_conf` builds Dakota's NIDR
+`itis_sumo.config.nidr` builds Dakota's NIDR
 (Named Input, Reduced) input-file syntax as plain Python f-strings — no
 templating engine, no intermediate object model. This is deliberate (`V5ui`
 in [`SPEC.md`](../about/spec.md)): it's the proven, near-verbatim port of the

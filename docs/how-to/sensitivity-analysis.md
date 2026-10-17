@@ -13,7 +13,7 @@ Assumes a fitted preprocessor and a training file in the shape
 ## Compute Sobol' indices
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sobol_indices
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sobol_indices
 
 sampling = {
     "length": {"minimum": 0.0, "maximum": 1.0},

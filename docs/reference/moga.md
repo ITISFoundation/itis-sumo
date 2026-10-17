@@ -1,12 +1,12 @@
 # MOGA optimization
 
-`perform_moga_optimization` (`evaluate/funs_evaluate.py`) drives Dakota's
+`perform_moga_optimization` (`evaluate/sumo_evaluation.py`) drives Dakota's
 Multi-Objective Genetic Algorithm (MOGA) method
 (`create_moga_optimization_conffile` in `config/`) over one or more
 objective functions defined by a fitted surrogate, and returns the
 Pareto-optimal set.
 
-## Pareto-front support (`data/funs_data_processing.py`)
+## Pareto-front support (`data/tabular.py`)
 
 - `is_dominated` / `get_non_dominated_indices` — standard Pareto dominance
   check/filter, used both to validate MOGA's own output and (independently)

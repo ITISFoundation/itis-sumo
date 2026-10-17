@@ -6,7 +6,7 @@ GP surrogate included.
 
 ## Sobol' sensitivity indices
 
-`evaluate_sobol_indices` (`evaluate/funs_evaluate.py`) computes first-,
+`evaluate_sobol_indices` (`evaluate/sumo_evaluation.py`) computes first-,
 total-, and exact second-order Sobol' sensitivity indices plus ANOVA order
 masses for an already-built surrogate — **scipy-design, not Dakota-native**
 (`V9gh`): Dakota's own Sobol study type is not used; instead the module draws
