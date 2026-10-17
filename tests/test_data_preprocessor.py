@@ -50,43 +50,6 @@ class TestDataPreprocessor:
         assert restored_from_dict == expected
         assert restored_from_array == expected
 
-    def test_filtering_remaps_variable_names_and_summary(self):
-        preprocessor = DataPreprocessor()
-        preprocessor.setup_variables(["a", "b", "c"], ["out_1", "out_2"])
-        preprocessor.setup_normalization(input_normalizations={"b": "z_score"})
-        preprocessor.fit(
-            pd.DataFrame({"a": [1], "b": [2], "c": [3], "out_1": [4], "out_2": [5]})
-        )
-
-        preprocessor.filter_variables(
-            include_inputs=["b", "c"], include_outputs=["out_2"]
-        )
-        summary = preprocessor.get_summary()
-
-        assert preprocessor.get_variable_mapping() == {
-            "b": "x1",
-            "c": "x2",
-            "out_2": "y1",
-        }
-        assert summary["n_input_variables"] == 2
-        assert summary["n_output_variables"] == 1
-        assert summary["input_variables"]["b"]["normalize"] is True
-
-    def test_save_and_load_config_round_trip(self, tmp_path):
-        config_path = tmp_path / "preprocessor.json"
-        preprocessor = DataPreprocessor()
-        preprocessor.setup_variables(["alpha"], ["beta"])
-        preprocessor.setup_normalization(output_normalizations={"beta": "z_score"})
-        preprocessor.fit(pd.DataFrame({"alpha": [1.0, 2.0], "beta": [4.0, 6.0]}))
-        preprocessor.save_config(config_path)
-
-        loaded = DataPreprocessor().load_config(config_path)
-
-        assert loaded.get_variable_mapping() == {"alpha": "x1", "beta": "y1"}
-        assert loaded.output_variables["beta"].mean == 5.0
-
-
-class TestLogTransform:
     def test_log_output_round_trips_to_original_space(self):
         dataframe = pd.DataFrame(
             {"length": [1.0, 2.0, 3.0], "stress": [10.0, 100.0, 1000.0]}

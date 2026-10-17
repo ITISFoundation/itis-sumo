@@ -11,12 +11,9 @@ The class is designed to work with the existing _create_training_file_from_jobs 
 and maintain compatibility with the ML workflow pipeline.
 """
 
-import json
 import logging
-import re
-from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
-from pathlib import Path
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -39,16 +36,6 @@ class VariableConfig:
     min_val: float | None = None
     max_val: float | None = None
     normalization_method: str = "z_score"
-
-
-@dataclass
-class PreprocessorConfig:
-    """Complete configuration for the data preprocessor."""
-
-    input_variables: dict[str, VariableConfig]
-    output_variables: dict[str, VariableConfig]
-    created_timestamp: str
-    version: str = "1.0"
 
 
 class DataPreprocessor:
@@ -561,14 +548,6 @@ class DataPreprocessor:
 
         return denormalized.tolist()
 
-    def get_variable_mapping(self) -> dict[str, str]:
-        mapping = {}
-        for var_name, config in self.input_variables.items():
-            mapping[var_name] = config.mapped_name
-        for var_name, config in self.output_variables.items():
-            mapping[var_name] = config.mapped_name
-        return mapping
-
     def get_inverse_mapping(self) -> dict[str, str]:
         mapping = {}
         for var_name, config in self.input_variables.items():
@@ -577,184 +556,8 @@ class DataPreprocessor:
             mapping[config.mapped_name] = var_name
         return mapping
 
-    def save_config(self, file_path: str | Path) -> None:
-        if not self._is_fitted:
-            raise ValueError("Preprocessor must be fitted before saving config")
-
-        from datetime import UTC, datetime
-
-        config = PreprocessorConfig(
-            input_variables={
-                name: config for name, config in self.input_variables.items()
-            },
-            output_variables={
-                name: config for name, config in self.output_variables.items()
-            },
-            created_timestamp=datetime.now(UTC).isoformat(),
-        )
-
-        config_dict = asdict(config)
-
-        def convert_numpy_types(obj):
-            if isinstance(obj, dict):
-                return {k: convert_numpy_types(v) for k, v in obj.items()}
-            if isinstance(obj, list):
-                return [convert_numpy_types(v) for v in obj]
-            if isinstance(obj, np.integer):
-                return int(obj)
-            if isinstance(obj, np.floating):
-                return float(obj)
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-            return obj
-
-        config_dict = convert_numpy_types(config_dict)
-
-        with open(file_path, "w") as f:
-            json.dump(config_dict, f, indent=2)
-
-        _logger.info(f"Configuration saved to {file_path}")
-
-    def load_config(self, file_path: str | Path) -> "DataPreprocessor":
-        with open(file_path) as f:
-            config_dict = json.load(f)
-
-        self.input_variables = {}
-        for name, var_config in config_dict["input_variables"].items():
-            self.input_variables[name] = VariableConfig(**var_config)
-
-        self.output_variables = {}
-        for name, var_config in config_dict["output_variables"].items():
-            self.output_variables[name] = VariableConfig(**var_config)
-
-        self._is_fitted = True
-        _logger.info(f"Configuration loaded from {file_path}")
-        return self
-
     def fit_transform(self, data: pd.DataFrame | list[dict[str, Any]]) -> pd.DataFrame:
         return self.fit(data).transform(data)
-
-    def filter_variables(
-        self,
-        include_inputs: list[str] | None = None,
-        exclude_inputs: list[str] | None = None,
-        include_outputs: list[str] | None = None,
-        exclude_outputs: list[str] | None = None,
-        input_patterns: list[str] | None = None,
-        output_patterns: list[str] | None = None,
-        input_predicate: Callable[[str, VariableConfig], bool] | None = None,
-        output_predicate: Callable[[str, VariableConfig], bool] | None = None,
-    ) -> "DataPreprocessor":
-        filtered_inputs = self._filter_variable_group(
-            self.input_variables,
-            include_list=include_inputs,
-            exclude_list=exclude_inputs,
-            patterns=input_patterns,
-            predicate=input_predicate,
-            var_type="input",
-        )
-
-        filtered_outputs = self._filter_variable_group(
-            self.output_variables,
-            include_list=include_outputs,
-            exclude_list=exclude_outputs,
-            patterns=output_patterns,
-            predicate=output_predicate,
-            var_type="output",
-        )
-
-        self.input_variables = filtered_inputs
-        self.output_variables = filtered_outputs
-        self._remap_filtered_variables()
-
-        _logger.info(
-            f"Filtered variables: {len(self.input_variables)} inputs, {len(self.output_variables)} outputs"
-        )
-
-        return self
-
-    def _filter_variable_group(
-        self,
-        variables: dict[str, VariableConfig],
-        include_list: list[str] | None = None,
-        exclude_list: list[str] | None = None,
-        patterns: list[str] | None = None,
-        predicate: Callable[[str, VariableConfig], bool] | None = None,
-        var_type: str = "variable",
-    ) -> dict[str, VariableConfig]:
-        filtered_vars = {}
-
-        for var_name, config in variables.items():
-            should_include = True
-
-            if include_list is not None:
-                should_include = var_name in include_list
-            elif exclude_list is not None:
-                should_include = var_name not in exclude_list
-
-            if should_include and patterns is not None:
-                pattern_match = any(
-                    re.search(pattern, var_name) for pattern in patterns
-                )
-                should_include = pattern_match
-
-            if should_include and predicate is not None:
-                should_include = predicate(var_name, config)
-
-            if should_include:
-                filtered_vars[var_name] = config
-            else:
-                _logger.debug(f"Filtered out {var_type} variable: {var_name}")
-
-        return filtered_vars
-
-    def _remap_filtered_variables(self) -> None:
-        for i, (_, config) in enumerate(self.input_variables.items()):
-            config.mapped_name = f"x{i + 1}"
-
-        for i, (_, config) in enumerate(self.output_variables.items()):
-            config.mapped_name = f"y{i + 1}"
-
-    def filter_by_names(
-        self,
-        input_names: list[str] | None = None,
-        output_names: list[str] | None = None,
-        exclude: bool = False,
-    ) -> "DataPreprocessor":
-        if exclude:
-            return self.filter_variables(
-                exclude_inputs=input_names, exclude_outputs=output_names
-            )
-        return self.filter_variables(
-            include_inputs=input_names, include_outputs=output_names
-        )
-
-    def filter_by_patterns(
-        self,
-        input_patterns: list[str] | None = None,
-        output_patterns: list[str] | None = None,
-    ) -> "DataPreprocessor":
-        return self.filter_variables(
-            input_patterns=input_patterns, output_patterns=output_patterns
-        )
-
-    def filter_normalized_only(self) -> "DataPreprocessor":
-        return self.filter_variables(
-            input_predicate=lambda name, config: config.normalize,
-            output_predicate=lambda name, config: config.normalize,
-        )
-
-    def filter_non_normalized_only(self) -> "DataPreprocessor":
-        return self.filter_variables(
-            input_predicate=lambda name, config: not config.normalize,
-            output_predicate=lambda name, config: not config.normalize,
-        )
-
-    def get_filtered_variable_names(self) -> dict[str, list[str]]:
-        return {
-            "inputs": list(self.input_variables.keys()),
-            "outputs": list(self.output_variables.keys()),
-        }
 
     def get_summary(self) -> dict[str, Any]:
         summary = {

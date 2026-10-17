@@ -63,7 +63,7 @@ makes one for you with a timestamp-scoped name.
 ## 4. Fit a surrogate and evaluate it
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sumo
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sumo
 
 preds = evaluate_sumo(run_dir, training_file, eval_samples_file, ["x1", "x2"], "y1")
 y_hat = preds["y1_hat"]  # posterior mean prediction at each eval point
@@ -78,12 +78,16 @@ why itis-sumo uses one: [How Gaussian Processes work](../explanation/gaussian-pr
 ## 5. How good is it? Cross-validate
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sumo_crossvalidation
+from itis_sumo.evaluate.sumo_evaluation import (
+    evaluate_sumo_manual_crossvalidation,
+    compute_cv_accuracy_metrics,
+)
 
-cv_metrics = evaluate_sumo_crossvalidation(
+cv = evaluate_sumo_manual_crossvalidation(
     run_dir, training_file, ["x1", "x2"], "y1", N_CROSS_VALIDATION=5
 )
-print(cv_metrics["y1"]["root_mean_squared"])
+metrics = compute_cv_accuracy_metrics(cv["y1"], cv["y1_hat"])
+print(metrics["root_mean_squared"])
 ```
 
 5-fold CV, held-out RMSE. This is the number that tells you whether to trust
@@ -94,7 +98,7 @@ full recipe including R² and convergence checks.
 ## 6. Which inputs actually matter? Sobol' sensitivity
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import evaluate_sobol_indices
+from itis_sumo.evaluate.sumo_evaluation import evaluate_sobol_indices
 
 sampling = {
     "length": {"minimum": 0.0, "maximum": 1.0},

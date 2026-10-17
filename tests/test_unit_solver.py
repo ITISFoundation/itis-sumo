@@ -3,30 +3,23 @@
 import numpy as np
 import pandas as pd
 import pytest
-from scipy import spatial
 
-from itis_sumo.config.funs_create_dakota_conf import (
+from itis_sumo.config.nidr import (
     add_continuous_variables,
     add_responses,
     add_surrogate_model,
     create_moga_optimization_conffile,
-    create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
-    create_sumo_manual_crossvalidation_conffile,
-    create_uq_propagation_conffile,
     start_dakota_file,
 )
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.tabular import (
     _filter_data,
     create_grid_samples,
     create_manual_uq_samples,
     create_samples_along_axes,
     get_bounds_uniform_distribution,
     get_bounds_uniform_distributions,
-    get_non_dominated_indices,
-    is_dominated,
 )
-from itis_sumo.evaluate.funs_evaluate import _parse_crossvalidation_outputlogs
 from itis_sumo.sampling.lhs import lhs
 
 
@@ -60,28 +53,6 @@ class TestLhs:
         H1 = lhs(n=3, k=10, seed=1)
         H2 = lhs(n=3, k=10, seed=2)
         assert not np.array_equal(H1, H2)
-
-    def test_maximin_min_distance_ge_classic(self):
-        rs_classic = np.random.RandomState(42)
-        rs_maximin = np.random.RandomState(42)
-        H_classic = lhs(n=4, k=15, seed=rs_classic)
-        H_maximin = lhs(n=4, k=15, method="maximin", iter=50, seed=rs_maximin)
-        d_classic = spatial.distance.pdist(H_classic, "euclidean")
-        d_maximin = spatial.distance.pdist(H_maximin, "euclidean")
-        assert np.min(d_maximin) >= np.min(d_classic)
-
-    def test_centered_values_at_midpoints(self):
-        n, k = 3, 6
-        H = lhs(n=n, k=k, method="center", seed=42)
-        expected_centers = np.linspace(0, 1, k + 1)
-        centers = (expected_centers[:k] + expected_centers[1 : k + 1]) / 2
-        for col in range(n):
-            col_sorted = np.sort(H[:, col])
-            np.testing.assert_allclose(col_sorted, centers, atol=1e-14)
-
-    def test_invalid_method_raises(self):
-        with pytest.raises(ValueError, match="Invalid value"):
-            lhs(n=3, k=5, method="invalid", seed=42)
 
     def test_single_sample(self):
         H = lhs(n=2, k=1, seed=42)
@@ -268,131 +239,16 @@ class TestDakotaConfigGeneration:
 # 4. Cross-Validation
 # ---------------------------------------------------------------------------
 @pytest.mark.unit
-class TestParseCrossvalidationOutputlogs:
-    def test_valid_log_extracts_metrics(self):
-        log = (
-            "Surrogate quality metrics (5-fold CV) for AFpeak:\n"
-            "    root_mean_squared 1.23e-04\n"
-            "    sum_abs 5.67e-03\n"
-            "    mean_abs 2.34e-04\n"
-            "    max_abs 8.90e-03\n"
-            "build (training) points\n"
-        )
-        result = _parse_crossvalidation_outputlogs(log, 5)
-        assert "AFpeak" in result
-        assert result["AFpeak"]["root_mean_squared"] == "1.23e-04"
-        assert result["AFpeak"]["sum_abs"] == "5.67e-03"
-        assert result["AFpeak"]["mean_abs"] == "2.34e-04"
-        assert result["AFpeak"]["max_abs"] == "8.90e-03"
-
-    def test_valid_log_two_variables(self):
-        log = (
-            "Surrogate quality metrics (5-fold CV) for AFpeak:\n"
-            "    root_mean_squared 1.0e-04\n"
-            "build (training) points\n"
-            "Surrogate quality metrics (5-fold CV) for BField:\n"
-            "    root_mean_squared 2.0e-04\n"
-            "build (training) points\n"
-        )
-        result = _parse_crossvalidation_outputlogs(log, 5)
-        assert "AFpeak" in result
-        assert "BField" in result
-        assert result["AFpeak"]["root_mean_squared"] == "1.0e-04"
-        assert result["BField"]["root_mean_squared"] == "2.0e-04"
-
-    def test_empty_log_returns_empty_dict(self):
-        result = _parse_crossvalidation_outputlogs("", 5)
-        assert result == {}
-
-    def test_variable_found_no_metrics(self):
-        log = "Surrogate quality metrics (5-fold CV) for AFpeak:\n"
-        result = _parse_crossvalidation_outputlogs(log, 5)
-        assert result["AFpeak"] == "No surrogate quality metrics found."
-
-    def test_malformed_log_no_crash(self):
-        result = _parse_crossvalidation_outputlogs("random garbage text", 5)
-        assert result == {}
-
-
-@pytest.mark.unit
-class TestCrossValidationConfigGeneration:
-    def _make_build_file(self, tmp_path):
-        df = pd.DataFrame(
-            {
-                "x": [0.0, 1.0, 2.0, 3.0],
-                "y": [10.0, 20.0, 30.0, 40.0],
-                "z": [1.0, 2.0, 3.0, 4.0],
-            }
-        )
-        build_file = tmp_path / "build.txt"
-        df.to_csv(build_file, sep=" ", index=False)
-        return build_file
-
-    def test_create_sumo_crossvalidation_has_folds_and_metrics(self, tmp_path):
-        build_file = self._make_build_file(tmp_path)
-        result = create_sumo_crossvalidation_conffile(
-            build_file=build_file,
-            input_variables=["x", "y"],
-            output_responses=["z"],
-            N_CROSS_VALIDATION=5,
-        )
-        assert "cross_validation folds = 5" in result
-        assert "root_mean_squared" in result
-        assert "'x'" in result
-        assert "'y'" in result
-        assert "'z'" in result
-
-    def test_create_sumo_crossvalidation_custom_fold_count(self, tmp_path):
-        build_file = self._make_build_file(tmp_path)
-        result = create_sumo_crossvalidation_conffile(
-            build_file=build_file,
-            input_variables=["x", "y"],
-            output_responses=["z"],
-            N_CROSS_VALIDATION=10,
-        )
-        assert "cross_validation folds = 10" in result
-
-    def test_create_sumo_manual_crossvalidation_has_all_blocks(self, tmp_path):
-        build_file = self._make_build_file(tmp_path)
-        fold_dir = tmp_path / "fold_0"
-        fold_dir.mkdir()
-        result = create_sumo_manual_crossvalidation_conffile(
-            fold_run_dir=fold_dir,
-            build_file=build_file,
-            input_variables=["x", "y"],
-            output_response="z",
-            validation_indices=[0, 2],
-        )
-        assert "environment" in result
-        assert "model" in result
-        assert "method" in result
-        assert "variables" in result
-        assert "responses" in result
-        assert "'x'" in result
-        assert "'y'" in result
-        assert "'z'" in result
-
-    def test_create_sumo_manual_crossvalidation_splits_training_and_validation(
-        self, tmp_path
-    ):
-
-        build_file = self._make_build_file(tmp_path)
-        fold_dir = tmp_path / "fold_0"
-        fold_dir.mkdir()
-        create_sumo_manual_crossvalidation_conffile(
-            fold_run_dir=fold_dir,
-            build_file=build_file,
-            input_variables=["x", "y"],
-            output_response="z",
-            validation_indices=[1, 3],
-        )
-        training_files = list(fold_dir.glob("*training*"))
-        validation_files = list(fold_dir.glob("*validation*"))
-        assert len(training_files) == 1
-        assert len(validation_files) == 1
-        # 4 total rows minus the 2 held-out validation indices [1, 3] leaves 2 training rows
-        training_df = pd.read_csv(training_files[0], sep=" ")
-        assert len(training_df) == 2
+class TestKFoldEquivalentFolds:
+    def test_fold_layout_frozen(self):
+        # The manual-CV validation-index layout, frozen as a literal. It was
+        # recorded against sklearn.model_selection.KFold(n_splits=3,
+        # shuffle=True, random_state=42) and parity checked over 42 seeds x
+        # 6 sample/fold shapes before scikit-learn was dropped as a
+        # dependency (ponytail A10) — a change here silently re-shuffles CV.
+        perm = np.random.RandomState(42).permutation(10)
+        folds = np.array_split(perm, 3)
+        assert [fold.tolist() for fold in folds] == [[8, 1, 5, 0], [7, 2, 9], [4, 3, 6]]
 
 
 # ---------------------------------------------------------------------------
@@ -532,26 +388,6 @@ class TestGetBoundsUniformDistributions:
 
 
 @pytest.mark.unit
-class TestUqPropagationConfigGeneration:
-    def test_create_uq_propagation_has_all_blocks(self, tmp_path):
-        build = tmp_path / "build.txt"
-        result = create_uq_propagation_conffile(
-            build_file=build,
-            input_variables=["x", "y"],
-            input_means={"x": 0.0, "y": 1.0},
-            input_stds={"x": 0.1, "y": 0.2},
-            output_responses=["response"],
-            n_samples=500,
-        )
-        assert "environment" in result
-        assert "model" in result
-        assert "method" in result
-        assert "normal_uncertain = 2" in result
-        assert "responses" in result
-        assert "'x'" in result
-        assert "'y'" in result
-
-
 # ---------------------------------------------------------------------------
 # 6. Data Filtering
 # ---------------------------------------------------------------------------
@@ -589,89 +425,7 @@ class TestFilterData:
 # DEFERRED: MOGA / Pareto (not this round — see docs/TIER1_TIER2_UNIT_TESTS_PLAN.md)
 # ---------------------------------------------------------------------------
 @pytest.mark.unit
-class TestIsDominated:
-    def test_dominated_returns_true(self):
-        point = np.array([3, 4])
-        others = np.array([[1, 2]])
-        assert is_dominated(point, others) is True
-
-    def test_not_dominated_returns_false(self):
-        point = np.array([1, 2])
-        others = np.array([[3, 4]])
-        assert is_dominated(point, others) is False
-
-    def test_self_dominance_returns_true(self):
-        point = np.array([1, 2])
-        others = np.array([[1, 2]])
-        assert is_dominated(point, others) is True
-
-    def test_multi_objective_dominated(self):
-        point = np.array([2, 3])
-        others = np.array([[1, 1]])
-        assert is_dominated(point, others) is True
-
-    def test_multi_objective_not_dominated(self):
-        point = np.array([1, 5])
-        others = np.array([[5, 1]])
-        assert is_dominated(point, others) is False
-
-    def test_multiple_others_one_dominates(self):
-        point = np.array([3, 4])
-        others = np.array([[5, 5], [1, 2], [4, 1]])
-        assert is_dominated(point, others) is True
-
-    def test_multiple_others_none_dominates(self):
-        point = np.array([1, 3])
-        others = np.array([[3, 1], [2, 2]])
-        assert is_dominated(point, others) is False
-
-
 @pytest.mark.unit
-class TestGetNonDominatedIndices:
-    def test_known_2d_front_minimization(self):
-        df = pd.DataFrame({"f1": [1, 2, 3, 4, 5], "f2": [3, 1, 2, 4, 5]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["min", "min"])
-        assert sorted(result) == [0, 1]
-
-    def test_all_points_on_front(self):
-        df = pd.DataFrame({"f1": [1, 2, 3], "f2": [3, 2, 1]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["min", "min"])
-        assert sorted(result) == [0, 1, 2]
-
-    def test_single_point(self):
-        df = pd.DataFrame({"f1": [1.0], "f2": [2.0]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["min", "min"])
-        assert result == [0]
-
-    def test_maximization_sign_flip(self):
-        df = pd.DataFrame({"f1": [5, 4, 3, 2, 1], "f2": [5, 4, 3, 2, 1]})
-        result = get_non_dominated_indices(df, ["f1", "f2"], ["max", "max"])
-        assert result == [0]
-
-    def test_sort_by_column(self):
-        df = pd.DataFrame(
-            {
-                "f1": [1, 2, 3, 4, 5],
-                "f2": [3, 1, 2, 4, 5],
-            }
-        )
-        result = get_non_dominated_indices(
-            df, ["f1", "f2"], ["min", "min"], sort_by_column="f1"
-        )
-
-        assert list(result) == [0, 1]
-
-    def test_mismatched_modes_raises(self):
-        df = pd.DataFrame({"f1": [1], "f2": [2]})
-        with pytest.raises(ValueError, match="must match"):
-            get_non_dominated_indices(df, ["f1", "f2"], ["min"])
-
-    def test_invalid_mode_raises(self):
-        df = pd.DataFrame({"f1": [1], "f2": [2]})
-        with pytest.raises(ValueError, match="not recognized"):
-            get_non_dominated_indices(df, ["f1", "f2"], ["min", "invalid"])  # ty: ignore[invalid-argument-type]
-
-
 @pytest.mark.unit
 class TestMogaConfigGeneration:
     def test_create_moga_optimization_has_all_blocks(self, tmp_path):

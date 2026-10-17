@@ -6,17 +6,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.tabular import (
     _filter_data,
     _parse_data,
     auto_select_distributions,
     create_manual_uq_samples,
     get_bounds_uniform_distribution,
     get_bounds_uniform_distributions,
-    get_non_dominated_indices,
     get_results,
     get_variable_names,
-    is_dominated,
     load_data,
     sanitize_varnames,
     select_variable_scale,
@@ -106,51 +104,6 @@ def test_get_bounds_uniform_distributions_multiple_vars():
 def test_get_bounds_uniform_distributions_missing_var_raises():
     with pytest.raises(ValueError, match="is not defined"):
         get_bounds_uniform_distributions(["missing"], {})
-
-
-# --- is_dominated / get_non_dominated_indices --------------------------------
-
-
-def test_is_dominated_true_when_another_point_dominates():
-    point = np.array([1.0, 1.0])
-    others = np.array([[2.0, 2.0], [0.0, 0.0]])
-    assert is_dominated(point, others) is True
-
-
-def test_is_dominated_false_when_no_point_dominates():
-    point = np.array([0.0, 0.0])
-    others = np.array([[1.0, -1.0], [-1.0, 1.0]])
-    assert is_dominated(point, others) is False
-
-
-def test_get_non_dominated_indices_minimization():
-    df = pd.DataFrame({"a": [1, 2, 3], "b": [3, 2, 1]})
-    # point 1 (a=2,b=2) is dominated by neither in a min/min sense trade-off (Pareto front)
-    indices = get_non_dominated_indices(df, ["a", "b"])
-    assert set(indices) == {0, 1, 2}
-
-
-def test_get_non_dominated_indices_with_optimization_modes():
-    df = pd.DataFrame({"a": [1, 2, 3], "b": [1, 2, 3]})
-    # minimize a, maximize b -> point 2 (a=3,b=3) is best on b but worst on a;
-    # point 0 (a=1,b=1) is best on a but worst on b -> both on the Pareto front,
-    # point 1 (a=2,b=2) is dominated by neither too since a min/b max create a trade-off
-    indices = get_non_dominated_indices(
-        df, ["a", "b"], optimization_modes=["min", "max"]
-    )
-    assert set(indices) == {0, 1, 2}
-
-
-def test_get_non_dominated_indices_invalid_mode_raises():
-    df = pd.DataFrame({"a": [1, 2]})
-    with pytest.raises(ValueError, match="not recognized"):
-        get_non_dominated_indices(df, ["a"], optimization_modes=["bogus"])  # ty: ignore[invalid-argument-type]
-
-
-def test_get_non_dominated_indices_mismatched_modes_length_raises():
-    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
-    with pytest.raises(ValueError, match="must match"):
-        get_non_dominated_indices(df, ["a", "b"], optimization_modes=["min"])
 
 
 # --- create_manual_uq_samples -------------------------------------------------

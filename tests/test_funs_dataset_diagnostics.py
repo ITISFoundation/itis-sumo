@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from itis_sumo.data import analyze_dataset
-from itis_sumo.data.funs_dataset_diagnostics import detect_raw_outliers
+from itis_sumo.data.diagnostics import detect_raw_outliers
 
 # --- detect_raw_outliers ------------------------------------------------------
 

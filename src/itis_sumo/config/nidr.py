@@ -383,87 +383,6 @@ def create_sumo_evaluation_conffile(
     return dakota_conf
 
 
-def create_uq_propagation_conffile(
-    build_file: Path,
-    # surrogate_type: Optional[str] = None, ## for now, always GP
-    # TODO be able to load sumo (instead of building every time)
-    input_variables: list[str],
-    input_means: dict[str, float],
-    input_stds: dict[str, float],
-    output_responses: list[str],
-    n_samples: int = 10000,
-    dakota_conf_file: str | Path | None = None,
-    has_eval_id_column: bool | None = None,
-) -> str:
-    dakota_conf = start_dakota_file()
-    training_samples_file = str(build_file.resolve())
-    dakota_conf += add_surrogate_model(
-        training_samples_file=training_samples_file,
-        has_eval_id_column=(
-            has_eval_id_column
-            if has_eval_id_column is not None
-            else infer_has_eval_id_column_from_filename(training_samples_file)
-        ),
-    )
-    dakota_conf += add_sampling_method(num_samples=n_samples)
-    ## TODO this is only NORMAL uncertain -- need to generalize if we want to include other types of input distributions
-    dakota_conf += f"""
-        variables
-            id_variables = "VARIABLES"
-            active uncertain
-            normal_uncertain = {len(input_variables)}
-                descriptors {" ".join([f"'{var}'" for var in input_variables])}
-                means {" ".join([str(input_means[var]) for var in input_variables])}
-                std_deviations {" ".join([str(input_stds[var]) for var in input_variables])}
-        """
-    dakota_conf += add_responses(output_responses)
-
-    if dakota_conf_file:
-        write_to_file(dakota_conf, dakota_conf_file)
-
-    return dakota_conf
-
-
-def create_sumo_crossvalidation_conffile(
-    build_file: Path,
-    input_variables: list[str],
-    output_responses: list[str],
-    dakota_conf_file: str | Path | None = None,
-    N_CROSS_VALIDATION=5,
-    has_eval_id_column: bool | None = None,
-):
-    dakota_conf = start_dakota_file()
-    training_samples_file = str(build_file.resolve())
-    dakota_conf += add_surrogate_model(
-        training_samples_file=training_samples_file,
-        cross_validation_folds=N_CROSS_VALIDATION,
-        has_eval_id_column=(
-            has_eval_id_column
-            if has_eval_id_column is not None
-            else infer_has_eval_id_column_from_filename(training_samples_file)
-        ),
-    )
-    from itis_sumo.data.funs_data_processing import process_input_file
-
-    JUST_INPUTS_FILE = process_input_file(
-        build_file,
-        columns_to_remove=output_responses,
-    )
-    dakota_conf += add_evaluation_method(
-        str(JUST_INPUTS_FILE.resolve()),
-        includes_eval_id=False,  ## just to have some method, otherwise Dakota gives error
-    )
-    dakota_conf += add_continuous_variables(
-        variables=input_variables,
-    )
-    dakota_conf += add_responses(output_responses)
-
-    if dakota_conf_file:
-        write_to_file(dakota_conf, dakota_conf_file)
-
-    return dakota_conf
-
-
 def create_sumo_manual_crossvalidation_conffile(
     fold_run_dir: Path,
     build_file: Path,
@@ -473,7 +392,7 @@ def create_sumo_manual_crossvalidation_conffile(
     dakota_conf_file: str | Path | None = None,
     has_eval_id_column: bool | None = None,
 ):
-    from itis_sumo.data.funs_data_processing import load_data, process_input_file
+    from itis_sumo.data.tabular import load_data, process_input_file
 
     dakota_conf = start_dakota_file()
     n_samples = len(load_data(build_file))

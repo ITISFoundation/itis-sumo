@@ -1,6 +1,6 @@
 """End-to-end evaluations on top of Dakota runs."""
 
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     compute_coverage,
     compute_cv_accuracy_metrics,
     compute_cv_convergence,
@@ -9,7 +9,6 @@ from itis_sumo.evaluate.funs_evaluate import (
     evaluate_sobol_indices,
     evaluate_sumo,
     evaluate_sumo_along_axes,
-    evaluate_sumo_crossvalidation,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
     export_sumo_model,
@@ -17,8 +16,6 @@ from itis_sumo.evaluate.funs_evaluate import (
     fit_convergence_exponential_asymptotic,
     import_sumo_model,
     perform_moga_optimization,
-    propagate_uq,
-    retrieve_csv_result,
 )
 
 __all__ = [
@@ -30,7 +27,6 @@ __all__ = [
     "evaluate_sobol_indices",
     "evaluate_sumo",
     "evaluate_sumo_along_axes",
-    "evaluate_sumo_crossvalidation",
     "evaluate_sumo_manual_crossvalidation",
     "evaluate_sumo_on_grid",
     "export_sumo_model",
@@ -38,6 +34,4 @@ __all__ = [
     "fit_convergence_exponential_asymptotic",
     "import_sumo_model",
     "perform_moga_optimization",
-    "propagate_uq",
-    "retrieve_csv_result",
 ]

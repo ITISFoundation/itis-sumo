@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -11,20 +10,17 @@ import pandas as pd
 from scipy.optimize import curve_fit
 from scipy.special import erfinv
 from scipy.stats import ttest_rel
-from sklearn.model_selection import KFold
 
-from itis_sumo.config.funs_create_dakota_conf import (
+from itis_sumo.config.nidr import (
     add_surrogate_model,
     create_moga_optimization_conffile,
-    create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
     create_sumo_manual_crossvalidation_conffile,
-    create_uq_propagation_conffile,
     infer_has_eval_id_column_from_filename,
 )
 from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.core.sumo_model_store import stage_model_for_import, store_exported_model
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.tabular import (
     compute_correlation_indices,
     create_grid_samples,
     create_manual_uq_samples,
@@ -41,39 +37,6 @@ from itis_sumo.data.funs_data_processing import (
 from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
 _logger = logging.getLogger(__name__)
-
-
-def retrieve_csv_result(
-    csv_file_path: str, inputs: dict[str, float], outputs: list[str] | None = None
-) -> dict[str, float]:
-    """
-    Retrieve the result from a csv file.
-    """
-
-    df = pd.read_csv(csv_file_path)
-
-    for col in inputs:
-        if col not in df.columns:
-            raise ValueError(
-                f"Input {col} not in the csv file. Columns are: {df.columns.values}"
-            )
-
-    if outputs is not None:
-        for col in outputs:
-            if col not in df.columns:
-                raise ValueError(
-                    f"Output {col} not in the csv file. Columns are: {df.columns.values}"
-                )
-        result = df.loc[np.all(df[inputs.keys()] == inputs.values(), axis=1), outputs]
-    else:
-        result = df.loc[np.all(df[inputs.keys()] == inputs.values(), axis=1)]
-    # Check if the result is empty or has multiple rows
-    if len(result) == 0:
-        raise ValueError(f"No result found for inputs {inputs}.")
-    if len(result) > 1:
-        raise ValueError(f"Multiple results found for inputs {inputs}.")
-
-    return result.iloc[0].to_dict()
 
 
 def evaluate_sumo_along_axes(
@@ -139,37 +102,6 @@ def evaluate_sumo_along_axes(
 
 
 ### TODO refactor in new MMUX-compatible version (like above)
-def propagate_uq(
-    run_dir: Path,
-    PROCESSED_TRAINING_FILE: Path,
-    input_vars: list[str],
-    output_response: str,
-    means: dict[str, float],
-    stds: dict[str, float],
-    n_samples: int = 1000,
-    xscale: Literal["linear", "log"] = "linear",
-    label_converter: Callable | None = None,
-) -> list[float]:
-    input_vars = sanitize_varnames(input_vars)
-    output_response = sanitize_varnames(output_response)
-    means = {sanitize_varnames(k): v for k, v in means.items()}
-    stds = {sanitize_varnames(k): v for k, v in stds.items()}
-
-    # create dakota file
-    dakota_conf = create_uq_propagation_conffile(
-        build_file=PROCESSED_TRAINING_FILE,
-        input_variables=input_vars,
-        input_means=means,
-        input_stds=stds,
-        output_responses=[output_response],
-        n_samples=n_samples,
-    )
-
-    # run dakota
-    dakobj = DakotaObject()
-    dakobj.run(dakota_conf, run_dir)
-    x = get_results(run_dir / "predictions.dat", output_response)
-    return x.tolist()
 
 
 def propagate_manual_uq_with_uncertainty(
@@ -398,76 +330,6 @@ def summarize_uncertainty_samples(
     }
 
 
-def _parse_crossvalidation_outputlogs(log_output: str, N_CROSS_VALIDATION: int):
-    variable_name_pattern = (
-        rf"Surrogate quality metrics \({N_CROSS_VALIDATION}-fold CV\) for (\w+):"
-    )
-    metrics_pattern = (
-        r"\s+(root_mean_squared|sum_abs|mean_abs|max_abs)\s+([\d.e+-]+|nan)"
-    )
-
-    # Find all occurrences of variable names in the log
-    variables = re.findall(variable_name_pattern, log_output)
-
-    # Split the log output by the variable name to handle each output separately
-    log_parts = re.split(variable_name_pattern, log_output)
-    log_parts = log_parts[1:]  # Skip the first part (before the first variable name)
-
-    # Dictionary to hold the parsed results for each output variable
-    parsed_error_metrics = {}
-
-    # Loop through the log parts, and extract metrics for each output variable
-    for i, variable in enumerate(variables):
-        # The log part after each variable name contains the metrics section for that variable
-        metrics_section = log_parts[
-            2 * i + 1
-        ]  # The log part immediately after the variable name
-
-        ## remove the training error of the next variable
-        metrics_section = metrics_section.split("build (training) points")[0]
-
-        # Find all the surrogate quality metrics for this particular output variable
-        metrics_matches = re.findall(metrics_pattern, metrics_section)
-
-        if metrics_matches:
-            metrics = {metric: value for metric, value in metrics_matches}
-            parsed_error_metrics[variable] = metrics
-        else:
-            parsed_error_metrics[variable] = "No surrogate quality metrics found."
-
-    _logger.debug("Parsed cross-validation metrics: %s", parsed_error_metrics)
-    return parsed_error_metrics
-
-
-def evaluate_sumo_crossvalidation(
-    run_dir: Path,
-    PROCESSED_TRAINING_FILE: Path,
-    input_vars: list[str],
-    output_response: str,
-    N_CROSS_VALIDATION: int = 5,
-):
-    input_vars = sanitize_varnames(input_vars)
-    output_response = sanitize_varnames(output_response)
-
-    dakota_conf = create_sumo_crossvalidation_conffile(
-        PROCESSED_TRAINING_FILE,
-        input_vars,
-        [output_response],
-        N_CROSS_VALIDATION=N_CROSS_VALIDATION,
-    )
-    # run dakota
-    dakobj = DakotaObject()
-    dakobj.run(dakota_conf, run_dir)
-    # `dakobj.run` writes captured stdout to "dakota_stdout.txt" in run_dir (see DakotaObject.run)
-    stdout_file = run_dir / "dakota_stdout.txt"
-    log_output = stdout_file.read_text() if stdout_file.is_file() else ""
-    parsed_error_metrics = _parse_crossvalidation_outputlogs(
-        log_output, N_CROSS_VALIDATION
-    )
-
-    return parsed_error_metrics
-
-
 def evaluate_sumo_manual_crossvalidation(
     run_dir: Path,
     PROCESSED_TRAINING_FILE: Path,
@@ -482,13 +344,18 @@ def evaluate_sumo_manual_crossvalidation(
 
     all_observations = load_data(PROCESSED_TRAINING_FILE)[output_response].astype(float)
     n_samples = len(all_observations)
-    indices = np.arange(n_samples)
     all_predictions = np.full(n_samples, np.nan)
     all_stds = np.full(n_samples, np.nan)
-    kf = KFold(n_splits=N_CROSS_VALIDATION, shuffle=True, random_state=seed)
+    # KFold(n_splits, shuffle=True, random_state=seed) equivalent, verified
+    # fold-for-fold against sklearn 1.x over 42 seeds x shapes {10,17,52,100}
+    # x {3,4,5,7,10} splits (ponytail A10): one RandomState permutation of the
+    # sample range, then np.array_split — the same front-loaded remainder fold
+    # sizes sklearn builds, and the same order folds are consumed in.
+    perm = np.random.RandomState(seed).permutation(n_samples)
+    val_folds = np.array_split(perm, N_CROSS_VALIDATION)
     parse_warnings: list[str] = []
 
-    for fold, (_, val_idx) in enumerate(kf.split(indices)):
+    for fold, val_idx in enumerate(val_folds):
         fold_run_dir = run_dir / f"fold_{fold}"
         os.makedirs(fold_run_dir, exist_ok=True)
 
@@ -613,10 +480,10 @@ def compute_cv_accuracy_metrics(
 ) -> dict[str, float]:
     """Compute RMSE/MAE/sum-abs/max-abs/bias directly from paired CV actual/predicted values.
 
-    Unlike `_parse_crossvalidation_outputlogs`, this does not depend on parsing Dakota's
-    stdout (which `evaluate_sumo_crossvalidation` no longer captures) - it derives the
-    same metrics straight from the actual/predicted arrays already produced by
-    `evaluate_sumo_manual_crossvalidation`.
+    This is the canonical CV metrics path: it derives the metrics straight
+    from the actual/predicted arrays produced by
+    `evaluate_sumo_manual_crossvalidation` — no parsing of Dakota's stdout
+    (the built-in Dakota CV chain that did was removed as dead: ponytail A2).
 
     `mean_signed_error` (bias) is `mean(actual - predicted)`, signed rather than
     absolute - a systematic over/under-prediction can net out near zero in `mean_abs`

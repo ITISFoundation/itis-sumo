@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.1.0a13"
+version = "0.2.0a1"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 # T55kd: the 6.24.13 engine wheel matrix is cp312-cp314 (6.24.8 dropped cp311,
@@ -35,13 +35,12 @@ dependencies = [
     # re-anchored to 1.5.11, owner call 2026-10-14). The 6.23+ `interface_cache`
     # regression (SPEC §R5) is still upstream in 6.24.13 (`.at()` throw, not the
     # pending get-or-create fix) and stays shimmed in-repo via
-    # `add_r5_interface_cache_workaround()` in config/funs_create_dakota_conf.py;
+    # `add_r5_interface_cache_workaround()` in config/nidr.py;
     # shim re-verified on the real wheel: analytical suite 26/26 on py3.14.
     "itis-dakota==6.24.13",
     "numpy>=2.0,<3.0",
     "pandas>=2.2,<3.0",
     "pydantic>=2.0,<3.0",
-    "scikit-learn>=1.6,<2.0",
     "scipy>=1.15,<2.0",
 ]
 

@@ -1,6 +1,6 @@
 # Config — NIDR string composers
 
-`itis_sumo.config.funs_create_dakota_conf` builds Dakota's NIDR
+`itis_sumo.config.nidr` builds Dakota's NIDR
 (Named Input, Reduced) input-file syntax as plain Python f-strings — no
 templating engine, no intermediate object model. This is deliberate (`V5ui`
 in [`SPEC.md`](../about/spec.md)): it's the proven, near-verbatim port of the
@@ -31,14 +31,10 @@ study type:
 
 - `create_sumo_evaluation_conffile` — fit a surrogate, evaluate it at
   supplied points (`evaluate_sumo`'s NIDR).
-- `create_sumo_crossvalidation_conffile` — Dakota's built-in cross-validation
-  study.
 - `create_sumo_manual_crossvalidation_conffile` — K-fold done in Python
-  (`sklearn.model_selection.KFold`) around repeated evaluation calls, used
-  because Dakota's built-in CV has a parsing bug (see
-  [Verification & Validation § Known limitations](../verification-validation.md#known-limitations)).
-- `create_uq_propagation_conffile` — Dakota-native uncertainty propagation
-  (normal-uncertain variables only).
+  (seeded `RandomState` permutation split, fold layout previously pinned to
+  `sklearn`'s `KFold`) around repeated evaluation calls; the canonical CV
+  study since Dakota's built-in CV chain was removed as dead.
 - `create_moga_optimization_conffile` — multi-objective genetic algorithm
   study.
 

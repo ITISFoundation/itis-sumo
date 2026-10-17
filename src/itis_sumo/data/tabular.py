@@ -23,10 +23,7 @@ def _parse_data(file: str | Path) -> list[list[str]]:
     Returns:
         List of lines, where each line is split into a list of values
     """
-    data = []
-    with open(file) as f:
-        data = [line.strip().split() for line in f]
-    return data
+    return [line.split() for line in Path(file).read_text().splitlines()]
 
 
 def _parse_json_dict(file: str | Path):
@@ -401,11 +398,9 @@ def create_grid_samples(
     cut_values: list[float],
     maxs: list[float],
     n_points_per_dimension: list[int],
-    downscaling_factor: float | None = None,
-    gridpoints_file_name: str = "grid_input.csv",
 ) -> Path:
     """Generate grid points (either for sampling, or to evaluate the SuMo upon and display)"""
-    GRIDPOINTS_INPUT_FILE = run_dir / gridpoints_file_name
+    GRIDPOINTS_INPUT_FILE = run_dir / "grid_input.csv"
     if len(input_vars) != len(n_points_per_dimension):
         raise ValueError(
             "Number of variables must match number of points per dimension."
@@ -416,11 +411,6 @@ def create_grid_samples(
         raise ValueError("Number of variables must match number of maxs.")
     if len(input_vars) < 1:
         raise ValueError("At least one variable is required to generate a grid.")
-
-    if downscaling_factor is not None:
-        n_points_per_dimension = [
-            int(np.ceil(n / downscaling_factor)) for n in n_points_per_dimension
-        ]
 
     input_vars = sanitize_varnames(input_vars)
     grid_vars = sanitize_varnames(grid_vars)
@@ -820,51 +810,6 @@ def sanitize_varnames(input_data):
 sanitize_varname = sanitize_varnames  # For single string input
 sanitize_varnames_dict = sanitize_varnames  # For dictionary input
 sanitize_varnames_df = sanitize_varnames  # For DataFrame input
-
-
-def is_dominated(point: np.ndarray, other_points: Sequence[np.ndarray] | np.ndarray):
-    return any(all(point >= other) for other in other_points)
-
-
-def get_non_dominated_indices(
-    data: pd.DataFrame,
-    optimized_vars: list[str],
-    optimization_modes: list[Literal["min", "max"]] | None = None,
-    sort_by_column: str | None = None,
-) -> list[int]:
-    data = data[optimized_vars].copy()
-    data = data.apply(
-        pd.to_numeric, errors="coerce"
-    )  ## bfr they were "np.object_" and was giving weird comparison results
-
-    ## extract to separate function; unify with interface of MinimizationModel
-    if optimization_modes:
-        if len(optimized_vars) != len(optimization_modes):
-            raise ValueError(
-                "The number of optimized variables and optimization modes must match"
-            )
-        for var, mode in zip(optimized_vars, optimization_modes):
-            if mode == "max":
-                data[var] = -data[var]
-            elif mode == "min":
-                pass
-            else:
-                raise ValueError(
-                    f"Optimization mode {mode} not recognized. Only 'min' and 'max' are allowed"
-                )
-
-    non_dominated_indices = []
-    for i, point in data.iterrows():
-        if not is_dominated(point.values, data.drop(i).values):
-            non_dominated_indices.append(i)
-
-    if sort_by_column:
-        sorted_indices = (
-            data.loc[non_dominated_indices].sort_values(by=sort_by_column).index.values
-        )
-        return list(sorted_indices)
-    else:
-        return non_dominated_indices
 
 
 def get_bounds_uniform_distributions(

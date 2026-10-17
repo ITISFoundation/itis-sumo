@@ -10,7 +10,7 @@ Assumes you already have a training file in the shape
 ## Run K-fold cross-validation
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     evaluate_sumo_manual_crossvalidation,
     compute_cv_accuracy_metrics,
 )
@@ -28,10 +28,12 @@ metrics = compute_cv_accuracy_metrics(cv["y1"], cv["y1_hat"])
 print(metrics["root_mean_squared"], metrics["mean_abs"], metrics["max_abs"])
 ```
 
-!!! danger "Use the manual K-fold path"
-    Use `evaluate_sumo_manual_crossvalidation`, not `evaluate_sumo_crossvalidation`
-    (the Dakota-native pathway). Dakota's own CV log parsing has a known gap;
-    the manual K-fold numbers are independently verified end to end.
+!!! danger "The manual K-fold path is the only CV path"
+    The Dakota-native CV chain was removed as dead: its log-parsing had a
+    known gap (see
+    [known limitations](../verification-validation.md#known-limitations))
+    and it had no callers. These manual K-fold numbers are independently
+    verified end to end.
 
 ## Check for systematic bias
 
@@ -40,7 +42,7 @@ pair, testing whether the surrogate is systematically biased (not just
 noisy) relative to the held-out truth:
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import compute_paired_ttest
+from itis_sumo.evaluate.sumo_evaluation import compute_paired_ttest
 
 compute_paired_ttest(cv["y1"], cv["y1_hat"])  # -> {"statistic": ..., "p_value": ...}
 ```
@@ -57,7 +59,7 @@ kernel assumptions, noisy/mislabeled data, insufficient sampling coverage)
 rather than "just needs more points":
 
 ```python
-from itis_sumo.evaluate.funs_evaluate import compute_cv_convergence
+from itis_sumo.evaluate.sumo_evaluation import compute_cv_convergence
 
 curve = compute_cv_convergence(run_dir, training_file, ["x1", "x2"], "y1")
 # list of {"n_samples": ..., "metric": <RMSE at that training-set size>}

@@ -29,7 +29,7 @@ from itis_sumo.evaluate import (
     fit_convergence_exponential,
     fit_convergence_exponential_asymptotic,
 )
-from itis_sumo.evaluate.funs_evaluate import propagate_manual_uq_with_uncertainty
+from itis_sumo.evaluate.sumo_evaluation import propagate_manual_uq_with_uncertainty
 
 __all__ = [
     "DEFAULT_SEED",

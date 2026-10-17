@@ -1,6 +1,13 @@
 """Training-data parsing, filtering, sampling grids, and statistics."""
 
-from itis_sumo.data.funs_data_processing import (
+from itis_sumo.data.diagnostics import (
+    DatasetDiagnostics,
+    OutlierSummary,
+    VariableDiagnostics,
+    analyze_dataset,
+    detect_raw_outliers,
+)
+from itis_sumo.data.tabular import (
     auto_select_distributions,
     compute_correlation_indices,
     create_grid_samples,
@@ -10,21 +17,12 @@ from itis_sumo.data.funs_data_processing import (
     extract_predictions_gridpoints,
     get_bounds_uniform_distribution,
     get_bounds_uniform_distributions,
-    get_non_dominated_indices,
     get_results,
     get_variable_names,
-    is_dominated,
     load_data,
     process_input_file,
     sanitize_varnames,
     select_variable_scale,
-)
-from itis_sumo.data.funs_dataset_diagnostics import (
-    DatasetDiagnostics,
-    OutlierSummary,
-    VariableDiagnostics,
-    analyze_dataset,
-    detect_raw_outliers,
 )
 
 __all__ = [
@@ -42,10 +40,8 @@ __all__ = [
     "extract_predictions_gridpoints",
     "get_bounds_uniform_distribution",
     "get_bounds_uniform_distributions",
-    "get_non_dominated_indices",
     "get_results",
     "get_variable_names",
-    "is_dominated",
     "load_data",
     "process_input_file",
     "sanitize_varnames",

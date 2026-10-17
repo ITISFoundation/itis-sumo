@@ -13,7 +13,7 @@ _SOURCE_MODULES = (
     "itis_sumo.api",
     "itis_sumo.data",
     "itis_sumo.evaluate",
-    "itis_sumo.evaluate.funs_evaluate",
+    "itis_sumo.evaluate.sumo_evaluation",
 )
 
 

@@ -5,13 +5,10 @@ avoids max-pipe-size issue in exchange for dealing with files
 """
 
 import ctypes
-import logging
 import os
 import sys
 from contextlib import contextmanager
 from typing import IO
-
-_logger = logging.getLogger(__name__)
 
 # libc bindings (wurlitzer pattern). POSIX: CDLL(None) = the main program's
 # already-loaded libc, which exports the `stdout`/`stderr` FILE* symbols.
@@ -74,48 +71,3 @@ def capture_to_file(stdout="./stdout", stderr="./stderr"):
             os.dup2(save_stderr, real_stderr)
             os.close(save_stderr)
             stderr_f.close()
-
-
-# ======================================================================
-# example (manual smoke-test script, not part of the public API)
-
-# calls via PyDLL hold the GIL,
-# which blocks when using wurlitzer with pipes
-# if the message size exceeds max-pipe-size
-# win32: PyDLL(None) fails like CDLL(None); the example's printf lives in the CRT.
-pylibc = ctypes.CDLL("ucrtbase.dll") if sys.platform == "win32" else ctypes.PyDLL(None)
-
-
-def main():  # pragma: no cover
-    sz = 64000
-    # while sz < 100_000_000:
-    while sz < 100_000:
-        _logger.debug("Writing %d bytes", sz)
-        buf = b"1" * sz
-
-        with capture_to_file() as (stdout, stderr):
-            # execute anything that outputs to stdout, stderr
-            pylibc.printf(buf + b"\0")
-        # gather from files
-        stdoutstr, stderrstr = None, None
-        with open(stdout) as outf, open(stderr) as errf:
-            stdoutstr = outf.read()
-            stderrstr = errf.read()
-        # print strings
-        _logger.debug("stdout: %s", stdoutstr)
-        _logger.debug("stderr: %s", stderrstr)
-        with capture_to_file() as (stdout, stderr):
-            # execute anything that outputs to stdout, stderr
-            pylibc.printf(buf + b"\0")
-        # gather from files
-        stdoutstr, stderrstr = None, None
-        with open(stdout) as outf, open(stderr) as errf:
-            stdoutstr = outf.read()
-            stderrstr = errf.read()
-        # print strings
-        _logger.debug("stdout: %s", stdoutstr)
-        _logger.debug("stderr: %s", stderrstr)
-
-
-if __name__ == "__main__":
-    main()

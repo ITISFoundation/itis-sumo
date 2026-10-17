@@ -1,28 +1,27 @@
 # MOGA optimization
 
-`perform_moga_optimization` (`evaluate/funs_evaluate.py`) drives Dakota's
+`perform_moga_optimization` (`evaluate/sumo_evaluation.py`) drives Dakota's
 Multi-Objective Genetic Algorithm (MOGA) method
 (`create_moga_optimization_conffile` in `config/`) over one or more
 objective functions defined by a fitted surrogate, and returns the
 Pareto-optimal set.
 
-## Pareto-front support (`data/funs_data_processing.py`)
+## Pareto-front support (`data/tabular.py`)
 
-- `is_dominated` / `get_non_dominated_indices` — standard Pareto dominance
-  check/filter, used both to validate MOGA's own output and (independently)
-  as a reusable utility.
 - `get_bounds_uniform_distribution(s)` — resolves variable bounds from a
   uniform-distribution spec, feeding the `variables` block MOGA searches
   over.
+
+(Standalone Python dominance helpers — `is_dominated` /
+`get_non_dominated_indices` — existed as a reusable cross-check but had no
+product callers; removed, nondominance is MOGA's own job on the Dakota side.)
 
 ## Verified behavior
 
 (Verification & Validation Category G)
 
 - Single-objective minimization finds the known optimum within tolerance.
-- A bi-objective front spans the expected trade-off curve and every
-  returned point is genuinely non-dominated (cross-checked against
-  `get_non_dominated_indices`).
+- A bi-objective front spans the expected trade-off curve.
 - The front improves (dominates the lower-iteration front) as the
   iteration budget increases.
 - Every returned point respects the input variable bounds.

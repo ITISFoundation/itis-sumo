@@ -8,7 +8,7 @@ call is monkeypatched to keep the tests fast and deterministic).
 import numpy as np
 import pytest
 
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     _convergence_subset_sizes,
     compute_coverage,
     compute_cv_accuracy_metrics,
@@ -313,7 +313,7 @@ class TestComputeCvConvergence:
             }
 
         monkeypatch.setattr(
-            "itis_sumo.evaluate.funs_evaluate.evaluate_sumo_manual_crossvalidation",
+            "itis_sumo.evaluate.sumo_evaluation.evaluate_sumo_manual_crossvalidation",
             fake_manual_cv,
         )
 
@@ -380,7 +380,7 @@ class TestComputeCvConvergenceBootstrap:
             }
 
         monkeypatch.setattr(
-            "itis_sumo.evaluate.funs_evaluate.evaluate_sumo_manual_crossvalidation",
+            "itis_sumo.evaluate.sumo_evaluation.evaluate_sumo_manual_crossvalidation",
             fake_manual_cv,
         )
 
@@ -441,7 +441,7 @@ class TestComputeCvConvergenceBootstrap:
             }
 
         monkeypatch.setattr(
-            "itis_sumo.evaluate.funs_evaluate.evaluate_sumo_manual_crossvalidation",
+            "itis_sumo.evaluate.sumo_evaluation.evaluate_sumo_manual_crossvalidation",
             fake_manual_cv,
         )
 
@@ -499,7 +499,7 @@ class TestComputeCvConvergenceBootstrap:
             }
 
         monkeypatch.setattr(
-            "itis_sumo.evaluate.funs_evaluate.evaluate_sumo_manual_crossvalidation",
+            "itis_sumo.evaluate.sumo_evaluation.evaluate_sumo_manual_crossvalidation",
             fake_manual_cv,
         )
 

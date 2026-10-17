@@ -44,7 +44,7 @@ from itis_sumo.api.types import (
     UncertaintyResult,
     VariableSpec,
 )
-from itis_sumo.evaluate.funs_evaluate import (
+from itis_sumo.evaluate.sumo_evaluation import (
     correlate_manual_uq_samples,
     evaluate_sobol_indices,
     evaluate_sumo_along_axes,
@@ -65,6 +65,20 @@ _STDERR_TAIL_LINES = 40
 def _minimum_samples(variable_count: int, floor: int = 5) -> int:
     """Return the minimum tabular sample count Dakota can fit safely."""
     return max(floor, variable_count + 1)
+
+
+def _require_exact_coverage(
+    provided: Mapping[str, object], variables: Sequence[str], *, what: str
+) -> None:
+    """Guard the 'spec mapping must cover the variables exactly' contract shared
+    by the UQ, correlation and MOGA entry points (distributions in the first two,
+    search domains in the third)."""
+    missing = sorted(set(variables) - set(provided))
+    unknown = sorted(set(provided) - set(variables))
+    if missing or unknown:
+        raise SumoInputError(
+            f"{what} must cover variables exactly; missing={missing}, unknown={unknown}"
+        )
 
 
 def _stderr_tail(run_dir: Path | None) -> str:
@@ -538,13 +552,7 @@ class SumoSession:
     ) -> UncertaintyResult:
         """Propagate explicit uncertainty through the surrogate's own predictive
         uncertainty and summarise the result as a histogram + boxplot."""
-        missing = sorted(set(self._variables) - set(distributions))
-        unknown = sorted(set(distributions) - set(self._variables))
-        if missing or unknown:
-            raise SumoInputError(
-                f"Distributions must cover variables exactly; missing={missing}, "
-                f"unknown={unknown}"
-            )
+        _require_exact_coverage(distributions, self._variables, what="Distributions")
         engine_distributions = self._uq_engine_distributions(distributions)
         samples = self._run_engine(
             "propagating uncertainty",
@@ -593,13 +601,7 @@ class SumoSession:
         Scale comes from the session's own spec (V45ls): each column's samples
         and the prediction are correlated on their declared scale.
         """
-        missing = sorted(set(self._variables) - set(distributions))
-        unknown = sorted(set(distributions) - set(self._variables))
-        if missing or unknown:
-            raise SumoInputError(
-                f"Distributions must cover variables exactly; missing={missing}, "
-                f"unknown={unknown}"
-            )
+        _require_exact_coverage(distributions, self._variables, what="Distributions")
         engine_distributions = self._uq_engine_distributions(distributions)
         coefficients = self._run_engine(
             "correlating through the surrogate",
@@ -816,13 +818,7 @@ def optimize_pareto_front(
     """
     variables = tuple(variables)
     spec = preprocessing or PreprocessingSpec()
-    missing_domains = sorted(set(variables) - set(domains))
-    unknown_domains = sorted(set(domains) - set(variables))
-    if missing_domains or unknown_domains:
-        raise SumoInputError(
-            f"Domains must cover variables exactly; missing={missing_domains}, "
-            f"unknown={unknown_domains}"
-        )
+    _require_exact_coverage(domains, variables, what="Domains")
 
     log_inputs = [
         variable for variable in variables if column_scale(spec, variable) == "log"

@@ -24,7 +24,7 @@ containing whatever output files that study type produces
 - **Run dirs are explicit paths** the caller supplies — `DakotaObject`
   never infers or defaults a run directory from global state.
 
-## `wiofiles` (`core/wiofiles.py`)
+## `capture` (`core/capture.py`)
 
 A "wurlitzer-lite" stdout/stderr capture utility, using files instead of
 OS pipes. Dakota's C++ layer writes directly to the process's `stdout`/

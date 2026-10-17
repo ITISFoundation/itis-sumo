@@ -55,32 +55,4 @@ original_scale = preprocessor.inverse_transform(predictions)
 form needs column order to match `input_variables` then `output_variables`,
 since there are no column names to key off of).
 
-## Persist and reload (across processes / requests)
-
-```python
-preprocessor.save_config(run_dir / "preprocessor_config.json")
-
-# ...later, possibly a different process...
-reloaded = DataPreprocessor().load_config(run_dir / "preprocessor_config.json")
-reloaded.inverse_transform(predictions)
-```
-
-`load_config` restores a preprocessor already marked fitted — you can call
-`inverse_transform` on it directly without re-fitting, as long as the saved
-config came from a preprocessor that was actually fitted.
-
-## Filter variables without starting over
-
-If you set up a preprocessor with more variables than you end up training
-on:
-
-```python
-preprocessor.filter_by_names(input_names=["length"], exclude=True)  # drop "length"
-# or: preprocessor.filter_by_patterns(input_patterns=[r"^geom_"])
-```
-
-This re-derives the `x1, x2, …` mapping over the remaining variables
-(filtering renumbers the mapped names), so do it once, up front — not
-between a `fit()`/`transform()` pair on the same run.
-
 Full class reference: [Reference → Data preprocessing](../reference/preprocess.md).
