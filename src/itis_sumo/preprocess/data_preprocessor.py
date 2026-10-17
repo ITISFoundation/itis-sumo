@@ -11,11 +11,9 @@ The class is designed to work with the existing _create_training_file_from_jobs 
 and maintain compatibility with the ML workflow pipeline.
 """
 
-import json
 import logging
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -38,16 +36,6 @@ class VariableConfig:
     min_val: float | None = None
     max_val: float | None = None
     normalization_method: str = "z_score"
-
-
-@dataclass
-class PreprocessorConfig:
-    """Complete configuration for the data preprocessor."""
-
-    input_variables: dict[str, VariableConfig]
-    output_variables: dict[str, VariableConfig]
-    created_timestamp: str
-    version: str = "1.0"
 
 
 class DataPreprocessor:
@@ -575,60 +563,6 @@ class DataPreprocessor:
         for var_name, config in self.output_variables.items():
             mapping[config.mapped_name] = var_name
         return mapping
-
-    def save_config(self, file_path: str | Path) -> None:
-        if not self._is_fitted:
-            raise ValueError("Preprocessor must be fitted before saving config")
-
-        from datetime import UTC, datetime
-
-        config = PreprocessorConfig(
-            input_variables={
-                name: config for name, config in self.input_variables.items()
-            },
-            output_variables={
-                name: config for name, config in self.output_variables.items()
-            },
-            created_timestamp=datetime.now(UTC).isoformat(),
-        )
-
-        config_dict = asdict(config)
-
-        def convert_numpy_types(obj):
-            if isinstance(obj, dict):
-                return {k: convert_numpy_types(v) for k, v in obj.items()}
-            if isinstance(obj, list):
-                return [convert_numpy_types(v) for v in obj]
-            if isinstance(obj, np.integer):
-                return int(obj)
-            if isinstance(obj, np.floating):
-                return float(obj)
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-            return obj
-
-        config_dict = convert_numpy_types(config_dict)
-
-        with open(file_path, "w") as f:
-            json.dump(config_dict, f, indent=2)
-
-        _logger.info(f"Configuration saved to {file_path}")
-
-    def load_config(self, file_path: str | Path) -> "DataPreprocessor":
-        with open(file_path) as f:
-            config_dict = json.load(f)
-
-        self.input_variables = {}
-        for name, var_config in config_dict["input_variables"].items():
-            self.input_variables[name] = VariableConfig(**var_config)
-
-        self.output_variables = {}
-        for name, var_config in config_dict["output_variables"].items():
-            self.output_variables[name] = VariableConfig(**var_config)
-
-        self._is_fitted = True
-        _logger.info(f"Configuration loaded from {file_path}")
-        return self
 
     def fit_transform(self, data: pd.DataFrame | list[dict[str, Any]]) -> pd.DataFrame:
         return self.fit(data).transform(data)

@@ -50,21 +50,6 @@ class TestDataPreprocessor:
         assert restored_from_dict == expected
         assert restored_from_array == expected
 
-    def test_save_and_load_config_round_trip(self, tmp_path):
-        config_path = tmp_path / "preprocessor.json"
-        preprocessor = DataPreprocessor()
-        preprocessor.setup_variables(["alpha"], ["beta"])
-        preprocessor.setup_normalization(output_normalizations={"beta": "z_score"})
-        preprocessor.fit(pd.DataFrame({"alpha": [1.0, 2.0], "beta": [4.0, 6.0]}))
-        preprocessor.save_config(config_path)
-
-        loaded = DataPreprocessor().load_config(config_path)
-
-        assert loaded.get_variable_mapping() == {"alpha": "x1", "beta": "y1"}
-        assert loaded.output_variables["beta"].mean == 5.0
-
-
-class TestLogTransform:
     def test_log_output_round_trips_to_original_space(self):
         dataframe = pd.DataFrame(
             {"length": [1.0, 2.0, 3.0], "stress": [10.0, 100.0, 1000.0]}

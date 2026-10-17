@@ -276,23 +276,6 @@ class TestDataPreprocessorRoundtrip:
         for col in ["length", "width", "stress"]:
             np.testing.assert_allclose(restored[col], df[col].tolist(), atol=1e-10)
 
-    def test_config_save_load_roundtrip(self, tmp_path):
-        df = self._make_df()
-        pp = DataPreprocessor()
-        pp.setup_variables(["length", "width"], ["stress"])
-        pp.setup_normalization(
-            input_normalizations={"length": "z_score"},
-            output_normalizations={"stress": "min_max"},
-        )
-        pp.fit(df)
-        config_path = tmp_path / "config.json"
-        pp.save_config(config_path)
-
-        pp2 = DataPreprocessor().load_config(config_path)
-        t1 = pp.transform(df)
-        t2 = pp2.transform(df)
-        pd.testing.assert_frame_equal(t1, t2)
-
 
 # ---------------------------------------------------------------------------
 # P5. Normalization Invariants (DataPreprocessor)
