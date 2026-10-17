@@ -52,3 +52,33 @@ Review subtotal: **net: -61 lines possible.**
 - A10 is the only parity-risk cut (fold layout is test-pinned).
 - A12 needs a spec decision (T18ry) — do not delete unilaterally.
 - Removing dead code ALSO removes its tests; suite count drops are expected, update the V&V report counts.
+
+---
+
+## Dispositions — executed 2026-10-17 on `jgo/consolidation-chain`
+
+One commit per cut (per the notes below); full suite + repo-wide `ty check` after each.
+
+| # | Outcome | Notes |
+|---|---------|-------|
+| A1 | ✅ cut | `e4f2a3e` — incl. 2 imports only it used (`re`, `Callable`) |
+| A2 | ✅ cut | `0ea62c9` — analytical tier re-run green; V&V E-IDs retired in docs |
+| A3 | ✅ cut | `036e2f5` — `lhs(n, k, seed)` = classic; docs-figure scatter rides classic |
+| A4 | ✅ cut | `5624547` — analytical docstring rationale rewritten to match |
+| A5 | ✅ cut | `69609a3` — 27 dominance tests across 3 files rode along |
+| A6 | ✅ cut | `af49c91` — `PreprocessorConfig` (serialize-only model) orphaned + cut; how-to section dropped |
+| A7 | ✅ cut | `4d9084c` |
+| A8 | ✅ cut | `3b1b4d3` |
+| A9 | ✅ cut | `d947aa5` — its only test refs had already died with A1/A6 |
+| A10 | ✅ cut | `dee4aa6` — **42-seed × 6-shape fold parity verified fold-for-fold before the swap**; layout now a frozen-literal test; dep closure (sklearn/joblib/narwhals/threadpoolctl) out of the lock |
+| A11 | ✋ kept | pydantic stays: `SumoModelMetadata` rides the model-export sidecar where `model_validate_json` is the disk-read validation gate — the counterargument in the row wins |
+| A12 | ✋ moot | `analyze_dataset` gained its product caller on develop: the `itis_sumo.report` façade (T54rp) consumes it; spec guard (T18ry) satisfied, nothing to decide |
+| B1 | ✅ cut | `93146e7` — one helper, noun-parameterized (the 3rd copy had become the MOGA *Domains* guard via T52xx); message text unchanged so error assertions keep pinning it |
+| B2 | ✅ cut | `e801679` — no more `PyDLL`/`CDLL` demo binding at package import |
+| B3 | ✅ cut | `e255aa6` — sized as a shrink, turned out DEAD (0 callers, 0 tests, no re-export): deleted outright |
+| B4 | 🚫 n/a | the loop grew the V47st strict-positive boundary guard after this review — deleting `log_names`/`build_bounds` into a dict-comp can no longer express the guard; left alone per the "deliberately not flagged" rule |
+| B5 | ✅ cut | `117c264` |
+
+Suite: 454 → 386 (−68, all dead-path tests). Reference/how-to/tutorial pages
+repointed (T55kv rename drift + removed APIs) and `headless_smoke.py` moved to
+the manual CV path — release smoke re-verified green on the real engine.
