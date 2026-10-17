@@ -43,39 +43,6 @@ from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 _logger = logging.getLogger(__name__)
 
 
-def retrieve_csv_result(
-    csv_file_path: str, inputs: dict[str, float], outputs: list[str] | None = None
-) -> dict[str, float]:
-    """
-    Retrieve the result from a csv file.
-    """
-
-    df = pd.read_csv(csv_file_path)
-
-    for col in inputs:
-        if col not in df.columns:
-            raise ValueError(
-                f"Input {col} not in the csv file. Columns are: {df.columns.values}"
-            )
-
-    if outputs is not None:
-        for col in outputs:
-            if col not in df.columns:
-                raise ValueError(
-                    f"Output {col} not in the csv file. Columns are: {df.columns.values}"
-                )
-        result = df.loc[np.all(df[inputs.keys()] == inputs.values(), axis=1), outputs]
-    else:
-        result = df.loc[np.all(df[inputs.keys()] == inputs.values(), axis=1)]
-    # Check if the result is empty or has multiple rows
-    if len(result) == 0:
-        raise ValueError(f"No result found for inputs {inputs}.")
-    if len(result) > 1:
-        raise ValueError(f"Multiple results found for inputs {inputs}.")
-
-    return result.iloc[0].to_dict()
-
-
 def evaluate_sumo_along_axes(
     run_dir: Path,
     PROCESSED_TRAINING_FILE: Path,

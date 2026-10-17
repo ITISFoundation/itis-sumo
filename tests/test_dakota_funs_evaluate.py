@@ -3,14 +3,12 @@
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.evaluate.sumo_evaluation import (
     _parse_crossvalidation_outputlogs,
     evaluate_sumo_crossvalidation,
-    retrieve_csv_result,
     summarize_uncertainty_samples,
 )
 from itis_sumo.utils.helpers import create_run_dir
@@ -108,41 +106,6 @@ def test_evaluate_sumo_crossvalidation_no_stdout_file_returns_empty(
     )
 
     assert result == {}
-
-
-def test_retrieve_csv_result_single_match(tmp_path):
-    csv_file = tmp_path / "data.csv"
-    df = pd.DataFrame({"x": [1, 2, 3], "y": [10, 20, 30], "out": [100, 200, 300]})
-    df.to_csv(csv_file, index=False)
-
-    result = retrieve_csv_result(
-        str(csv_file), inputs={"x": 2, "y": 20}, outputs=["out"]
-    )
-    assert result == {"out": 200}
-
-
-def test_retrieve_csv_result_missing_input_column_raises(tmp_path):
-    csv_file = tmp_path / "data.csv"
-    pd.DataFrame({"x": [1]}).to_csv(csv_file, index=False)
-
-    with pytest.raises(ValueError, match="not in the csv file"):
-        retrieve_csv_result(str(csv_file), inputs={"missing_col": 1})
-
-
-def test_retrieve_csv_result_no_match_raises(tmp_path):
-    csv_file = tmp_path / "data.csv"
-    pd.DataFrame({"x": [1, 2]}).to_csv(csv_file, index=False)
-
-    with pytest.raises(ValueError, match="No result found"):
-        retrieve_csv_result(str(csv_file), inputs={"x": 999})
-
-
-def test_retrieve_csv_result_multiple_matches_raises(tmp_path):
-    csv_file = tmp_path / "data.csv"
-    pd.DataFrame({"x": [1, 1], "out": [1, 2]}).to_csv(csv_file, index=False)
-
-    with pytest.raises(ValueError, match="Multiple results found"):
-        retrieve_csv_result(str(csv_file), inputs={"x": 1})
 
 
 def test_create_run_dir_creates_unique_directory(tmp_path):

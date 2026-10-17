@@ -18,7 +18,6 @@ from itis_sumo.evaluate.sumo_evaluation import (
     import_sumo_model,
     perform_moga_optimization,
     propagate_uq,
-    retrieve_csv_result,
 )
 
 __all__ = [
@@ -39,5 +38,4 @@ __all__ = [
     "import_sumo_model",
     "perform_moga_optimization",
     "propagate_uq",
-    "retrieve_csv_result",
 ]
