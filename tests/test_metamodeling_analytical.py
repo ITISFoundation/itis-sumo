@@ -32,7 +32,6 @@ from itis_sumo.data.tabular import create_manual_uq_samples
 from itis_sumo.evaluate.sumo_evaluation import (
     evaluate_sumo,
     evaluate_sumo_along_axes,
-    evaluate_sumo_crossvalidation,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
 )
@@ -492,40 +491,6 @@ class TestGridEvaluation:
 class TestCrossValidation:
     """Category E: Cross-Validation."""
 
-    def test_crossvalidation_rmse_near_zero_for_linear(self, run_dir):
-        """E1: A well-sampled linear function should cross-validate with RMSE ~ 0."""
-        x_train = np.linspace(0, 1, 30)
-        train_file = _write_processed(
-            pd.DataFrame({"x": x_train, "y": 2 * x_train + 1}),
-            run_dir / "train_processed.txt",
-        )
-
-        metrics = evaluate_sumo_crossvalidation(
-            run_dir, train_file, ["x"], "y", N_CROSS_VALIDATION=5
-        )
-        assert "y" in metrics
-        assert isinstance(metrics["y"], dict)
-        rmse = float(metrics["y"]["root_mean_squared"])
-        assert rmse < 0.1
-
-    def test_crossvalidation_rmse_improves_with_more_data(self, run_dir):
-        """E2: CV RMSE for f(x) = sin(x) should generally decrease as training size grows."""
-        rmses = {}
-        for n in (20, 50, 100):
-            sub_dir = run_dir / f"n_{n}"
-            sub_dir.mkdir()
-            x_train = np.linspace(0, 2 * np.pi, n)
-            train_file = _write_processed(
-                pd.DataFrame({"x": x_train, "y": np.sin(x_train)}),
-                sub_dir / "train_processed.txt",
-            )
-            metrics = evaluate_sumo_crossvalidation(
-                sub_dir, train_file, ["x"], "y", N_CROSS_VALIDATION=5
-            )
-            rmses[n] = float(metrics["y"]["root_mean_squared"])
-
-        assert rmses[100] < rmses[20]
-
     def test_manual_crossvalidation_prediction_interval_coverage(self, run_dir):
         """E3: ~95% of held-out points should fall within y_hat +/- 1.96*std_hat.
 
@@ -549,30 +514,6 @@ class TestCrossValidation:
         within_interval = np.abs(obs - pred) <= 1.96 * std + 1e-9
         coverage = within_interval.mean()
         assert coverage >= 0.7
-
-    def test_manual_vs_builtin_crossvalidation_agree(self, run_dir):
-        """E4: manual (per-fold) and built-in Dakota CV RMSE should roughly agree."""
-        x_train = np.linspace(0, 1, 30)
-        train_file = _write_processed(
-            pd.DataFrame({"x": x_train, "y": 2 * x_train + 1}),
-            run_dir / "train_processed.txt",
-        )
-
-        builtin_metrics = evaluate_sumo_crossvalidation(
-            run_dir, train_file, ["x"], "y", N_CROSS_VALIDATION=5
-        )
-        builtin_rmse = float(builtin_metrics["y"]["root_mean_squared"])
-
-        manual_dir = run_dir / "manual"
-        manual_dir.mkdir()
-        manual_cv = evaluate_sumo_manual_crossvalidation(
-            manual_dir, train_file, ["x"], "y", N_CROSS_VALIDATION=5
-        )
-        manual_rmse = _rmse(manual_cv["y"], manual_cv["y_hat"])
-
-        # both should be small in absolute terms for this easy, well-sampled function
-        assert builtin_rmse < 0.1
-        assert manual_rmse < 0.1
 
 
 @pytest.mark.analytical

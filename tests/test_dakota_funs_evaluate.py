@@ -5,107 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from itis_sumo.core.dakota_object import DakotaObject
 from itis_sumo.evaluate.sumo_evaluation import (
-    _parse_crossvalidation_outputlogs,
-    evaluate_sumo_crossvalidation,
     summarize_uncertainty_samples,
 )
 from itis_sumo.utils.helpers import create_run_dir
-
-SAMPLE_CV_LOG = """
-Some preamble text.
-Surrogate quality metrics (5-fold CV) for response_1:
-      root_mean_squared         0.1234
-      sum_abs                   1.2345
-      mean_abs                  0.2345
-      max_abs                   0.9999
-some intervening text about build (training) points here
-Surrogate quality metrics (5-fold CV) for response_2:
-      root_mean_squared         0.5678
-      sum_abs                   nan
-      mean_abs                  0.1111
-      max_abs                   0.2222
-"""
-
-
-def test_parse_crossvalidation_outputlogs_extracts_all_variables_and_metrics():
-    result = _parse_crossvalidation_outputlogs(SAMPLE_CV_LOG, N_CROSS_VALIDATION=5)
-
-    assert set(result.keys()) == {"response_1", "response_2"}
-    assert result["response_1"]["root_mean_squared"] == "0.1234"
-    assert result["response_1"]["max_abs"] == "0.9999"
-    assert result["response_2"]["sum_abs"] == "nan"
-
-
-def test_parse_crossvalidation_outputlogs_no_matches_returns_message():
-    result = _parse_crossvalidation_outputlogs("no metrics here", N_CROSS_VALIDATION=5)
-    assert result == {}
-
-
-def test_parse_crossvalidation_outputlogs_empty_string():
-    result = _parse_crossvalidation_outputlogs("", N_CROSS_VALIDATION=5)
-    assert result == {}
-
-
-def test_evaluate_sumo_crossvalidation_parses_captured_dakota_stdout(
-    tmp_path, monkeypatch
-):
-    """Regression test for B22 (V37): evaluate_sumo_crossvalidation must return the
-    metrics parsed from the stdout `DakotaObject.run` actually captures to
-    `dakota_stdout.txt`, not the metrics from a hardcoded empty string.
-
-    Only `DakotaObject.run` (the actual Dakota engine invocation) is mocked; the
-    surrounding conf-file generation and stdout-parsing code runs for real, so a
-    regression to `log_output = ""` makes this test fail with `result == {}`
-    instead of silently passing (unlike the endpoint-level tests, which accept
-    the "No surrogate quality metrics found." fallback as an equally valid
-    outcome and therefore don't catch this regression -- see B22 postmortem)."""
-    training_file = tmp_path / "df_processed_jobs.dat"
-    training_file.write_text("x y\n0.1 1.0\n0.2 2.0\n0.3 3.0\n0.4 4.0\n0.5 5.0\n")
-
-    fake_stdout = (
-        "Surrogate quality metrics (5-fold CV) for y:\n"
-        "      root_mean_squared         0.1234\n"
-        "      sum_abs                   1.2345\n"
-        "      mean_abs                  0.2345\n"
-        "      max_abs                   0.9999\n"
-    )
-
-    def fake_run(self, dakota_conf, run_dir):
-        Path(run_dir, "dakota_stdout.txt").write_text(fake_stdout)
-
-    monkeypatch.setattr(DakotaObject, "run", fake_run)
-
-    result = evaluate_sumo_crossvalidation(
-        tmp_path, training_file, ["x"], "y", N_CROSS_VALIDATION=5
-    )
-
-    assert result == {
-        "y": {
-            "root_mean_squared": "0.1234",
-            "sum_abs": "1.2345",
-            "mean_abs": "0.2345",
-            "max_abs": "0.9999",
-        }
-    }
-
-
-def test_evaluate_sumo_crossvalidation_no_stdout_file_returns_empty(
-    tmp_path, monkeypatch
-):
-    """If DakotaObject.run doesn't produce a stdout file, parsing degrades to {}
-    rather than raising (mirrors the `stdout_file.is_file()` guard)."""
-    training_file = tmp_path / "df_processed_jobs.dat"
-    training_file.write_text("x y\n0.1 1.0\n0.2 2.0\n0.3 3.0\n0.4 4.0\n0.5 5.0\n")
-
-    monkeypatch.setattr(DakotaObject, "run", lambda self, dakota_conf, run_dir: None)
-
-    result = evaluate_sumo_crossvalidation(
-        tmp_path, training_file, ["x"], "y", N_CROSS_VALIDATION=5
-    )
-
-    assert result == {}
 
 
 def test_create_run_dir_creates_unique_directory(tmp_path):

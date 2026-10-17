@@ -383,46 +383,6 @@ def create_sumo_evaluation_conffile(
     return dakota_conf
 
 
-def create_sumo_crossvalidation_conffile(
-    build_file: Path,
-    input_variables: list[str],
-    output_responses: list[str],
-    dakota_conf_file: str | Path | None = None,
-    N_CROSS_VALIDATION=5,
-    has_eval_id_column: bool | None = None,
-):
-    dakota_conf = start_dakota_file()
-    training_samples_file = str(build_file.resolve())
-    dakota_conf += add_surrogate_model(
-        training_samples_file=training_samples_file,
-        cross_validation_folds=N_CROSS_VALIDATION,
-        has_eval_id_column=(
-            has_eval_id_column
-            if has_eval_id_column is not None
-            else infer_has_eval_id_column_from_filename(training_samples_file)
-        ),
-    )
-    from itis_sumo.data.tabular import process_input_file
-
-    JUST_INPUTS_FILE = process_input_file(
-        build_file,
-        columns_to_remove=output_responses,
-    )
-    dakota_conf += add_evaluation_method(
-        str(JUST_INPUTS_FILE.resolve()),
-        includes_eval_id=False,  ## just to have some method, otherwise Dakota gives error
-    )
-    dakota_conf += add_continuous_variables(
-        variables=input_variables,
-    )
-    dakota_conf += add_responses(output_responses)
-
-    if dakota_conf_file:
-        write_to_file(dakota_conf, dakota_conf_file)
-
-    return dakota_conf
-
-
 def create_sumo_manual_crossvalidation_conffile(
     fold_run_dir: Path,
     build_file: Path,

@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -16,7 +15,6 @@ from sklearn.model_selection import KFold
 from itis_sumo.config.nidr import (
     add_surrogate_model,
     create_moga_optimization_conffile,
-    create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
     create_sumo_manual_crossvalidation_conffile,
     infer_has_eval_id_column_from_filename,
@@ -333,76 +331,6 @@ def summarize_uncertainty_samples(
     }
 
 
-def _parse_crossvalidation_outputlogs(log_output: str, N_CROSS_VALIDATION: int):
-    variable_name_pattern = (
-        rf"Surrogate quality metrics \({N_CROSS_VALIDATION}-fold CV\) for (\w+):"
-    )
-    metrics_pattern = (
-        r"\s+(root_mean_squared|sum_abs|mean_abs|max_abs)\s+([\d.e+-]+|nan)"
-    )
-
-    # Find all occurrences of variable names in the log
-    variables = re.findall(variable_name_pattern, log_output)
-
-    # Split the log output by the variable name to handle each output separately
-    log_parts = re.split(variable_name_pattern, log_output)
-    log_parts = log_parts[1:]  # Skip the first part (before the first variable name)
-
-    # Dictionary to hold the parsed results for each output variable
-    parsed_error_metrics = {}
-
-    # Loop through the log parts, and extract metrics for each output variable
-    for i, variable in enumerate(variables):
-        # The log part after each variable name contains the metrics section for that variable
-        metrics_section = log_parts[
-            2 * i + 1
-        ]  # The log part immediately after the variable name
-
-        ## remove the training error of the next variable
-        metrics_section = metrics_section.split("build (training) points")[0]
-
-        # Find all the surrogate quality metrics for this particular output variable
-        metrics_matches = re.findall(metrics_pattern, metrics_section)
-
-        if metrics_matches:
-            metrics = {metric: value for metric, value in metrics_matches}
-            parsed_error_metrics[variable] = metrics
-        else:
-            parsed_error_metrics[variable] = "No surrogate quality metrics found."
-
-    _logger.debug("Parsed cross-validation metrics: %s", parsed_error_metrics)
-    return parsed_error_metrics
-
-
-def evaluate_sumo_crossvalidation(
-    run_dir: Path,
-    PROCESSED_TRAINING_FILE: Path,
-    input_vars: list[str],
-    output_response: str,
-    N_CROSS_VALIDATION: int = 5,
-):
-    input_vars = sanitize_varnames(input_vars)
-    output_response = sanitize_varnames(output_response)
-
-    dakota_conf = create_sumo_crossvalidation_conffile(
-        PROCESSED_TRAINING_FILE,
-        input_vars,
-        [output_response],
-        N_CROSS_VALIDATION=N_CROSS_VALIDATION,
-    )
-    # run dakota
-    dakobj = DakotaObject()
-    dakobj.run(dakota_conf, run_dir)
-    # `dakobj.run` writes captured stdout to "dakota_stdout.txt" in run_dir (see DakotaObject.run)
-    stdout_file = run_dir / "dakota_stdout.txt"
-    log_output = stdout_file.read_text() if stdout_file.is_file() else ""
-    parsed_error_metrics = _parse_crossvalidation_outputlogs(
-        log_output, N_CROSS_VALIDATION
-    )
-
-    return parsed_error_metrics
-
-
 def evaluate_sumo_manual_crossvalidation(
     run_dir: Path,
     PROCESSED_TRAINING_FILE: Path,
@@ -548,10 +476,10 @@ def compute_cv_accuracy_metrics(
 ) -> dict[str, float]:
     """Compute RMSE/MAE/sum-abs/max-abs/bias directly from paired CV actual/predicted values.
 
-    Unlike `_parse_crossvalidation_outputlogs`, this does not depend on parsing Dakota's
-    stdout (which `evaluate_sumo_crossvalidation` no longer captures) - it derives the
-    same metrics straight from the actual/predicted arrays already produced by
-    `evaluate_sumo_manual_crossvalidation`.
+    This is the canonical CV metrics path: it derives the metrics straight
+    from the actual/predicted arrays produced by
+    `evaluate_sumo_manual_crossvalidation` — no parsing of Dakota's stdout
+    (the built-in Dakota CV chain that did was removed as dead: ponytail A2).
 
     `mean_signed_error` (bias) is `mean(actual - predicted)`, signed rather than
     absolute - a systematic over/under-prediction can net out near zero in `mean_abs`
