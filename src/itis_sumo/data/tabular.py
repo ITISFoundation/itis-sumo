@@ -23,10 +23,7 @@ def _parse_data(file: str | Path) -> list[list[str]]:
     Returns:
         List of lines, where each line is split into a list of values
     """
-    data = []
-    with open(file) as f:
-        data = [line.strip().split() for line in f]
-    return data
+    return [line.split() for line in Path(file).read_text().splitlines()]
 
 
 def _parse_json_dict(file: str | Path):
