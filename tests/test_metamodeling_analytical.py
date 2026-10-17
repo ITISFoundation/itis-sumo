@@ -6,7 +6,7 @@ match. This is the "give it inputs, check the outputs are what we expect" layer.
 Each test spawns a real Dakota subprocess, so all tests here are tagged
 `@pytest.mark.analytical` and excluded from the default `make test-flaskapi` run.
 
-Test IDs (B1-B8, C1-C3, D1-D5, E1-E4, F1-F3, F5-F7) mirror the categories/IDs in
+Test IDs (B1-B8, C1-C3, D1-D5, E3, F1-F3, F5-F7) mirror the categories/IDs in
 docs/VERIFICATION_VALIDATION_PLAN.md. Category A (LHS) and H (DataPreprocessor) are
 pure-Python and already covered in test_unit_solver.py / test_property_invariants.py;
 Category G (MOGA) is deferred (see those files' "DEFERRED" sections).

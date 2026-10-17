@@ -84,7 +84,9 @@ as boxes with a narrow range, since cost scales with count, not width.
 
 Sobol' indices tell you *which* inputs matter; if instead you want the
 output distribution itself (mean/std of `y` given input distributions),
-that's `propagate_uq` — a separate, Dakota-native pathway not currently
-wired to the web UI. See
+that's `evaluate_uncertainty` (or `SumoSession.uncertainty`): it draws
+per-variable samples from your declared normal/uniform/constant
+distributions, evaluates the surrogate, and injects its own predictive
+uncertainty to summarise the output. See
 [Reference → Evaluate § Uncertainty propagation](../reference/evaluate.md#uncertainty-propagation)
-for its signature and known caveats before using it.
+for the pathway behind it.

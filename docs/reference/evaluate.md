@@ -21,21 +21,20 @@ output back into pandas DataFrames and derived metrics.
 
 ## Cross-validation
 
-Two independent pathways, because Dakota's built-in one has a known
-parsing gap:
+One pathway: Dakota's built-in CV chain (conf composer + stdout-log parser)
+was removed as dead — the product never called it, and its log-parsing
+was a known gap (see
+[known limitations](../verification-validation.md#known-limitations)).
 
-- **`evaluate_sumo_crossvalidation`** — Dakota-native CV
-  (`create_sumo_crossvalidation_conffile`). Parses Dakota's CV log output
-  via `_parse_crossvalidation_outputlogs`.
 - **`evaluate_sumo_manual_crossvalidation`** — K-fold CV done in Python
-  (`sklearn.model_selection.KFold`) driving repeated `evaluate_sumo` calls,
-  one fold at a time. This is the pathway that's actually
-  correctness-verified end to end (Verification & Validation Category E);
-  the built-in pathway's `log_output` is currently hardcoded empty on the
-  Dakota side, which the manual path exists to work around — see
-  [known limitations](../verification-validation.md#known-limitations).
+  (validation indices from a seeded `np.random.RandomState` permutation
+  split via `np.array_split`, a layout frozen to be fold-for-fold identical
+  to `sklearn`'s `KFold(shuffle=True)` before that dependency was dropped)
+  driving repeated `evaluate_sumo` calls, one fold at a time. This is the
+  pathway that's actually correctness-verified end to end (Verification &
+  Validation Category E).
 
-Metrics on top of either pathway:
+Metrics on top of the fold predictions:
 
 - `compute_cv_accuracy_metrics` — RMSE / R² from predictions vs. held-out
   truth.
@@ -43,20 +42,19 @@ Metrics on top of either pathway:
   sets of predictions (`scipy.stats.ttest_rel`).
 - `compute_cv_convergence` — re-runs CV at increasing subset sizes
   (`_convergence_subset_sizes`) to produce a convergence curve; verified
-  monotonically decreasing RMSE with more training data (Category B7/E2).
+  monotonically decreasing RMSE with more training data (Category B7).
 
 ## Uncertainty propagation
 
-- **`propagate_uq`** — Dakota-native forward UQ propagation
-  (`create_uq_propagation_conffile`); normal-uncertain inputs only.
-- The **actually user-reachable** UQ pathway (the one wired to the
-  `/manual_uq_propagation_with_uncertainty` route in mmux/vite) composes
-  `create_manual_uq_samples` (supports normal/uniform/constant per
-  variable) with `evaluate_sumo`, then injects the surrogate's own
-  predictive uncertainty via an erfinv-based transform
-  (`sqrt(2)·erfinv(U)  ~  N(0,1)` for `U ~ Uniform(-1, 1)`) — this is the
-  pathway [Verification & Validation Category F](../verification-validation.md#category-f-uq-propagation)
-  actually exercises, not `propagate_uq`.
+The **user-reachable** UQ pathway (the one wired to the
+`/manual_uq_propagation_with_uncertainty` route in mmux/vite) composes
+`create_manual_uq_samples` (supports normal/uniform/constant per
+variable) with `evaluate_sumo`, then injects the surrogate's own
+predictive uncertainty via an erfinv-based transform
+(`sqrt(2)·erfinv(U)  ~  N(0,1)` for `U ~ Uniform(-1, 1)`) — this is the
+pathway [Verification & Validation Category F](../verification-validation.md#category-f-uq-propagation)
+exercises. (Dakota's native `propagate_uq` chain — normal-uncertain inputs
+only — was dead on every real path and has been removed.)
 
 ## Optimization
 
