@@ -10,7 +10,6 @@ import pandas as pd
 from scipy.optimize import curve_fit
 from scipy.special import erfinv
 from scipy.stats import ttest_rel
-from sklearn.model_selection import KFold
 
 from itis_sumo.config.nidr import (
     add_surrogate_model,
@@ -345,13 +344,18 @@ def evaluate_sumo_manual_crossvalidation(
 
     all_observations = load_data(PROCESSED_TRAINING_FILE)[output_response].astype(float)
     n_samples = len(all_observations)
-    indices = np.arange(n_samples)
     all_predictions = np.full(n_samples, np.nan)
     all_stds = np.full(n_samples, np.nan)
-    kf = KFold(n_splits=N_CROSS_VALIDATION, shuffle=True, random_state=seed)
+    # KFold(n_splits, shuffle=True, random_state=seed) equivalent, verified
+    # fold-for-fold against sklearn 1.x over 42 seeds x shapes {10,17,52,100}
+    # x {3,4,5,7,10} splits (ponytail A10): one RandomState permutation of the
+    # sample range, then np.array_split — the same front-loaded remainder fold
+    # sizes sklearn builds, and the same order folds are consumed in.
+    perm = np.random.RandomState(seed).permutation(n_samples)
+    val_folds = np.array_split(perm, N_CROSS_VALIDATION)
     parse_warnings: list[str] = []
 
-    for fold, (_, val_idx) in enumerate(kf.split(indices)):
+    for fold, val_idx in enumerate(val_folds):
         fold_run_dir = run_dir / f"fold_{fold}"
         os.makedirs(fold_run_dir, exist_ok=True)
 

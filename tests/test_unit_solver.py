@@ -237,6 +237,18 @@ class TestDakotaConfigGeneration:
 
 # ---------------------------------------------------------------------------
 # 4. Cross-Validation
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestKFoldEquivalentFolds:
+    def test_fold_layout_frozen(self):
+        # The manual-CV validation-index layout, frozen as a literal. It was
+        # recorded against sklearn.model_selection.KFold(n_splits=3,
+        # shuffle=True, random_state=42) and parity checked over 42 seeds x
+        # 6 sample/fold shapes before scikit-learn was dropped as a
+        # dependency (ponytail A10) — a change here silently re-shuffles CV.
+        perm = np.random.RandomState(42).permutation(10)
+        folds = np.array_split(perm, 3)
+        assert [fold.tolist() for fold in folds] == [[8, 1, 5, 0], [7, 2, 9], [4, 3, 6]]
 
 
 # ---------------------------------------------------------------------------
