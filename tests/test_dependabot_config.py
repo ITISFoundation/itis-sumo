@@ -53,8 +53,11 @@ def test_v20qx_itis_dakota_ignore_is_documented_and_tracked():
     content = CONFIG.read_text()
 
     assert 'dependency-name: "itis-dakota"' in content
-    # V20qx (amended T55kd): the reason must name the active constraint (the
-    # wheel-matrix decision) and reference the currently active engine task —
-    # the retired T16mo ladder reference would be a stale tracker.
-    assert "T55kd" in content
+    # V20qx: the reason must name the active constraint (the wheel-matrix
+    # decision) and reference the currently active engine policy — after
+    # T55kd shipped, that is the T16mo rung ladder + the R5 interface-cache
+    # shim (B16mo), not the closed T55kd.
+    assert "T16mo" in content
+    assert "R5" in content
+    assert "T55kd" not in content
     assert "wheel-matrix" in content
