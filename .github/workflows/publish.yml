@@ -151,5 +151,9 @@ jobs:
 
       - uses: softprops/action-gh-release@v3
         with:
+          # workflow_dispatch runs carry a branch ref (GITHUB_REF_NAME=main), so
+          # softprops' auto-detection finds no tag ("GitHub Releases requires a
+          # tag", B24qz) — the dispatch input is the tag's source of truth.
+          tag_name: ${{ inputs.tag }}
           body: ${{ steps.changelog.outputs.content }}
           files: dist/*
