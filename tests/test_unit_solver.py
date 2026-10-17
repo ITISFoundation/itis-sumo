@@ -13,7 +13,6 @@ from itis_sumo.config.nidr import (
     create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
     create_sumo_manual_crossvalidation_conffile,
-    create_uq_propagation_conffile,
     start_dakota_file,
 )
 from itis_sumo.data.tabular import (
@@ -530,26 +529,6 @@ class TestGetBoundsUniformDistributions:
 
 
 @pytest.mark.unit
-class TestUqPropagationConfigGeneration:
-    def test_create_uq_propagation_has_all_blocks(self, tmp_path):
-        build = tmp_path / "build.txt"
-        result = create_uq_propagation_conffile(
-            build_file=build,
-            input_variables=["x", "y"],
-            input_means={"x": 0.0, "y": 1.0},
-            input_stds={"x": 0.1, "y": 0.2},
-            output_responses=["response"],
-            n_samples=500,
-        )
-        assert "environment" in result
-        assert "model" in result
-        assert "method" in result
-        assert "normal_uncertain = 2" in result
-        assert "responses" in result
-        assert "'x'" in result
-        assert "'y'" in result
-
-
 # ---------------------------------------------------------------------------
 # 6. Data Filtering
 # ---------------------------------------------------------------------------

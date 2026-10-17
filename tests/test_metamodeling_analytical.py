@@ -11,16 +11,14 @@ docs/VERIFICATION_VALIDATION_PLAN.md. Category A (LHS) and H (DataPreprocessor) 
 pure-Python and already covered in test_unit_solver.py / test_property_invariants.py;
 Category G (MOGA) is deferred (see those files' "DEFERRED" sections).
 
-Category F note: `propagate_uq`/`create_uq_propagation_conffile` (Dakota-native UQ,
-normal-uncertain only) is *not called from any Flask route* - grepping
-blueprints/dakota.py confirms only `evaluate_sumo*` functions are imported from
-funs_evaluate.py. The real, user-reachable UQ pathway is
-`POST /manual_uq_propagation_with_uncertainty` (blueprints/dakota.py), which composes
-`create_manual_uq_samples` (funs_data_processing.py - supports normal/uniform/constant
-per-variable distributions) with `evaluate_sumo` and an erfinv-based predictive-
-uncertainty injection, entirely in Python plus one Dakota surrogate-evaluation call.
-This suite tests *that* pathway (see `_manual_uq_propagate` below), which is why F2
-(uniform input) and F7 (mixed normal+uniform inputs) are now included, not excluded.
+Category F note: the tested pathway is the manual-UQ composition (`_manual_uq_
+propagate` below) — `create_manual_uq_samples` (normal/uniform/constant
+per-variable distributions) + `evaluate_sumo` + erfinv-based predictive-
+uncertainty injection in Python plus one Dakota surrogate-evaluation call —
+i.e. what the api actually exposes, which is why F2 (uniform input) and F7
+(mixed normal+uniform inputs) are included, not excluded. The Dakota-native
+UQ pair (propagate_uq/create_uq_propagation_conffile, normal_uncertain only)
+was dead on every real pathway and has been deleted (ponytail A4).
 
 See docs/TIER1_TIER2_UNIT_TESTS_PLAN.md (Tier 3) for scope and rationale.
 """

@@ -19,7 +19,6 @@ from itis_sumo.config.nidr import (
     create_sumo_crossvalidation_conffile,
     create_sumo_evaluation_conffile,
     create_sumo_manual_crossvalidation_conffile,
-    create_uq_propagation_conffile,
     infer_has_eval_id_column_from_filename,
 )
 from itis_sumo.core.dakota_object import DakotaObject
@@ -106,37 +105,6 @@ def evaluate_sumo_along_axes(
 
 
 ### TODO refactor in new MMUX-compatible version (like above)
-def propagate_uq(
-    run_dir: Path,
-    PROCESSED_TRAINING_FILE: Path,
-    input_vars: list[str],
-    output_response: str,
-    means: dict[str, float],
-    stds: dict[str, float],
-    n_samples: int = 1000,
-    xscale: Literal["linear", "log"] = "linear",
-    label_converter: Callable | None = None,
-) -> list[float]:
-    input_vars = sanitize_varnames(input_vars)
-    output_response = sanitize_varnames(output_response)
-    means = {sanitize_varnames(k): v for k, v in means.items()}
-    stds = {sanitize_varnames(k): v for k, v in stds.items()}
-
-    # create dakota file
-    dakota_conf = create_uq_propagation_conffile(
-        build_file=PROCESSED_TRAINING_FILE,
-        input_variables=input_vars,
-        input_means=means,
-        input_stds=stds,
-        output_responses=[output_response],
-        n_samples=n_samples,
-    )
-
-    # run dakota
-    dakobj = DakotaObject()
-    dakobj.run(dakota_conf, run_dir)
-    x = get_results(run_dir / "predictions.dat", output_response)
-    return x.tolist()
 
 
 def propagate_manual_uq_with_uncertainty(

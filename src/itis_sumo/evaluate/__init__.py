@@ -17,7 +17,6 @@ from itis_sumo.evaluate.sumo_evaluation import (
     fit_convergence_exponential_asymptotic,
     import_sumo_model,
     perform_moga_optimization,
-    propagate_uq,
 )
 
 __all__ = [
@@ -37,5 +36,4 @@ __all__ = [
     "fit_convergence_exponential_asymptotic",
     "import_sumo_model",
     "perform_moga_optimization",
-    "propagate_uq",
 ]
