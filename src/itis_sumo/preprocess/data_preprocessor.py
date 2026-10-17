@@ -13,8 +13,7 @@ and maintain compatibility with the ML workflow pipeline.
 
 import json
 import logging
-import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -633,128 +632,6 @@ class DataPreprocessor:
 
     def fit_transform(self, data: pd.DataFrame | list[dict[str, Any]]) -> pd.DataFrame:
         return self.fit(data).transform(data)
-
-    def filter_variables(
-        self,
-        include_inputs: list[str] | None = None,
-        exclude_inputs: list[str] | None = None,
-        include_outputs: list[str] | None = None,
-        exclude_outputs: list[str] | None = None,
-        input_patterns: list[str] | None = None,
-        output_patterns: list[str] | None = None,
-        input_predicate: Callable[[str, VariableConfig], bool] | None = None,
-        output_predicate: Callable[[str, VariableConfig], bool] | None = None,
-    ) -> "DataPreprocessor":
-        filtered_inputs = self._filter_variable_group(
-            self.input_variables,
-            include_list=include_inputs,
-            exclude_list=exclude_inputs,
-            patterns=input_patterns,
-            predicate=input_predicate,
-            var_type="input",
-        )
-
-        filtered_outputs = self._filter_variable_group(
-            self.output_variables,
-            include_list=include_outputs,
-            exclude_list=exclude_outputs,
-            patterns=output_patterns,
-            predicate=output_predicate,
-            var_type="output",
-        )
-
-        self.input_variables = filtered_inputs
-        self.output_variables = filtered_outputs
-        self._remap_filtered_variables()
-
-        _logger.info(
-            f"Filtered variables: {len(self.input_variables)} inputs, {len(self.output_variables)} outputs"
-        )
-
-        return self
-
-    def _filter_variable_group(
-        self,
-        variables: dict[str, VariableConfig],
-        include_list: list[str] | None = None,
-        exclude_list: list[str] | None = None,
-        patterns: list[str] | None = None,
-        predicate: Callable[[str, VariableConfig], bool] | None = None,
-        var_type: str = "variable",
-    ) -> dict[str, VariableConfig]:
-        filtered_vars = {}
-
-        for var_name, config in variables.items():
-            should_include = True
-
-            if include_list is not None:
-                should_include = var_name in include_list
-            elif exclude_list is not None:
-                should_include = var_name not in exclude_list
-
-            if should_include and patterns is not None:
-                pattern_match = any(
-                    re.search(pattern, var_name) for pattern in patterns
-                )
-                should_include = pattern_match
-
-            if should_include and predicate is not None:
-                should_include = predicate(var_name, config)
-
-            if should_include:
-                filtered_vars[var_name] = config
-            else:
-                _logger.debug(f"Filtered out {var_type} variable: {var_name}")
-
-        return filtered_vars
-
-    def _remap_filtered_variables(self) -> None:
-        for i, (_, config) in enumerate(self.input_variables.items()):
-            config.mapped_name = f"x{i + 1}"
-
-        for i, (_, config) in enumerate(self.output_variables.items()):
-            config.mapped_name = f"y{i + 1}"
-
-    def filter_by_names(
-        self,
-        input_names: list[str] | None = None,
-        output_names: list[str] | None = None,
-        exclude: bool = False,
-    ) -> "DataPreprocessor":
-        if exclude:
-            return self.filter_variables(
-                exclude_inputs=input_names, exclude_outputs=output_names
-            )
-        return self.filter_variables(
-            include_inputs=input_names, include_outputs=output_names
-        )
-
-    def filter_by_patterns(
-        self,
-        input_patterns: list[str] | None = None,
-        output_patterns: list[str] | None = None,
-    ) -> "DataPreprocessor":
-        return self.filter_variables(
-            input_patterns=input_patterns, output_patterns=output_patterns
-        )
-
-    def filter_normalized_only(self) -> "DataPreprocessor":
-        return self.filter_variables(
-            input_predicate=lambda name, config: config.normalize,
-            output_predicate=lambda name, config: config.normalize,
-        )
-
-    def filter_non_normalized_only(self) -> "DataPreprocessor":
-        return self.filter_variables(
-            input_predicate=lambda name, config: not config.normalize,
-            output_predicate=lambda name, config: not config.normalize,
-        )
-
-    def get_filtered_variable_names(self) -> dict[str, list[str]]:
-        return {
-            "inputs": list(self.input_variables.keys()),
-            "outputs": list(self.output_variables.keys()),
-        }
 
     def get_summary(self) -> dict[str, Any]:
         summary = {
