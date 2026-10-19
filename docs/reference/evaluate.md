@@ -1,6 +1,6 @@
 # Surrogate evaluation & cross-validation
 
-`itis_sumo.evaluate.sumo_evaluation` is the highest-level module: it drives a
+`itis_sumo.engine.evaluation` is the highest-level module: it drives a
 Dakota study through `DakotaObject`, then parses the resulting tabular
 output back into pandas DataFrames and derived metrics.
 

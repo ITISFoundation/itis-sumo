@@ -1,6 +1,6 @@
-# Consumer API (`itis_sumo.api`)
+# Consumer API (`itis_sumo`)
 
-`itis_sumo.api` is the whole of what an application embedding itis-sumo is expected to
+`itis_sumo` is the whole of what an application embedding itis-sumo is expected to
 import — a web service, a notebook, a script. Pass a table of samples and some
 configuration; get back a typed result in your own units.
 
@@ -9,7 +9,7 @@ layout, Dakota configuration, normalization, internal variable renaming, run dir
 and inverse transforms.
 
 ```python
-from itis_sumo.api import cross_validate
+from itis_sumo import cross_validate
 
 result = cross_validate(samples, variables=["width", "height"], response="stress")
 result.predicted  # one value per sample, in the units of `stress`
@@ -51,7 +51,7 @@ configuration at all. Advanced users may override behaviour per column with
 `PreprocessingSpec`:
 
 ```python
-from itis_sumo.api import PreprocessingSpec, VariableSpec
+from itis_sumo import PreprocessingSpec, VariableSpec
 
 spec = PreprocessingSpec(overrides={"width": VariableSpec(scale="linear")})
 ```
@@ -67,7 +67,7 @@ result.
 
 ## Errors
 
-Every error that escapes `itis_sumo.api` is a `SumoError`. Catch the subclass rather than
+Every error that escapes `itis_sumo` is a `SumoError`. Catch the subclass rather than
 matching on message text.
 
 | Error | Meaning | Typical HTTP status |

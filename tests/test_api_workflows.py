@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.api import (
+from itis_sumo import (
     DistributionSpec,
     DomainSpec,
     PreprocessingSpec,
@@ -907,7 +907,7 @@ class TestEvaluateCorrelations:
 
     def test_producer_requires_scales(self):
         """V45ls structural tripwire on the new value-producing entry point."""
-        from itis_sumo.evaluate.sumo_evaluation import correlate_manual_uq_samples
+        from itis_sumo.engine.evaluation import correlate_manual_uq_samples
 
         with pytest.raises(TypeError):
             correlate_manual_uq_samples(  # ty: ignore[missing-argument]

@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from itis_sumo.evaluate.sumo_evaluation import SOBOL_BASE_SAMPLES
+from itis_sumo.engine.evaluation import SOBOL_BASE_SAMPLES
 
 pytestmark = pytest.mark.unit
 
@@ -41,7 +41,7 @@ def _build_sobol_designs(f, d: int, *, n: int = 2**12, seed: int = 42):
     analytic benchmarks exercise the shipped pipeline, not a copy of it."""
     from scipy.stats import uniform
 
-    from itis_sumo.evaluate.sumo_evaluation import (
+    from itis_sumo.engine.evaluation import (
         _saltelli_abc,
         _saltelli_pair_designs,
     )
@@ -57,7 +57,7 @@ def _build_sobol_designs(f, d: int, *, n: int = 2**12, seed: int = 42):
 
 def _run_algebra_on_analytic(f, d: int, *, n: int = 2**12, seed: int = 42):
     """Run the PRODUCTION algebra/bootstrap helpers on analytic designs."""
-    from itis_sumo.evaluate.sumo_evaluation import (
+    from itis_sumo.engine.evaluation import (
         _sobol_algebra,
         _sobol_joint_bootstrap,
     )
@@ -290,7 +290,7 @@ class TestSobolEstimatorInvariants:
 
         Raw-product estimators drift proportionally to the offset (units
         effects, e.g. stress reported in Pa); centered products cannot."""
-        from itis_sumo.evaluate.sumo_evaluation import _sobol_algebra
+        from itis_sumo.engine.evaluation import _sobol_algebra
 
         d = 4
         f_A, f_B, f_AB, f_U, f_V, pairs = _build_sobol_designs(
@@ -314,7 +314,7 @@ class TestSobolEstimatorInvariants:
         what pins evaluate_sobol_indices output to scipy.stats.sobol_indices."""
         from scipy.stats import sobol_indices
 
-        from itis_sumo.evaluate.sumo_evaluation import _sobol_algebra
+        from itis_sumo.engine.evaluation import _sobol_algebra
 
         d, n = 4, 2**10
         f_A, f_B, f_AB, f_U, f_V, pairs = _build_sobol_designs(
@@ -339,7 +339,7 @@ class TestSobolEstimatorInvariants:
     def test_zero_variance_sample_sets_var_zero(self):
         """V43pt/B28pp algebra seam: constant samples flag var_zero (the response
         layer turns that into null order contributions, not fake 0/0/0 masses)."""
-        from itis_sumo.evaluate.sumo_evaluation import _sobol_algebra
+        from itis_sumo.engine.evaluation import _sobol_algebra
 
         n, d = 64, 3
         alg = _sobol_algebra(
@@ -376,7 +376,7 @@ class TestDegenerateResponses:
             return df
 
     def test_all_constant_inputs_return_null_contributions(self, tmp_path: Path):
-        from itis_sumo.evaluate import sumo_evaluation as funs_evaluate
+        from itis_sumo.engine import evaluation as funs_evaluate
 
         pre = self._FakePreprocessor(["x1", "x2"])
         sampling = {"x1": {"value": 1.0}, "x2": {"value": 2.0}}
@@ -400,7 +400,7 @@ class TestDegenerateResponses:
         """One varying input, constant surrogate output: var_zero -> null masses."""
         import pandas as pd
 
-        from itis_sumo.evaluate import sumo_evaluation as funs_evaluate
+        from itis_sumo.engine import evaluation as funs_evaluate
 
         def _constant_sumo(
             run_dir, training_file, samples_file, input_vars, response_var

@@ -11,16 +11,20 @@ from scipy.optimize import curve_fit
 from scipy.special import erfinv
 from scipy.stats import ttest_rel
 
-from itis_sumo.config.nidr import (
+from itis_sumo.engine.dakota_object import DakotaObject
+from itis_sumo.engine.nidr import (
     add_surrogate_model,
     create_moga_optimization_conffile,
     create_sumo_evaluation_conffile,
     create_sumo_manual_crossvalidation_conffile,
     infer_has_eval_id_column_from_filename,
 )
-from itis_sumo.core.dakota_object import DakotaObject
-from itis_sumo.core.sumo_model_store import stage_model_for_import, store_exported_model
-from itis_sumo.data.tabular import (
+from itis_sumo.engine.sumo_model_store import (
+    stage_model_for_import,
+    store_exported_model,
+)
+from itis_sumo.tabular.preprocessor import DataPreprocessor
+from itis_sumo.tabular.processing import (
     compute_correlation_indices,
     create_grid_samples,
     create_manual_uq_samples,
@@ -34,7 +38,6 @@ from itis_sumo.data.tabular import (
     sanitize_varnames,
     scale_distribution,
 )
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
 
 _logger = logging.getLogger(__name__)
 

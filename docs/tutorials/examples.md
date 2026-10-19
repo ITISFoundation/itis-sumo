@@ -24,7 +24,7 @@ here is the actual shape of it. Nine training points sampled from
 `evaluate_sumo`, evaluated on a dense grid:
 
 ```python
-from itis_sumo.evaluate.sumo_evaluation import evaluate_sumo
+from itis_sumo.engine.evaluation import evaluate_sumo
 
 # x_train: 9 points, y_train = sin(x_train), written as a Dakota training file
 result = evaluate_sumo(run_dir, train_file, eval_file, ["x"], "y")
@@ -51,7 +51,7 @@ argues that training-point placement matters as much as training-point count.
 25 points each, drawn two ways, using itis-sumo's real `lhs()`:
 
 ```python
-from itis_sumo.sampling.lhs import lhs
+from itis_sumo.engine.lhs import lhs
 
 lhs_pts = lhs(
     2, 25, method="maximin", seed=42

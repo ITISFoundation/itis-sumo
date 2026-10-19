@@ -5,10 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from itis_sumo.evaluate.sumo_evaluation import (
+from itis_sumo.engine.evaluation import (
     summarize_uncertainty_samples,
 )
-from itis_sumo.utils.helpers import create_run_dir
+from itis_sumo.engine.helpers import create_run_dir
 
 
 def test_create_run_dir_creates_unique_directory(tmp_path):

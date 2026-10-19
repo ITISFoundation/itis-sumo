@@ -1,51 +1,28 @@
-"""Dataset diagnostics: the narrow, versioned entrypoint flaskapi/mmux_vite
-consumes for scale/distribution/outlier information (SPEC.md V16qf, T18ry).
+"""Dataset diagnostics (T18ry, T49np): the narrow one-call diagnostics surface.
 
-Detection is stitched from pieces promoted off the confidential incubator
-branch: `select_variable_scale`/`auto_select_distributions` (T48np) for the
-scale/distribution half, and `detect_raw_outliers` (this module, V46np) for
-the outlier-surfacing half — the raw-value Tukey detector BRANCH_CONSOLIDATION.md
-§3 recorded as "new work, not a port". Flag-only, like `_tukey_outlier_mask`
-does for CV residuals (V17kb): nothing here drops data, callers decide.
+`analyze_dataset` returns the override payload for preprocessing defaults and
+the auto-`domain` source; `detect_raw_outliers` is the scale-aware Tukey fence
+flagger (V46np).
 """
 
 from __future__ import annotations
 
+__all__ = [
+    "analyze_dataset",
+    "detect_raw_outliers",
+]
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
-from itis_sumo.data.tabular import auto_select_distributions
-
-Scale = Literal["linear", "log"]
-Distribution = Literal["constant", "uniform", "normal"]
-
-
-@dataclass
-class OutlierSummary:
-    count: int
-    indices: list[int]
-    fence_low: float
-    fence_high: float
-
-
-@dataclass
-class VariableDiagnostics:
-    name: str
-    scale: Scale
-    distribution: Distribution
-    confident: bool
-    outliers: OutlierSummary | None = None
-
-
-@dataclass
-class DatasetDiagnostics:
-    inputs: dict[str, VariableDiagnostics]
-    outputs: dict[str, VariableDiagnostics]
-    detail: dict[str, Any] | None = None
+from itis_sumo.tabular.processing import auto_select_distributions
+from itis_sumo.types import (
+    DatasetDiagnostics,
+    OutlierSummary,
+    Scale,
+    VariableDiagnostics,
+)
 
 
 def detect_raw_outliers(

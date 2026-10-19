@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.data.tabular import compute_correlation_indices
+from itis_sumo.tabular.processing import compute_correlation_indices
 
 _LINEAR = "linear"
 

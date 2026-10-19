@@ -18,7 +18,7 @@ estimator-parity test), the single runtime source for every index.
 - **Sampling box = exploration domain** (`V26dd`): each varying input is
   drawn uniformly across its box (log-uniform under a `log_scale` entry);
   modeller distributions are NOT an input — they belong to UQ propagation.
-  The public `itis_sumo.api.evaluate_sobol` accepts optional `DomainSpec`
+  The public `itis_sumo.evaluate_sobol` accepts optional `DomainSpec`
   boxes; omitted boxes are auto-inferred from the observed sample bounds, and
   a column constant in the samples is held fixed.
 - **Base sample size**: fixed at `SOBOL_BASE_SAMPLES = 1024`, independent

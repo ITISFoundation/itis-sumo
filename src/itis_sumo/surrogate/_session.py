@@ -1,6 +1,6 @@
 """Internal fit-then-query engine behind the public one-shot workflows.
 
-The public functions in :mod:`itis_sumo.api.workflows` are deliberately thin
+The public functions in :mod:`itis_sumo` are deliberately thin
 wrappers over a session that is fitted once and then queried many times. Keeping
 that split in place from the outset is what makes the eventual public
 fitted-model handle a re-export rather than a second port (SPEC V27fq).
@@ -22,13 +22,25 @@ from typing import Self, cast
 import numpy as np
 import pandas as pd
 
-from itis_sumo.api.errors import (
+from itis_sumo.engine.evaluation import (
+    correlate_manual_uq_samples,
+    evaluate_sobol_indices,
+    evaluate_sumo_along_axes,
+    evaluate_sumo_manual_crossvalidation,
+    evaluate_sumo_on_grid,
+    perform_moga_optimization,
+    propagate_manual_uq_with_uncertainty,
+    summarize_uncertainty_samples,
+)
+from itis_sumo.engine.helpers import create_run_dir
+from itis_sumo.errors import (
     SumoEngineError,
     SumoError,
     SumoInputError,
     SumoResultError,
 )
-from itis_sumo.api.types import (
+from itis_sumo.tabular.preprocessor import DataPreprocessor
+from itis_sumo.types import (
     AlongAxesResult,
     AxisSweep,
     CorrelationResult,
@@ -44,18 +56,6 @@ from itis_sumo.api.types import (
     UncertaintyResult,
     VariableSpec,
 )
-from itis_sumo.evaluate.sumo_evaluation import (
-    correlate_manual_uq_samples,
-    evaluate_sobol_indices,
-    evaluate_sumo_along_axes,
-    evaluate_sumo_manual_crossvalidation,
-    evaluate_sumo_on_grid,
-    perform_moga_optimization,
-    propagate_manual_uq_with_uncertainty,
-    summarize_uncertainty_samples,
-)
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
-from itis_sumo.utils.helpers import create_run_dir
 
 _logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 """Stable error taxonomy for the itis-sumo consumer API (SPEC V23er).
 
-Every error that escapes ``itis_sumo.api`` is a :class:`SumoError`. Consumers
+Every error that escapes ``itis_sumo`` is a :class:`SumoError`. Consumers
 classify failures by catching one of the three subclasses -- an HTTP service maps
 them onto 400 / 422 / 500 -- instead of matching on message text.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 class SumoError(Exception):
-    """Base class for every error crossing the ``itis_sumo.api`` boundary."""
+    """Base class for every error crossing the ``itis_sumo`` boundary."""
 
 
 class SumoInputError(SumoError):

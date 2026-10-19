@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from itis_sumo.core import dakota_object as dakobj
-from itis_sumo.core.dakota_object import (
+from itis_sumo.engine import dakota_object as dakobj
+from itis_sumo.engine.dakota_object import (
     DakotaObject,
     _dak_exec_static,
     working_directory,
@@ -58,7 +58,7 @@ def test_dak_exec_static_runs_study_and_captures_output(tmp_path, monkeypatch):
     fake_study.execute.side_effect = fake_execute
 
     with patch(
-        "itis_sumo.core.dakota_object.dakenv.study", return_value=fake_study
+        "itis_sumo.engine.dakota_object.dakenv.study", return_value=fake_study
     ) as mock_study:
         stdoutstr, stderrstr = _dak_exec_static("some dakota conf")
 

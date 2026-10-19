@@ -10,10 +10,10 @@ from itis_sumo import report
 
 #: modules the facade is allowed to source from, in lookup order
 _SOURCE_MODULES = (
-    "itis_sumo.api",
-    "itis_sumo.data",
-    "itis_sumo.evaluate",
-    "itis_sumo.evaluate.sumo_evaluation",
+    "itis_sumo",
+    "itis_sumo.tabular.processing",
+    "itis_sumo.engine.evaluation",
+    "itis_sumo.engine.evaluation",
 )
 
 

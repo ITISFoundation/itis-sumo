@@ -1,8 +1,8 @@
-"""Tests for itis_sumo.sampling.lhs (Latin Hypercube Sampling)."""
+"""Tests for itis_sumo.engine.lhs (Latin Hypercube Sampling)."""
 
 import numpy as np
 
-from itis_sumo.sampling.lhs import lhs
+from itis_sumo.engine.lhs import lhs
 
 
 def test_lhs_default_method_is_randomized_classic():

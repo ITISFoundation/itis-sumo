@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.config.nidr import (
+from itis_sumo.engine.lhs import lhs
+from itis_sumo.engine.nidr import (
     add_continuous_variables,
     add_responses,
     add_surrogate_model,
@@ -12,7 +13,7 @@ from itis_sumo.config.nidr import (
     create_sumo_evaluation_conffile,
     start_dakota_file,
 )
-from itis_sumo.data.tabular import (
+from itis_sumo.tabular.processing import (
     _filter_data,
     create_grid_samples,
     create_manual_uq_samples,
@@ -20,7 +21,6 @@ from itis_sumo.data.tabular import (
     get_bounds_uniform_distribution,
     get_bounds_uniform_distributions,
 )
-from itis_sumo.sampling.lhs import lhs
 
 
 # ---------------------------------------------------------------------------

@@ -10,14 +10,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from itis_sumo.evaluate.sumo_evaluation import (
+from itis_sumo.engine.evaluation import (
     compute_cv_accuracy_metrics,
     evaluate_sobol_indices,
     evaluate_sumo,
     evaluate_sumo_manual_crossvalidation,
 )
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
-from itis_sumo.utils.helpers import create_run_dir
+from itis_sumo.engine.helpers import create_run_dir
+from itis_sumo.tabular.preprocessor import DataPreprocessor
 
 N_TRAINING_SAMPLES = 30
 SEED = 42

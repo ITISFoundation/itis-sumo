@@ -1,6 +1,6 @@
 # Sampling
 
-`itis_sumo.sampling.lhs` and parts of `itis_sumo.data.tabular`
+`itis_sumo.engine.lhs` and parts of `itis_sumo.tabular.processing`
 generate the input points a surrogate is trained or evaluated on.
 
 ## Latin Hypercube Sampling (`sampling/lhs.py`)

@@ -28,13 +28,13 @@ import pandas as pd
 import pytest
 from scipy.special import erfinv
 
-from itis_sumo.data.tabular import create_manual_uq_samples
-from itis_sumo.evaluate.sumo_evaluation import (
+from itis_sumo.engine.evaluation import (
     evaluate_sumo,
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
 )
+from itis_sumo.tabular.processing import create_manual_uq_samples
 
 
 @pytest.fixture
