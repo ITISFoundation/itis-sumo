@@ -111,12 +111,41 @@ class ParetoFrontResult:
 
 
 @dataclass(frozen=True)
-class UncertaintyResult:
-    """Histogram and summary statistics from propagating explicit uncertainty
-    through a surrogate's own predictive uncertainty."""
+class UncertaintyDraws:
+    """Monte-Carlo propagation data (V53md): the draws, owned by the caller.
+
+    `draws` are the per-variable Monte-Carlo inputs in original units (one
+    column per variable, `num_samples` entries); `predictions` is the
+    surrogate's response for each draw and `prediction_stds` its predictive
+    spread where the engine supplies it, else None (V8df). `propagated` is
+    the propagated response grid (`n_histograms` rows x `num_samples`) that
+    `summarize_uncertainty` turns into bin statistics — the data-first seam
+    (V52rc): the summary is recomputable from this result, never locked
+    inside the call that produced it, and the caller may correlate or plot
+    the raw material themselves.
+    """
 
     response: str
     distributions: dict[str, DistributionSpec]
+    seed: int
+    num_samples: int
+    n_histograms: int
+    draws: dict[str, list[float]]
+    predictions: list[float]
+    prediction_stds: list[float] | None
+    propagated: list[list[float]]
+
+
+@dataclass(frozen=True)
+class UncertaintySummary:
+    """Histogram and summary statistics over propagated draws (V52rc).
+
+    The pure recomputation of `summarize_uncertainty` over an
+    `UncertaintyDraws.propagated` grid; provenance (response, seed) travels
+    with the draws that produced it.
+    """
+
+    response: str
     seed: int
     bins_start: float
     bins_end: float

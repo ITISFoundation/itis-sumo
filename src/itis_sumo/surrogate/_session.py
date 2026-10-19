@@ -23,7 +23,6 @@ import numpy as np
 import pandas as pd
 
 from itis_sumo.engine.evaluation import (
-    correlate_manual_uq_samples,
     evaluate_sobol_indices,
     evaluate_sumo,
     evaluate_sumo_along_axes,
@@ -32,8 +31,7 @@ from itis_sumo.engine.evaluation import (
     export_sumo_model,
     import_sumo_model,
     perform_moga_optimization,
-    propagate_manual_uq_with_uncertainty,
-    summarize_uncertainty_samples,
+    sample_and_propagate_uq,
 )
 from itis_sumo.engine.helpers import create_run_dir
 from itis_sumo.engine.sumo_model_store import (
@@ -51,7 +49,6 @@ from itis_sumo.tabular.processing import load_data
 from itis_sumo.types import (
     AlongAxesResult,
     AxisSweep,
-    CorrelationResult,
     CrossValidationResult,
     Direction,
     DistributionSpec,
@@ -62,7 +59,7 @@ from itis_sumo.types import (
     PredictionsResult,
     PreprocessingSpec,
     SobolResult,
-    UncertaintyResult,
+    UncertaintyDraws,
     VariableSpec,
 )
 
@@ -667,21 +664,27 @@ class SumoSession:
             effective_config=self.effective_config,
         )
 
-    def uncertainty(
+    def sample_uncertainty(
         self,
         *,
         distributions: Mapping[str, DistributionSpec],
         num_samples: int,
         n_histograms: int,
         seed: int,
-    ) -> UncertaintyResult:
+    ) -> UncertaintyDraws:
         """Propagate explicit uncertainty through the surrogate's own predictive
-        uncertainty and summarise the result as a histogram + boxplot."""
+        uncertainty, returning the raw material (V53md).
+
+        Draws are the per-variable Monte-Carlo inputs, predictions and spreads
+        travel per draw, and `propagated` is the realisation grid that
+        `summarize_uncertainty` re-summarises — the caller may correlate it,
+        plot it, or summarise it themselves (V52rc).
+        """
         _require_exact_coverage(distributions, self._variables, what="Distributions")
         engine_distributions = self._uq_engine_distributions(distributions)
-        samples = self._run_engine(
+        pieces = self._run_engine(
             "propagating uncertainty",
-            propagate_manual_uq_with_uncertainty,
+            sample_and_propagate_uq,
             self._run_dir,
             self._training_file,
             self._variables,
@@ -692,60 +695,16 @@ class SumoSession:
             n_histograms=n_histograms,
             seed=seed,
         )
-        summary = summarize_uncertainty_samples(samples)
-        return UncertaintyResult(
+        return UncertaintyDraws(
             response=self._response,
             distributions=dict(distributions),
             seed=seed,
-            bins_start=summary["bins_start"],
-            bins_end=summary["bins_end"],
-            bin_means=summary["bin_means"],
-            bin_stds=summary["bin_stds"],
-            q1=summary["q1"],
-            median=summary["median"],
-            q3=summary["q3"],
-            whisker_min=summary["whisker_min"],
-            whisker_max=summary["whisker_max"],
-            outliers=summary["outliers"],
-            mean=summary["mean"],
-            std=summary["std"],
-            minimum=summary["min"],
-            maximum=summary["max"],
-        )
-
-    def correlations(
-        self,
-        *,
-        distributions: Mapping[str, DistributionSpec],
-        num_samples: int,
-        seed: int,
-    ) -> CorrelationResult:
-        """Correlate each variable with the surrogate-predicted response over a
-        shared Monte Carlo sample set drawn from ``distributions``.
-
-        Scale comes from the session's own spec (V45ls): each column's samples
-        and the prediction are correlated on their declared scale.
-        """
-        _require_exact_coverage(distributions, self._variables, what="Distributions")
-        engine_distributions = self._uq_engine_distributions(distributions)
-        coefficients = self._run_engine(
-            "correlating through the surrogate",
-            correlate_manual_uq_samples,
-            self._run_dir,
-            self._training_file,
-            self._variables,
-            self._response,
-            engine_distributions,
-            self._preprocessor,
-            num_samples,
-            input_scales={
-                variable: self._scale_of(variable) for variable in self._variables
-            },
-            output_scale=self._scale_of(self._response),
-            seed=seed,
-        )
-        return CorrelationResult(
-            response=self._response, seed=seed, coefficients=coefficients
+            num_samples=num_samples,
+            n_histograms=n_histograms,
+            draws=pieces["draws"],
+            predictions=pieces["predictions"],
+            prediction_stds=pieces["prediction_stds"],
+            propagated=[list(row) for row in pieces["propagated"]],
         )
 
     def _uq_engine_distributions(
