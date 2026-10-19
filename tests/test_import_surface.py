@@ -45,28 +45,19 @@ def _imported_modules(source: str, path: Path) -> list[tuple[int, str]]:
     return found
 
 
-# Deep-harness tooling (publish-verify smoke, docs figure generation) drives the
-# engine internals on purpose; T60gb rewrites them onto the manifest surface.
-# Until then they are exempt HERE — not in docs or tutorials.
-_EXEMPT = {
-    REPO / "examples" / "headless_smoke.py",
-    REPO / "examples" / "generate_docs_figures.py",
-}
-
-
 @pytest.mark.parametrize(
     "path",
     sorted((REPO / "examples").rglob("*.py")) + sorted((REPO / "docs").rglob("*.md")),
     ids=lambda p: str(p.relative_to(REPO)),
 )
 def test_consumer_surfaces_import_only_the_public_namespace(path: Path) -> None:
-    if path in _EXEMPT:
-        pytest.skip("engine-harness tooling; migrates with T60gb")
     source = path.read_text(encoding="utf-8")
     if path.suffix == ".md":
-        # markdown code fences only; prose mentions are documentation talk
+        # markdown code fences only; prose mentions are documentation talk.
+        # EVERY line of every fence counts (B11sc: the first line after the
+        # fence opener used to be dropped, hiding the import lines themselves)
         source = "\n".join(
-            "\n".join(block.splitlines()[1:-1])
+            "\n".join(block.splitlines())
             for block in re.findall(r"```[^\n]*\n(.*?)```", source, re.DOTALL)
         )
         if not source.strip():

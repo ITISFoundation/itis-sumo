@@ -403,6 +403,14 @@ class SumoSession:
     # ----------------------------------------------------------------- queries
 
     def cross_validate(self, *, folds: int, seed: int) -> CrossValidationResult:
+        """Held-out predictions for every sample via manual K-fold CV.
+
+        Each fold is predicted by a surrogate that never saw it, so the result
+        is an honest read of generalization, not memorization. ``observed``,
+        ``predicted`` and ``predicted_std`` stay aligned to the caller's rows;
+        a fold Dakota abandons leaves NaNs there with the reason in
+        ``warnings`` instead of failing the run.
+        """
         response = self._mapped_response
         results = self._run_engine(
             "cross-validating the surrogate",
@@ -451,6 +459,12 @@ class SumoSession:
         at: Mapping[str, float] | None,
         points_per_variable: int,
     ) -> AlongAxesResult:
+        """One sweep per variable: response along each axis with every other
+        variable held at its centre (or at your ``at`` values).
+
+        The cheap shape of the response surface — one line per variable where
+        ``grid`` would be a hypercube.
+        """
         response = self._mapped_response
         results = self._run_engine(
             "evaluating the surrogate along its axes",

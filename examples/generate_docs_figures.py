@@ -1,113 +1,159 @@
 """Generate the worked-example figures embedded in the docs site.
 
-Every figure here is produced by calling itis-sumo's real public API (real Dakota
-GP fits, real LHS sampler, real Sobol' pipeline) against small analytical problems
-with known closed-form answers — nothing is hand-drawn or faked. Regenerate with:
+T61pn: PLOTLY, not matplotlib — one visual language across docs, the report
+renderings, and the mmux front-end (V54hz). Figures are interactive HTML,
+embedded from the docs pages via `<iframe>`. Regenerate with:
 
-    uv run --group docs python examples/generate_docs_figures.py
+    uv run --extra report python examples/generate_docs_figures.py
 
-Outputs land in docs/assets/examples/, referenced from docs/tutorials/*.md
-and docs/explanation/*.md.
+Every figure is produced by calling the root manifest (real Dakota GP fits,
+real LHS sampler, real Sobol' pipeline) against small analytical problems with
+known closed-form answers — nothing is hand-drawn or faked. The Sobol' figure
+starts FROM the report rendering (`itis_sumo.report.render_sobol`) and adds
+the analytical reference bars: docs figures are built from renderings, not
+beside them. Outputs land in docs/assets/examples/, referenced from
+docs/tutorials/*.md and docs/index.md.
 """
 
 import sys
 from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-from itis_sumo.engine.evaluation import evaluate_sobol_indices, evaluate_sumo
-from itis_sumo.engine.helpers import create_run_dir
-from itis_sumo.engine.lhs import lhs
-from itis_sumo.tabular.preprocessor import DataPreprocessor
+from itis_sumo import DomainSpec, evaluate_sobol, fit, generate_lhs_samples
+from itis_sumo.report import render_sobol
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "docs" / "assets" / "examples"
 SEED = 42
 
 
-def _write_processed(df: pd.DataFrame, path: Path) -> Path:
-    df.to_csv(path, sep=" ", index=False)
-    return path
+def _embed(fig: go.Figure, name: str) -> None:
+    fig.update_layout(width=760, height=430)
+    fig.write_html(
+        OUT_DIR / name, include_plotlyjs="cdn", include_mathjax=False, full_html=True
+    )
+    print(name)
 
 
-def fig_gp_fit_uncertainty(run_dir: Path) -> None:
+def fig_gp_fit_uncertainty() -> None:
     """GP surrogate mean + 95% prediction interval on a sparsely-sampled sine."""
     rng = np.random.default_rng(SEED)
     x_train = np.sort(rng.uniform(0.0, 2 * np.pi, size=9))
-    y_train = np.sin(x_train)
-    train_file = _write_processed(
-        pd.DataFrame({"x": x_train, "y": y_train}), run_dir / "gp_train_processed.txt"
-    )
+    train = pd.DataFrame({"x": x_train, "y": np.sin(x_train)})
 
     x_eval = np.linspace(0.0, 2 * np.pi, 200)
-    eval_file = _write_processed(pd.DataFrame({"x": x_eval}), run_dir / "gp_eval.txt")
+    model = fit(train, ["x"], "y")
+    predictions = model.predict(pd.DataFrame({"x": x_eval}))
+    y_hat = np.asarray(predictions.values)
+    y_std = np.asarray(predictions.std)
+    model.close()
 
-    result = evaluate_sumo(run_dir, train_file, eval_file, ["x"], "y")
-    y_hat = np.asarray(result["y_hat"])
-    y_std = np.asarray(result["y_std_hat"])
-
-    fig, ax = plt.subplots(figsize=(7, 4.2))
-    ax.plot(x_eval, np.sin(x_eval), "k--", lw=1.2, label="true f(x) = sin(x)")
-    ax.plot(x_eval, y_hat, color="#3f51b5", lw=1.8, label="GP mean prediction")
-    ax.fill_between(
-        x_eval,
-        y_hat - 1.96 * y_std,
-        y_hat + 1.96 * y_std,
-        color="#3f51b5",
-        alpha=0.2,
-        label="95% prediction interval (±1.96 σ̂)",
+    fig = go.Figure()
+    fig.add_scatter(
+        x=x_eval, y=np.sin(x_eval), name="true f(x) = sin(x)", line={"dash": "dash"}
     )
-    ax.scatter(
-        x_train, y_train, color="#e91e63", zorder=5, s=40, label="training points (n=9)"
+    fig.add_scatter(
+        x=x_eval,
+        y=y_hat + 1.96 * y_std,
+        name="95% interval",
+        line={"width": 0},
+        showlegend=False,
+        hoverinfo="skip",
     )
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_title("GP surrogate: mean prediction and uncertainty band")
-    ax.legend(loc="lower left", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(OUT_DIR / "gp_fit_uncertainty.png", dpi=150)
-    plt.close(fig)
-    print("[1/3] gp_fit_uncertainty.png")
+    fig.add_scatter(
+        x=x_eval,
+        y=y_hat - 1.96 * y_std,
+        fill="tonexty",
+        fillcolor="rgba(63, 81, 181, 0.2)",
+        line={"width": 0},
+        name="95% prediction interval (±1.96 σ̂)",
+        hoverinfo="skip",
+    )
+    fig.add_scatter(x=x_eval, y=y_hat, name="GP mean prediction", line={"width": 2})
+    fig.add_scatter(
+        x=x_train,
+        y=np.sin(x_train),
+        mode="markers",
+        name="training points (n=9)",
+        marker={"size": 8},
+    )
+    fig.update_layout(
+        title="GP surrogate: mean prediction and uncertainty band",
+        xaxis_title="x",
+        yaxis_title="y",
+        legend={"x": 0.01, "y": 0.01},
+    )
+    _embed(fig, "gp_fit_uncertainty.html")
 
 
 def fig_lhs_vs_random() -> None:
     """LHS vs. plain uniform random: LHS covers each 1D marginal stratum exactly once."""
     n = 25
-    rng = np.random.default_rng(SEED)
-    lhs_pts = lhs(2, n, seed=SEED)
-    rand_pts = rng.uniform(0.0, 1.0, size=(n, 2))
-
-    fig, axes = plt.subplots(1, 2, figsize=(8.5, 4.2), sharex=True, sharey=True)
-    for ax, pts, title in zip(
-        axes,
-        [rand_pts, lhs_pts],
-        ["Plain uniform random (n=25)", "Latin Hypercube, maximin (n=25)"],
-    ):
-        ax.scatter(pts[:, 0], pts[:, 1], color="#3f51b5", s=35)
-        for edge in np.linspace(0, 1, n + 1):
-            ax.axvline(edge, color="0.9", lw=0.5, zorder=0)
-            ax.axhline(edge, color="0.9", lw=0.5, zorder=0)
-        ax.set_title(title, fontsize=10)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel("x1")
-    axes[0].set_ylabel("x2")
-    fig.suptitle(
-        "Design-of-experiments: LHS stratifies every marginal, random sampling doesn't",
-        fontsize=10,
+    lhs_pts = generate_lhs_samples(
+        {
+            "x1": DomainSpec(minimum=0.0, maximum=1.0),
+            "x2": DomainSpec(minimum=0.0, maximum=1.0),
+        },
+        n,
+        seed=SEED,
     )
-    fig.tight_layout()
-    fig.savefig(OUT_DIR / "lhs_vs_random.png", dpi=150)
-    plt.close(fig)
-    print("[2/3] lhs_vs_random.png")
+    rng = np.random.default_rng(SEED)
+    rand_pts = pd.DataFrame({"x1": rng.uniform(0, 1, n), "x2": rng.uniform(0, 1, n)})
+
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=(
+            "Plain uniform random (n=25)",
+            "Latin Hypercube, maximin (n=25)",
+        ),
+    )
+    for col, pts, name, show in (
+        (1, rand_pts, "uniform random", True),
+        (2, lhs_pts, "LHS (maximin)", False),
+    ):
+        for edge in np.linspace(0, 1, n + 1):
+            fig.add_shape(
+                {"type": "line", "x0": edge, "x1": edge, "y0": 0, "y1": 1},
+                row=1,
+                col=col,
+                line={"color": "lightgrey", "width": 0.5},
+                layer="below",
+            )
+            fig.add_shape(
+                {"type": "line", "x0": 0, "x1": 1, "y0": edge, "y1": edge},
+                row=1,
+                col=col,
+                line={"color": "lightgrey", "width": 0.5},
+                layer="below",
+            )
+        fig.add_trace(
+            go.Scatter(
+                x=pts["x1"],
+                y=pts["x2"],
+                mode="markers",
+                name=name if show else None,
+                showlegend=show,
+                hovertemplate="x1 %{x:.3f}<br>x2 %{y:.3f}<extra></extra>",
+            ),
+            row=1,
+            col=col,
+        )
+    fig.update_xaxes(title_text="x1", range=[0, 1], row=1, col=1)
+    fig.update_xaxes(title_text="x1", range=[0, 1], row=1, col=2)
+    fig.update_yaxes(title_text="x2", range=[0, 1], row=1, col=1)
+    fig.update_yaxes(range=[0, 1], row=1, col=2)
+    fig.update_layout(
+        title="Design-of-experiments: LHS stratifies every marginal, random sampling doesn't"
+    )
+    _embed(fig, "lhs_vs_random.html")
 
 
-def fig_sobol_ishigami(run_dir: Path) -> None:
-    """Sobol' first-order and total-order indices for the Ishigami function, GP-surrogate-based."""
+def fig_sobol_ishigami() -> None:
+    """Sobol' indices for Ishigami, GP-surrogate-based, via the report rendering."""
 
     def ishigami(x: np.ndarray) -> np.ndarray:
         return (
@@ -118,90 +164,50 @@ def fig_sobol_ishigami(run_dir: Path) -> None:
 
     rng = np.random.default_rng(SEED)
     x_train = rng.uniform(-np.pi, np.pi, size=(300, 3))
-    train_raw = pd.DataFrame(x_train, columns=pd.Index(["x1", "x2", "x3"]))
-    train_raw["y"] = ishigami(x_train)
+    train = pd.DataFrame(x_train, columns=pd.Index(["x1", "x2", "x3"]))
+    train["y"] = ishigami(x_train)
 
-    preprocessor = DataPreprocessor()
-    preprocessor.setup_variables(["x1", "x2", "x3"], ["y"])
-    preprocessor.fit(train_raw)
-    train_file = _write_processed(
-        preprocessor.transform(train_raw), run_dir / "sobol_train_processed.txt"
+    result = evaluate_sobol(
+        train,
+        ["x1", "x2", "x3"],
+        "y",
+        domains={
+            "x1": DomainSpec(minimum=-np.pi, maximum=np.pi),
+            "x2": DomainSpec(minimum=-np.pi, maximum=np.pi),
+            "x3": DomainSpec(minimum=-np.pi, maximum=np.pi),
+        },
+        seed=SEED,
     )
 
-    sampling = {
-        "x1": {"minimum": -np.pi, "maximum": np.pi},
-        "x2": {"minimum": -np.pi, "maximum": np.pi},
-        "x3": {"minimum": -np.pi, "maximum": np.pi},
-    }
-    sobol = evaluate_sobol_indices(
-        run_dir,
-        train_file,
-        ["x1", "x2", "x3"],
-        "y1",
-        sampling,
-        preprocessor,
-        seed=SEED,
-    )["sobol"]
-
+    fig = render_sobol(result)
     variables = ["x1", "x2", "x3"]
-    main = [sobol[v]["main"] for v in variables]
-    total = [sobol[v]["total"] for v in variables]
     ref_main = [0.314, 0.442, 0.0]
     ref_total = [0.558, 0.442, 0.244]
-
-    x_pos = np.arange(len(variables))
-    width = 0.2
-
-    fig, ax = plt.subplots(figsize=(7, 4.2))
-    ax.bar(
-        x_pos - 1.5 * width,
-        main,
-        width,
-        label="first-order (GP surrogate)",
-        color="#3f51b5",
+    fig.add_scatter(
+        x=variables,
+        y=ref_main,
+        name="first-order (analytical)",
+        mode="markers",
+        marker={"symbol": "diamond", "size": 10},
     )
-    ax.bar(
-        x_pos - 0.5 * width,
-        ref_main,
-        width,
-        label="first-order (analytical)",
-        color="#9fa8da",
+    fig.add_scatter(
+        x=variables,
+        y=ref_total,
+        name="total-order (analytical)",
+        mode="markers",
+        marker={"symbol": "diamond-open", "size": 10},
     )
-    ax.bar(
-        x_pos + 0.5 * width,
-        total,
-        width,
-        label="total-order (GP surrogate)",
-        color="#e91e63",
+    fig.update_layout(
+        title="Ishigami function: Sobol' indices, GP surrogate vs. analytical reference"
     )
-    ax.bar(
-        x_pos + 1.5 * width,
-        ref_total,
-        width,
-        label="total-order (analytical)",
-        color="#f48fb1",
-    )
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(variables)
-    ax.set_ylabel("Sobol' index")
-    ax.set_title(
-        "Ishigami function: Sobol' indices, GP surrogate vs. analytical reference"
-    )
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    fig.savefig(OUT_DIR / "sobol_ishigami.png", dpi=150)
-    plt.close(fig)
-    print("[3/3] sobol_ishigami.png")
+    _embed(fig, "sobol_ishigami.html")
 
 
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    run_dir = create_run_dir(Path.cwd(), dir_name="docs_figures")
-
-    fig_gp_fit_uncertainty(run_dir)
+    fig_gp_fit_uncertainty()
     fig_lhs_vs_random()
-    fig_sobol_ishigami(run_dir)
-
+    fig_sobol_ishigami()
     print(f"\nAll docs figures written to {OUT_DIR}")
     return 0
 

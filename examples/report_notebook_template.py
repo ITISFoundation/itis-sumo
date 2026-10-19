@@ -60,7 +60,7 @@ model = fit(samples, VARIABLES, RESPONSE)
 # %% ── data cells: one result object per report section
 cv = model.cross_validate(folds=5, seed=DEFAULT_SEED)
 sobol = model.sobol(seed=DEFAULT_SEED)
-axes = model.along_axes(points_per_variable=11)
+axes = model.along_axes(at=None, points_per_variable=11)
 grid = model.grid(points_per_variable=5)
 draws = model.sample_uncertainty(
     distributions={

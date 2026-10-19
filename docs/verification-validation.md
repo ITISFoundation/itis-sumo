@@ -76,7 +76,7 @@ analytical values (`tests/test_metamodeling_analytical.py`, real Dakota).
 ## Evaluation pathways (Categories C–E)
 
 Axis sweep, grid evaluation, and cross-validation — see
-[Evaluate: core evaluation & cross-validation](reference/evaluate.md).
+[Evaluate: core evaluation & cross-validation](reference/functions.md).
 
 | Category | What | Status |
 |---|---|---|
@@ -96,7 +96,7 @@ by B1-B8-style checks — so the comparison lost both inputs at once.
 Tests the pathway actually reachable from the web UI — manual per-variable
 sampling (`create_manual_uq_samples`) + surrogate evaluation + erfinv-based
 predictive-uncertainty injection (see
-[Sensitivity & UQ propagation](reference/sensitivity-uq.md)) —
+[Sensitivity & UQ propagation](reference/functions.md#sensitivity)) —
 against closed-form output distributions.
 
 | Test | Function | Input | Analytical output | Status |
@@ -111,7 +111,7 @@ against closed-form output distributions.
 
 ## Category G: MOGA Optimization
 
-See [MOGA optimization](reference/moga.md) for the known
+See [MOGA optimization](reference/functions.md#optimization) for the known
 `max_function_evaluations` limitation.
 
 | Test | What | Status |
@@ -123,7 +123,7 @@ See [MOGA optimization](reference/moga.md) for the known
 
 ## Category H: Data Preprocessor
 
-See [Data preprocessing](reference/preprocess.md).
+See [Data preprocessing](reference/engine.md).
 
 | Test | What | Status |
 |---|---|---|
@@ -151,8 +151,8 @@ breaks with `TypeError`, it can never silently default.
 | I6 | MOGA: log variable explored in ln-space (domain mapped, positivity-guarded); log objective exp-restored for **both** minimize and maximize (sign-after-log inverse order verified) | ✅ |
 | I7 | Sobol: log input shifts the variance decomposition in the expected direction (log-uniform box draws compress toward the low end, so the variable explains less); a DECLARED narrow box concentrates sensitivity onto the other variable — the decomposition follows the sampled domain, not the training spread (V26dd) | ✅ |
 | I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log, ∀ 2 `distributions`-taking entry points also move when a NORMAL column turns log (V46rn; Sobol's box is domain-only after V26dd, so its flip rides on DOMAIN boxes and it has no NORMAL matrix row) — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
-| I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
-| I10 | Boundary input guards (V47st): `DomainSpec`/`DistributionSpec` reject inverted/degenerate bounds at construction; unused `preprocessing` overrides rejected by the table-mode + sampler entry points (not just the session path); log-uniform upper bound required ∧ ordered at the api boundary; a variable missing from the correlator's `input_scales` raises instead of defaulting to linear | ✅ |
+| I9 | MC-through-surrogate correlation (#470 workflow, now open composition per V52rc: `sample_uncertainty` draws → caller-owned table → `compute_correlations`): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, correlation producer requires its scales (`TypeError` tripwire) | ✅ |
+| I10 | Boundary input guards (V47st): `DomainSpec`/`DistributionSpec` reject inverted/degenerate bounds at construction; unused `preprocessing` overrides rejected by the table-mode + sampler entry points (not just the handle path); log-uniform upper bound required ∧ ordered at the input boundary; a variable missing from the correlator's `input_scales` raises instead of defaulting to linear | ✅ |
 | I11 | Domain⊥distribution split (V26dd): `evaluate_sobol` samples the exploration DOMAIN (explicit `DomainSpec` boxes echoed verbatim ∧ auto-inferred from observed bounds when omitted), ⊥ modeller distributions ∧ ⊥ a box re-derived from `mean±3σ`; a column constant in the samples is pinned (reports in `fixed`, indices zero, ⊥ a fabricated box); explicitly `fixed` factors pin at the caller's value (zero indices, ⊥ boxed∧fixed overlap); unknown domain names rejected; log-scale domain non-positive rejected at the boundary | ✅ |
 
 Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
@@ -232,7 +232,7 @@ Carried over from the original test plan, still true of the pinned engine
 - **No Dakota-native UQ propagation** — the `propagate_uq` chain was dead
   on every real pathway and has been removed (ponytail A4). UQ for web-UI
   traffic is the manual composition — see
-  [Evaluate § Uncertainty propagation](reference/evaluate.md#uncertainty-propagation).
+  [Evaluate § Uncertainty propagation](reference/functions.md#uncertainty).
 
 ## Summary
 
