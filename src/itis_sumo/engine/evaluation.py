@@ -985,6 +985,7 @@ def export_sumo_model(
     input_vars: list[str],
     response_var: str,
     export_format: str = "text_archive",
+    preprocessor_config: dict | None = None,
 ) -> tuple[dict[str, list[float]], str]:
     """Build+evaluate a SuMo surrogate and persist it to the model store (E1, T12).
 
@@ -1039,6 +1040,7 @@ def export_sumo_model(
         output_descriptor=response_var,
         export_prefix=export_prefix,
         export_format=export_format,
+        preprocessor_config=preprocessor_config,
     )
 
     return results, sumo_model_id

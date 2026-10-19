@@ -25,14 +25,21 @@ import pandas as pd
 from itis_sumo.engine.evaluation import (
     correlate_manual_uq_samples,
     evaluate_sobol_indices,
+    evaluate_sumo,
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
+    export_sumo_model,
+    import_sumo_model,
     perform_moga_optimization,
     propagate_manual_uq_with_uncertainty,
     summarize_uncertainty_samples,
 )
 from itis_sumo.engine.helpers import create_run_dir
+from itis_sumo.engine.sumo_model_store import (
+    load_model_metadata,
+    stage_model_for_import,
+)
 from itis_sumo.errors import (
     SumoEngineError,
     SumoError,
@@ -40,6 +47,7 @@ from itis_sumo.errors import (
     SumoResultError,
 )
 from itis_sumo.tabular.preprocessor import DataPreprocessor
+from itis_sumo.tabular.processing import load_data
 from itis_sumo.types import (
     AlongAxesResult,
     AxisSweep,
@@ -51,6 +59,7 @@ from itis_sumo.types import (
     GridResult,
     OrderMasses,
     ParetoFrontResult,
+    PredictionsResult,
     PreprocessingSpec,
     SobolResult,
     UncertaintyResult,
@@ -221,6 +230,8 @@ class SumoSession:
         self._run_dir: Path | None = None
         self._preprocessor: DataPreprocessor | None = None
         self._training_file: Path | None = None
+        self._loaded_model_id: str | None = None
+        self._failed = False
 
     # ---------------------------------------------------------------- lifetime
 
@@ -277,6 +288,120 @@ class SumoSession:
         self._preprocessor = preprocessor
         self._training_file = training_file
         return self
+
+    # ------------------------------------------------------------- persistence
+
+    def save(self, *, export_format: str = "text_archive") -> str:
+        """Persist the fitted SuMo to the model store; return its `sumo_model_id`.
+
+        Runs Dakota's `export_model` in this handle's run dir and persists the
+        fitted preprocessing config alongside the archive (T26eq), so `load()`
+        restores the inverse transform and keeps results in original units
+        (V22rs). Callers never choose the on-disk key (V12).
+        """
+        assert self._run_dir is not None and self._preprocessor is not None
+        export_samples = self._run_dir / "save_samples.dat"
+        self._preprocessor.transform(self._samples)[self._mapped_variables].to_csv(
+            export_samples, sep=" ", index=False
+        )
+        _, sumo_model_id = self._run_engine(
+            "exporting the surrogate",
+            export_sumo_model,
+            self._run_dir,
+            self._training_file,
+            export_samples,
+            self._mapped_variables,
+            self._mapped_response,
+            export_format,
+            preprocessor_config=self._preprocessor.to_config(),
+        )
+        return sumo_model_id
+
+    def predict(self, samples: pd.DataFrame) -> PredictionsResult:
+        """Predict the response for fresh samples -- original units in and out.
+
+        On a fitted handle this builds the surrogate and evaluates it; on a
+        loaded handle (T57rc) the surrogate is re-imported from the store
+        instead (E1, R9: the archive, not the staged points, defines the model).
+
+        Args:
+            samples: One row per sample, one column per variable (original names).
+
+        Raises:
+            SumoInputError: The samples cannot be translated for this model.
+            SumoResultError: The run finished without producing predictions.
+            SumoEngineError: Dakota failed; the error carries the surviving run
+                directory and the tail of Dakota's stderr.
+        """
+        assert self._run_dir is not None and self._preprocessor is not None
+        evaluation_file = self._run_dir / "predict_samples.dat"
+        self._preprocessor.transform(samples)[self._mapped_variables].to_csv(
+            evaluation_file, sep=" ", index=False
+        )
+        if self._loaded_model_id is None:
+            results = self._run_engine(
+                "predicting with the surrogate",
+                evaluate_sumo,
+                self._run_dir,
+                self._training_file,
+                evaluation_file,
+                self._mapped_variables,
+                self._mapped_response,
+            )
+        else:
+            results = self._run_engine(
+                "predicting with the loaded surrogate",
+                import_sumo_model,
+                self._run_dir,
+                self._loaded_model_id,
+                evaluation_file,
+                self._mapped_variables,
+                self._mapped_response,
+            )
+        mapped = self._mapped_response
+        if f"{mapped}_hat" not in results:
+            raise SumoResultError(
+                f"Prediction produced no {mapped}_hat values for '{self._response}'. "
+                "The surrogate may not have been trained."
+            )
+        values = self._to_original_units(mapped, results[f"{mapped}_hat"])
+        std: list[float] | None = None
+        if f"{mapped}_std_hat" in results:
+            std = self._to_original_std(
+                mapped, results[f"{mapped}_std_hat"], {self._response: values}
+            )
+        return PredictionsResult(
+            response=self._response,
+            values=values,
+            std=std,
+            sumo_model_id=self._loaded_model_id,
+            effective_config=self.effective_config,
+        )
+
+    def close(self) -> None:
+        """End the handle's lifetime: the run dir is discarded on success and
+        preserved on failure (V24af). Safe to call more than once; `__exit__`
+        and garbage collection do the same."""
+        if self._run_dir is None:
+            return
+        if self._failed:
+            _logger.warning(
+                "itis-sumo run failed; run directory preserved at %s", self._run_dir
+            )
+        elif self._workspace is None:
+            shutil.rmtree(self._run_dir, ignore_errors=True)
+        self._run_dir = None
+
+    def __del__(
+        self,
+    ) -> None:  # best effort: an unclosed fitted handle leaks no temp dir
+        run_dir = getattr(self, "_run_dir", None)
+        if (
+            run_dir is not None
+            and not getattr(self, "_failed", True)
+            and getattr(self, "_workspace", "unset") is None
+        ):
+            shutil.rmtree(run_dir, ignore_errors=True)
 
     # ----------------------------------------------------------------- queries
 
@@ -718,6 +843,17 @@ class SumoSession:
     @property
     def effective_config(self) -> dict[str, VariableSpec]:
         """What was actually used -- readable, but not settable in transform terms."""
+        if self._loaded_model_id is not None and self._preprocessor is not None:
+            inputs = self._preprocessor.input_variables
+            outputs = self._preprocessor.output_variables
+            scale_of = {**inputs, **outputs}
+            return {
+                column: VariableSpec(
+                    scale="log" if scale_of[column].log_transform else "linear"
+                )
+                for column in (*self._variables, self._response)
+                if column in scale_of
+            }
         return {
             column: self._spec.overrides.get(column, VariableSpec())
             for column in (*self._variables, self._response)
@@ -784,11 +920,18 @@ class SumoSession:
         return [float(value) for value in restored.get(original, list(values))]
 
     def _run_engine(self, description: str, function, *args, **kwargs):
+        if self._loaded_model_id is not None and function is not import_sumo_model:
+            raise SumoInputError(
+                "This query retrains and is not supported on a loaded model "
+                f"(T57rc scope): '{getattr(function, '__name__', function)}' "
+                "needs a freshly fitted SuMo handle."
+            )
         try:
             return function(*args, **kwargs)
         except SumoError:
             raise
         except Exception as exc:
+            self._failed = True
             raise SumoEngineError(
                 f"Dakota failed while {description}: {exc}",
                 run_dir=self._run_dir,
@@ -920,3 +1063,86 @@ def optimize_pareto_front(
                 "itis-sumo run failed; run directory preserved at %s", run_dir
             )
         raise
+
+
+# --------------------------------------------------------------------------- handle
+# The handle-primary surface (§C architecture, V27fq, V52rc). One-shot workflow
+# functions are thin fit-then-query delegations over exactly this machinery, so
+# the handle is a re-export, not a second port.
+
+SuMo = SumoSession
+
+
+def fit(
+    samples: pd.DataFrame,
+    variables: Sequence[str],
+    response: str,
+    *,
+    preprocessing: PreprocessingSpec | None = None,
+    workspace: Path | None = None,
+) -> SumoSession:
+    """Fit a SuMo and hand back the live handle (the catalog is its methods).
+
+    The run directory lives as long as the handle (V24af): discard it with
+    `close()` (or a `with` block) on success; a failed run keeps it and the
+    raised `SumoEngineError` carries its path and a stderr tail.
+
+    Args:
+        samples: One row per sample, one column per variable or response.
+        variables: Columns to treat as inputs.
+        response: Column to predict.
+        preprocessing: Optional per-column overrides (domain vocabulary only).
+        workspace: If given, working files are written here and kept.
+
+    Raises:
+        SumoInputError: The samples or configuration cannot support a fit.
+        SumoEngineError: Dakota failed while fitting; the error carries the
+            surviving run directory and the tail of Dakota's stderr.
+    """
+    handle = SumoSession(
+        samples,
+        variables,
+        response,
+        preprocessing=preprocessing,
+        workspace=workspace,
+    )
+    handle.__enter__()
+    handle.fit()
+    return handle
+
+
+def load(sumo_model_id: str, *, workspace: Path | None = None) -> SumoSession:
+    """Reopen a stored SuMo by id (E1 restart escape hatch, V12/V13).
+
+    `predict` runs against the re-imported surrogate; queries that retrain
+    (cross-validate, Sobol, MOGA, ...) raise `SumoInputError` at T57rc scope.
+    Models stored before preprocessing persistence (T26eq) are rejected with a
+    re-export instruction rather than returning wrong-unit numbers.
+    """
+    metadata = load_model_metadata(sumo_model_id)
+    if metadata.preprocessor_config is None:
+        raise SumoInputError(
+            f"SuMo model '{sumo_model_id}' predates preprocessing persistence "
+            "(T26eq); re-export it from a fitted handle to use load()."
+        )
+    preprocessor = DataPreprocessor.from_config(metadata.preprocessor_config)
+    inverse = preprocessor.get_inverse_mapping()
+
+    handle = SumoSession.__new__(SumoSession)
+    handle._spec = PreprocessingSpec()
+    handle._workspace = workspace
+    handle._loaded_model_id = sumo_model_id
+    handle._failed = False
+    handle._preprocessor = preprocessor
+    handle._variables = tuple(inverse.get(v, v) for v in metadata.input_descriptors)
+    handle._response = inverse.get(
+        metadata.output_descriptor, metadata.output_descriptor
+    )
+    if workspace is None:
+        handle._run_dir = Path(tempfile.mkdtemp(prefix="itis-sumo-"))
+    else:
+        handle._run_dir = create_run_dir(Path(workspace), "sumo")
+    _, staged_training_file = stage_model_for_import(sumo_model_id, handle._run_dir)
+    handle._training_file = staged_training_file
+    handle._samples = load_data(staged_training_file)
+    return handle

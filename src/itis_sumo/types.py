@@ -220,6 +220,23 @@ class CorrelationResult:
     seed: int | None = None
 
 
+@dataclass
+class PredictionsResult:
+    """Predictions on the caller's samples, in original units (V22rs).
+
+    `values` are the surrogate's response predictions, aligned to the row order
+    of the samples passed to `predict`. `std` is the surrogate's predictive
+    spread where the engine supplies it, else None (V8df). `sumo_model_id` is
+    populated only for results from a loaded (E1) model.
+    """
+
+    response: str
+    values: list[float]
+    std: list[float] | None
+    sumo_model_id: str | None = None
+    effective_config: dict[str, VariableSpec] = field(default_factory=dict)
+
+
 @dataclass(frozen=True)
 class CVAccuracyMetrics:
     """Error metrics computed from cross-validation predictions."""
