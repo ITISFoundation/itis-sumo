@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.2.0a10"
+version = "0.2.0a11"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 # T55kd: the 6.24.13 engine wheel matrix is cp312-cp314 (6.24.8 dropped cp311,
