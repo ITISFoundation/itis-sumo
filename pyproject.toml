@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.2.0a7"
+version = "0.2.0a8"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 # T55kd: the 6.24.13 engine wheel matrix is cp312-cp314 (6.24.8 dropped cp311,
@@ -44,6 +44,14 @@ dependencies = [
     "scipy>=1.15,<2.0",
 ]
 
+[project.optional-dependencies]
+# V54hz (T59hz): presentation deps stay OUT of core; `itis-sumo[report]`
+# carries the report renderings (plotly) and the marimo notebook template.
+report = [
+    "plotly>=5.24",
+    "marimo>=0.9",
+]
+
 [project.urls]
 Homepage = "https://github.com/ITISFoundation/itis-sumo"
 Repository = "https://github.com/ITISFoundation/itis-sumo.git"
@@ -61,6 +69,9 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.16.3",
     "ty>=0.0.72",
+    # report renderings are tested against synthetic results (V54hz); plotly
+    # must resolve in a plain `uv sync` too, not only via --all-extras
+    "plotly>=5.24",
 ]
 docs = [
     "mkdocs>=1.6,<2.0",
