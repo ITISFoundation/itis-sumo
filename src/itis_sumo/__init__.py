@@ -35,6 +35,7 @@ from itis_sumo.exploration import evaluate_along_axes, evaluate_grid
 from itis_sumo.optimization import optimize
 from itis_sumo.sampling import generate_grid_samples, generate_lhs_samples
 from itis_sumo.sensitivity import compute_correlations, evaluate_sobol
+from itis_sumo.surrogate import SuMo, fit, load
 from itis_sumo.types import (
     DEFAULT_SEED,
     AlongAxesResult,
@@ -50,6 +51,7 @@ from itis_sumo.types import (
     OrderMasses,
     OutlierSummary,
     ParetoFrontResult,
+    PredictionsResult,
     PreprocessingSpec,
     Scale,
     SobolResult,
@@ -75,9 +77,11 @@ __all__ = [
     "OrderMasses",
     "OutlierSummary",
     "ParetoFrontResult",
+    "PredictionsResult",
     "PreprocessingSpec",
     "Scale",
     "SobolResult",
+    "SuMo",
     "SumoEngineError",
     "SumoError",
     "SumoInputError",
@@ -99,9 +103,11 @@ __all__ = [
     "evaluate_grid",
     "evaluate_sobol",
     "evaluate_uncertainty",
+    "fit",
     "fit_convergence_exponential",
     "fit_convergence_exponential_asymptotic",
     "generate_grid_samples",
     "generate_lhs_samples",
+    "load",
     "optimize",
 ]

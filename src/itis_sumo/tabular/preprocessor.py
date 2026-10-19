@@ -13,7 +13,7 @@ and maintain compatibility with the ML workflow pipeline.
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
@@ -558,6 +558,38 @@ class DataPreprocessor:
 
     def fit_transform(self, data: pd.DataFrame | list[dict[str, Any]]) -> pd.DataFrame:
         return self.fit(data).transform(data)
+
+    def to_config(self) -> dict[str, Any]:
+        """Serialize the full preprocessor state (setup + fitted parameters).
+
+        Persisted on ``SuMo.save()`` (T26eq) so ``load()`` restores the inverse
+        transform and keeps results in original units (V22rs); JSON-safe via
+        `dataclasses.asdict`.
+        """
+        return {
+            "fitted": self._is_fitted,
+            "input_variables": {
+                name: asdict(config) for name, config in self.input_variables.items()
+            },
+            "output_variables": {
+                name: asdict(config) for name, config in self.output_variables.items()
+            },
+        }
+
+    @classmethod
+    def from_config(cls, config: dict[str, Any]) -> "DataPreprocessor":
+        """Rebuild a fitted preprocessor from `to_config` output (T26eq)."""
+        preprocessor = cls()
+        preprocessor.input_variables = {
+            name: VariableConfig(**vars_dict)
+            for name, vars_dict in config.get("input_variables", {}).items()
+        }
+        preprocessor.output_variables = {
+            name: VariableConfig(**vars_dict)
+            for name, vars_dict in config.get("output_variables", {}).items()
+        }
+        preprocessor._is_fitted = bool(config.get("fitted", False))
+        return preprocessor
 
     def get_summary(self) -> dict[str, Any]:
         summary = {

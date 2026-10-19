@@ -31,6 +31,7 @@ import os
 import shutil
 import uuid
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -41,13 +42,20 @@ _DEFAULT_MODELS_DIR = Path.cwd() / "sumo_models"
 
 
 class SumoModelMetadata(BaseModel):
-    """Sidecar contents for one exported SuMo model (V10)."""
+    """Sidecar contents for one exported SuMo model (V10).
+
+    ``preprocessor_config`` (T26eq) is the fitted preprocessing state, so a
+    ``load()``ed handle can inverse-transform to original units (V22rs).
+    Models exported before T26eq lack it and stay loadable for the raw
+    archive path only.
+    """
 
     sumo_model_id: str
     surrogate_conf_block: str
     input_descriptors: list[str]
     output_descriptor: str
     export_format: str
+    preprocessor_config: dict[str, Any] | None = None
 
 
 def get_models_dir() -> Path:
@@ -77,6 +85,7 @@ def store_exported_model(
     output_descriptor: str,
     export_prefix: str,
     export_format: str = "text_archive",
+    preprocessor_config: dict[str, Any] | None = None,
 ) -> str:
     """Move Dakota's `export_prefix.*` archive files out of `run_dir` into the
     canonical models dir under a fresh `sumo_model_id`, alongside a metadata
@@ -104,6 +113,7 @@ def store_exported_model(
         input_descriptors=list(input_descriptors),
         output_descriptor=output_descriptor,
         export_format=export_format,
+        preprocessor_config=preprocessor_config,
     )
     _metadata_path(models_dir, sumo_model_id).write_text(
         metadata.model_dump_json(indent=2)
