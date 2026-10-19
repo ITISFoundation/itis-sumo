@@ -1,58 +1,58 @@
-# How to preprocess data for the Dakota engine
+# How to tell itis-sumo how a column behaves
 
-**Goal:** turn a dataframe with your own column names and scales into the
-standardized `x1, x2, …` / `y1, y2, …` files the Dakota engine expects — and
-turn results back the other way, into your original names and scales.
+**Goal:** tell the engine what your columns *are* (a log-scale length, a
+minimize-direction response) without ever naming a transform — and read back
+what was actually applied.
 
-## Map and fit
+You never preprocess by hand for itis-sumo. Column names, units, and scales
+stay yours on the way in and on the way out; normalization, internal renaming,
+and inverse transforms are engine business (V21pf). What you can control is
+one level of intent:
 
-```python
-from itis_sumo.tabular.preprocessor import DataPreprocessor
-
-preprocessor = DataPreprocessor()
-preprocessor.setup_variables(
-    input_vars=["length", "width"],
-    output_vars=["stress"],
-)  # length -> x1, width -> x2, stress -> y1
-
-preprocessor.fit(train_raw)  # computes normalization stats, if any
-train_processed = preprocessor.transform(train_raw)
-train_processed.to_csv(training_file, sep=" ", index=False)
-```
-
-`setup_variables` alone is enough to run — normalization and sign-switching
-are both opt-in.
-
-## Add normalization or sign-switching (optional)
+## The default is usually right
 
 ```python
-preprocessor.setup_normalization(
-    input_normalizations={"length": "z_score"},
-    output_normalizations={"stress": "min_max"},
-)
-preprocessor.setup_sign_switching(output_sign_switches=["stress"])
+from itis_sumo import fit
+
+model = fit(samples, ["width", "height"], "stress")
+model.effective_config  # what was selected per column, and why
 ```
 
-Call these **before** `fit()` — `fit()` is what computes the actual
-mean/std or min/max from your data; calling it after `fit()` leaves those
-stats uncomputed and normalization silently does nothing (a warning is
-logged, not an exception).
+`analyze_dataset(samples)` shows the same reading before you fit: per-column
+selected `scale` and `distribution`, a `confident` flag, and scale-aware
+Tukey outlier fences (V46np) — presented as a table by
+`itis_sumo.report.render_diagnostics`.
 
-- `normalization_method`: `"z_score"` or `"min_max"` per variable.
-- Sign-switching negates the variable both directions — useful when Dakota's
-  variable-bound assumptions (e.g. MOGA's uniform lower/upper bounds) fit a
-  positive-going convention better than your raw data's sign.
-
-## Bring predictions back to your own scale
+## Override in domain terms only
 
 ```python
-predictions = {"y1": preds["y1_hat"]}  # mapped-name keys, as returned by evaluate_sumo
-original_scale = preprocessor.inverse_transform(predictions)
-# {"stress": [...]}  -- original name, denormalized/sign-restored
+from itis_sumo import PreprocessingSpec, VariableSpec, fit
+
+log_height = PreprocessingSpec({"height": VariableSpec(scale="log")})
+model = fit(samples, ["width", "height"], "stress", preprocessing=log_height)
 ```
 
-`inverse_transform` accepts a dict, a DataFrame, or an ndarray (ndarray
-form needs column order to match `input_variables` then `output_variables`,
-since there are no column names to key off of).
+`scale` describes the column; it does not name a transform. A `log` column is
+fitted in ln space, sampled log-uniformly, drawn log-uniformly in Monte-Carlo
+UQ, and reported exp-restored — everywhere, consistently (V45ls). Which
+transform each override implies never appears in a signature; you can see it
+in `model.effective_config`, but you cannot set transforms directly.
 
-Full class reference: [Reference → Data preprocessing](../reference/preprocess.md).
+!!! warning "Say it once, mean it everywhere"
+    The same spec travels with the handle into every query — cross-validation,
+    Sobol' (log-uniform boxes), `sample_uncertainty` (log-uniform draws),
+    `optimize` (log exploration, exp-restored front). A log reading that only
+    half-arrived is exactly the failure the flip-matrix tests exist to catch.
+
+!!! note "A log column must be positive"
+    A `log`-scale column whose values or bounds include zero or less is a
+    `SumoInputError`, everywhere the scale is consulted — no silent clipping.
+
+## The engine layer, for the curious
+
+Inside, a `DataPreprocessor` (internal, `itis_sumo.tabular`) maps your names
+to Dakota's (`x1, x2, …` / `y1, y2, …`), applies the implied transforms, and
+maps everything back — including through the fitted-state round-trip persisted
+in a saved model (`model.save()` / `itis_sumo.load()`; the preprocessing
+config travels with the model, T26eq). Consumer code never constructs it
+(V50kv); the `PreprocessingSpec` is the door.

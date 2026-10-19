@@ -29,11 +29,11 @@ Running the real simulator that many times is frequently not tractable.
 **Surrogate modeling** (also called *metamodeling* or *response surface
 modeling*) sidesteps this: run the expensive \(f\) a comparatively small number
 of times (tens to low hundreds — this is the *training set*, produced via
-[design-of-experiments sampling](../reference/sampling.md)), fit a cheap
+[design-of-experiments sampling](../reference/functions.md#sampling)), fit a cheap
 approximation \(\hat{f}(\mathbf{x}) \approx f(\mathbf{x})\) to those observations,
 then run everything downstream — optimization
-([MOGA](../reference/moga.md)), sensitivity analysis
-([Sobol'](../reference/sensitivity-uq.md)), uncertainty propagation — against
+([MOGA](../reference/functions.md#optimization)), sensitivity analysis
+([Sobol'](../reference/functions.md#sensitivity)), uncertainty propagation — against
 \(\hat{f}\), which costs microseconds per evaluation instead of minutes.
 
 ```
@@ -69,7 +69,7 @@ training points you can afford:
   cover almost nothing of a 10D hypercube. Surrogate modeling doesn't repeal
   this law; it just moves the sample-efficiency problem from "cost per
   simulator call" to "cost per training point," which is why *how* those
-  training points are chosen ([Latin Hypercube sampling](../reference/sampling.md),
+  training points are chosen ([Latin Hypercube sampling](../reference/functions.md#sampling),
   not grid or plain-random) matters so much at fixed budget.
 - **Noise.** If \(f\) itself is stochastic (Monte Carlo simulators, measurement
   noise), the surrogate is fitting a moving target — Gaussian Process
@@ -102,7 +102,7 @@ itis-sumo pipeline:
 1. **Does it reproduce the training data?** (sanity floor — see
    [Category B](../verification-validation.md#category-b-surrogate-model-accuracy))
 2. **Does it generalize to unseen points?** — answered via
-   [cross-validation](../reference/evaluate.md#cross-validation):
+   [cross-validation](../reference/functions.md#validation):
    hold out a fold of training data, fit on the rest, check prediction error on
    the held-out fold. itis-sumo runs both Dakota-native and a manual K-fold CV
    pathway (the latter is the one whose numbers are independently verified —

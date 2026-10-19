@@ -9,21 +9,27 @@ Aggregates the computational core of the mmux/vite flaskapi Dakota modules plus
 recycled utilities from earlier MetaModeling trials. No Flask, no oSPARC, no UI:
 pure computation on top of the Dakota wheel.
 
+```python
+from itis_sumo import fit
+from itis_sumo.report import render_cross_validation  # needs itis-sumo[report]
+
+model = fit(samples, ["width", "height"], "stress")   # -> SuMo handle
+cv = model.cross_validate(folds=5, seed=42)           # typed result, your units
+render_cross_validation(cv)                           # one result in, one figure out
+```
+
 ## Engine
 
-- Runtime engine = the **PyPI wheel `itis-dakota==6.24.13`** (Dakota 6.24), on
-  **Python 3.12-3.14**, Linux, macOS **and Windows** (first `itis-dakota` release with
-  `win_amd64` wheels; engine parity with mmux/vite is now a process, not a version — the
-  consumer may anchor on 1.5.11, see SPEC §C py).
-- The in-repo `itis-dakota/` checkout is the IT'IS Dakota fork, kept **for reference
-  only** — this package consumes the pre-built wheels published to PyPI and
-  **does not build the fork**.
-- Engine calls happen through `dakota.environment.study(input_string=...)` executed
-  inside a `ProcessPoolExecutor` with an explicit start-method context (fork on POSIX,
-  spawn on Windows — SPEC V50gm); the package never shells out to a `dakota` binary.
-- Engine caveats, the wheel-build process, and the 6.23+ `Interface::interface_cache`
-  regression (still upstream; shimmed in-repo via `add_r5_interface_cache_workaround()`)
-  are documented in [`DAKOTA-STUBS.md`](DAKOTA-STUBS.md).
+Runtime engine = the **PyPI wheel `itis-dakota==6.24.13`** (Dakota 6.24) on
+Python 3.12-3.14, Linux, macOS and Windows — executed in-process through
+`dakota.environment.study`, never a shelled-out binary. Engine caveats, the
+wheel-build process, and the known upstream regressions (and their in-repo
+shims) are documented in
+[`DAKOTA-STUBS.md`](DAKOTA-STUBS.md) and the published docs
+([Engine internals](https://itisfoundation.github.io/itis-sumo/reference/engine/)).
+The in-repo `itis-dakota/` checkout is the IT'IS Dakota fork, kept **for
+reference only** — this package consumes the pre-built wheels and does not
+build the fork.
 
 ## Provenance
 
@@ -42,7 +48,7 @@ deliberately not ported, and what remains as porting candidates — is in
 ```sh
 uv sync                          # Python 3.12-3.14; resolves itis-dakota==6.24.13
 uv run itis-sumo validate        # engine probe (expect: Version 6.24.13)
-uv run pytest                    # 123 tests, standalone
+uv run pytest                    # full suite, standalone
 uv run python examples/headless_smoke.py   # surrogate -> CV -> Sobol
 ```
 
@@ -103,13 +109,16 @@ This temporarily writes the next `.devN` version for the build, checks the packa
 
 ```
 src/itis_sumo/
-  core/       Dakota execution primitives (DakotaObject, capture)
-  config/     NIDR string composers (surrogate/MOGA/UQ confs)
-  data/       data processing (healing, bounds, correlation, dominance)
-  sampling/   LHS / manual-UQ / grid sampling
-  evaluate/   end-to-end runs (sumo eval, CV+metrics, MOGA, Sobol, UQ)
-  preprocess/ DataPreprocessor + function-jobs pydantic models
-  utils/      engine validation + NIDR config guard
+  __init__.py      root manifest — THE consumer surface (V50kv)
+  surrogate/       SuMo handle: fit/load, run dir = handle lifetime (V24af)
+  validation.py sensitivity.py uncertainty.py exploration.py
+  sampling.py optimization.py diagnostics.py calibration.py
+  convergence.py               ≤2 public functions per module (§I)
+  types.py errors.py           typed results (original units) + typed failures
+  report/          renderings: figures.py + text.py + sections() (V54hz);
+                   optional extra `itis-sumo[report]` (plotly, marimo)
+  engine/          Dakota execution, NIDR composers, study runners — internal
+  tabular/         preprocessor + pure data maths — internal
 ```
 
 ## Docs
