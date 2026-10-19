@@ -7,7 +7,7 @@ from types import TracebackType
 from packaging.version import Version
 
 _spec = spec_from_file_location(
-    "dev_version", Path(__file__).parents[1] / "scripts/dev_version.py"
+    "dev_version", Path(__file__).parents[2] / "scripts/dev_version.py"
 )
 assert _spec is not None
 dev_version = module_from_spec(_spec)

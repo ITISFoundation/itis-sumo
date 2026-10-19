@@ -214,7 +214,7 @@ T58md|x||function-grammar rework (V52rc): `sample_uncertainty` (+ draws result p
 T59hz|x||report package: renderings (plotly Figure / pandas DataFrame, one per section, kwargs pass-through, hover = per-sample traceability) + `sections()` catalog + dependency-free marimo notebook template (data-cell + rendering-cell pairs, version stamp); REPLACES the T54rp façade (V49rp already marked superseded; `test_report_surface.py` rewritten in THIS PR — report-surface change is this task's declared scope, ⊥ silent); extra `[report]` carries plotly+marimo|V54hz,V22rs,V50kv,V51jw
 T60gb|x||docs: mkdocstrings auto-reference (function docstrings = the visible product surface) + SuMo catalog page + marimo-first tutorials (generated notebook as worked example) + composition how-tos (UQ→correlations) + README prune (engine caveats → docs) + glossary↔VOCAB sync (function/rendering/catalog in, entrypoint out)|V50kv,V53md
 T61pn|x||docs figures + V&V rendering matplotlib→plotly (one visual language across docs/renderings/FE)|V54hz
-T62yt|.|tests reshuffle to mirror the module tree — the ONLY phase ⊥ import-line-restricted; collection count ! identical|V51jw
+T62yt|x||tests reshuffle to mirror the module tree — the ONLY phase ⊥ import-line-restricted; collection count ! identical|V51jw
 T63zw|.|coordinated mmux_vite flaskapi migration: root-manifest imports, UQ/correlation compositions, FE payloads mapped from the new results (FE shape ⊥ change); 522-pass editable-overlay parity verify pre-pin-bump (T45zt pattern)|T40qz,V50kv,V52rc
 
 ## §B
