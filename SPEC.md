@@ -216,6 +216,7 @@ T60gb|x||docs: mkdocstrings auto-reference (function docstrings = the visible pr
 T61pn|x||docs figures + V&V rendering matplotlib→plotly (one visual language across docs/renderings/FE)|V54hz
 T62yt|x||tests reshuffle to mirror the module tree — the ONLY phase ⊥ import-line-restricted; collection count ! identical|V51jw
 T63zw|.|coordinated mmux_vite flaskapi migration: root-manifest imports, UQ/correlation compositions, FE payloads mapped from the new results (FE shape ⊥ change); 522-pass editable-overlay parity verify pre-pin-bump (T45zt pattern)|T40qz,V50kv,V52rc
+T64fv|.|handle-native convergence sweep: `SuMo.convergence_curve(*, folds=5, min_samples, max_points, n_bootstrap=1, seed)` — retrains the size-subset CV reruns ON the handle's own fitted preprocessing, writing the training table internally (consumer ⊥ hand-rolled report-space file bridge — the NIH tissue-LHS report dogfood 2026-10-19 found this the last surviving manual-ln machinery in a migrated report), and returns the `compute_cv_convergence`-shaped series with metrics in ORIGINAL units (V22rs: one report ⊥ split between physical headline-CV ∧ ln convergence panels); rendering surface ⊥ change (render_convergence consumes the same series shape); `compute_cv_convergence` demoted root manifest → engine-internal (V50kv surface returns w/ docs fences re-anchored), engine file-based path stays for NIH ⊣ T63zw|V50kv,V22rs,V54hz
 
 ## §B
 id|date|cause|fix
