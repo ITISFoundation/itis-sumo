@@ -43,7 +43,7 @@ from itis_sumo.types import (
     VariableDiagnostics,
 )
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.unit
 

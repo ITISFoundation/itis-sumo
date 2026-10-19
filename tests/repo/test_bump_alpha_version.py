@@ -4,7 +4,7 @@ from pathlib import Path
 from packaging.version import Version
 
 _spec = spec_from_file_location(
-    "bump_alpha_version", Path(__file__).parents[1] / "scripts/bump_alpha_version.py"
+    "bump_alpha_version", Path(__file__).parents[2] / "scripts/bump_alpha_version.py"
 )
 assert _spec is not None
 bump_alpha_version = module_from_spec(_spec)
