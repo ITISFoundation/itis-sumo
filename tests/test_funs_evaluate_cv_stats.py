@@ -16,7 +16,6 @@ from itis_sumo.engine.evaluation import (
     compute_cv_diagnostics,
     compute_paired_ttest,
     fit_convergence_exponential,
-    fit_convergence_exponential_asymptotic,
 )
 
 
@@ -237,7 +236,7 @@ class TestFitConvergenceExponentialAsymptotic:
         n = np.linspace(10, 100, 40)
         y = a_true * np.exp(-b_true * n) + c_true
 
-        fit = fit_convergence_exponential_asymptotic(n.tolist(), y.tolist())
+        fit = fit_convergence_exponential(n.tolist(), y.tolist(), asymptotic=True)
 
         assert fit["a"] == pytest.approx(a_true, rel=1e-2)
         assert fit["b"] == pytest.approx(b_true, rel=1e-2)
@@ -252,14 +251,16 @@ class TestFitConvergenceExponentialAsymptotic:
         y_with_nans[2] = float("nan")
         y_with_nans[7] = float("nan")
 
-        fit = fit_convergence_exponential_asymptotic(n.tolist(), y_with_nans)
+        fit = fit_convergence_exponential(n.tolist(), y_with_nans, asymptotic=True)
 
         assert fit["a"] == pytest.approx(a_true, rel=1e-2)
         assert fit["c"] == pytest.approx(c_true, rel=1e-2)
 
     def test_raises_below_four_valid_points(self):
         with pytest.raises(ValueError):
-            fit_convergence_exponential_asymptotic([10.0, 20.0, 30.0], [1.0, 0.5, 0.3])
+            fit_convergence_exponential(
+                [10.0, 20.0, 30.0], [1.0, 0.5, 0.3], asymptotic=True
+            )
 
 
 class TestConvergenceSubsetSizes:

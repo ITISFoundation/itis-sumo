@@ -1,7 +1,7 @@
 import logging
 import os
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -25,7 +25,6 @@ from itis_sumo.engine.sumo_model_store import (
 )
 from itis_sumo.tabular.preprocessor import DataPreprocessor
 from itis_sumo.tabular.processing import (
-    compute_correlation_indices,
     create_grid_samples,
     create_manual_uq_samples,
     create_samples_along_axes,
@@ -107,7 +106,7 @@ def evaluate_sumo_along_axes(
 ### TODO refactor in new MMUX-compatible version (like above)
 
 
-def propagate_manual_uq_with_uncertainty(
+def sample_and_propagate_uq(
     run_dir: Path,
     PROCESSED_TRAINING_FILE: Path,
     input_vars: list[str],
@@ -117,30 +116,24 @@ def propagate_manual_uq_with_uncertainty(
     num_samples: int,
     n_histograms: int = 100,
     seed: int = 42,
-) -> np.ndarray:
-    """Propagate explicit per-variable uncertainty through a surrogate's own
-    predictive uncertainty.
+) -> dict:
+    """Draw -> evaluate -> inject, returning every intermediate (V53md seam).
 
-    Draws ``num_samples`` per-variable samples from ``distributions`` (uniform /
-    normal / constant, in the caller's original units), evaluates the surrogate
-    once, then injects the surrogate's predictive std via the erfinv trick
-    (``sqrt(2) * erfinv(U) ~ N(0, 1)`` for ``U ~ Uniform(-1, 1)``), repeated
-    ``n_histograms`` times to characterise realisation-to-realisation spread.
+    The data-first producer behind ``SuMo.sample_uncertainty``: same draw /
+    evaluate / predictive-std-injection machinery as
+    ``propagate_manual_uq_with_uncertainty`` (see it for the semantics), but
+    it hands back the raw material instead of discarding it --
 
-    This mirrors the historical ``/manual_uq_propagation_with_uncertainty``
-    Flask route rather than ``propagate_uq`` (Dakota-native, normal-only, no
-    predictive-uncertainty injection) -- see test_metamodeling_analytical.py.
+        ``draws``            per-variable Monte-Carlo inputs, original units;
+        ``predictions``      surrogate response per draw, original units;
+        ``prediction_stds``  predictive spread in original units as the
+            inverse-image half-interval ``|inverse(pred+std) - inverse(pred)|``
+            (exact under a linear scale);
+        ``propagated``       the ``(n_histograms, num_samples)`` grid in
+            original units that ``summarize_uncertainty`` re-summarises.
 
-    If ``preprocessor`` is given, samples are drawn/transformed/evaluated in
-    the preprocessor's mapped space and results are mapped back via
-    ``inverse_transform``; if omitted, ``input_vars``/``output_response`` are
-    used directly (sanitized for Dakota) and the returned samples live in the
-    file's own space -- the pathway the NIH worked example uses to propagate
-    in a hand-built log-transformed space without a ``DataPreprocessor``.
-
-    Returns:
-        A ``(n_histograms, num_samples)`` array of propagated output samples,
-        already inverse-transformed to the caller's original units.
+    A missing ``_std_hat`` raises ``ValueError`` exactly as before: the
+    injection step cannot run without the surrogate's spread.
     """
     from scipy.special import erfinv
 
@@ -198,81 +191,82 @@ def propagate_manual_uq_with_uncertainty(
         all_results_transformed[i, :] = prediction + r * uncertainty
 
     if preprocessor is None:
-        return all_results_transformed
+        return {
+            "draws": {var: list(samples[var]) for var in input_vars},
+            "predictions": prediction.tolist(),
+            "prediction_stds": uncertainty.tolist(),
+            "propagated": all_results_transformed,
+        }
     all_samples_dict = {mapped_response: all_results_transformed.flatten().tolist()}
     all_samples_original = preprocessor.inverse_transform(all_samples_dict)
-    return np.asarray(all_samples_original[output_response]).reshape(
+    propagated = np.asarray(all_samples_original[output_response]).reshape(
         n_histograms, num_samples
     )
+    predictions_original = preprocessor.inverse_transform(
+        {mapped_response: prediction.tolist()}
+    )[output_response]
+    upper_original = preprocessor.inverse_transform(
+        {mapped_response: (prediction + uncertainty).tolist()}
+    )[output_response]
+    return {
+        "draws": {var: list(samples[var]) for var in input_vars},
+        "predictions": list(predictions_original),
+        "prediction_stds": [
+            abs(u - c) for u, c in zip(upper_original, predictions_original)
+        ],
+        "propagated": propagated,
+    }
 
 
-def correlate_manual_uq_samples(
+def propagate_manual_uq_with_uncertainty(
     run_dir: Path,
     PROCESSED_TRAINING_FILE: Path,
     input_vars: list[str],
     output_response: str,
     distributions: dict[str, dict[str, float | str]],
-    preprocessor,
+    preprocessor: DataPreprocessor | None,
     num_samples: int,
-    *,
-    input_scales: Mapping[str, str],
-    output_scale: str,
+    n_histograms: int = 100,
     seed: int = 42,
-) -> dict[str, dict[str, float]]:
-    """Correlate each input variable with the surrogate-predicted response over
-    a shared Monte Carlo sample set.
+) -> np.ndarray:
+    """Propagate explicit per-variable uncertainty through a surrogate's own
+    predictive uncertainty.
 
-    Draws ``num_samples`` per-variable samples from ``distributions`` (in the
-    caller's original units), evaluates the surrogate once, then correlates
-    every input's samples against the inverse-transformed prediction -- the
-    workflow behind the historical ``/flask/dakota/compute_correlation_indices``
-    route (#470), owned here so no consumer re-implements the sampling/
-    surrogate/correlation chain.
+    Draws ``num_samples`` per-variable samples from ``distributions`` (uniform /
+    normal / constant, in the caller's original units), evaluates the surrogate
+    once, then injects the surrogate's predictive std via the erfinv trick
+    (``sqrt(2) * erfinv(U) ~ N(0, 1)`` for ``U ~ Uniform(-1, 1)``), repeated
+    ``n_histograms`` times to characterise realisation-to-realisation spread.
 
-    Correlations run on values mapped onto each column's own scale (V45ls):
-    ``input_scales``/``output_scale`` are REQUIRED keyword arguments -- a
-    producer of values cannot forget to decide a scale (``TypeError``, never a
-    silent linear default). Pearson moves under a log reparametrization;
-    Spearman is monotone-invariant by construction.
+    This mirrors the historical ``/manual_uq_propagation_with_uncertainty``
+    Flask route rather than ``propagate_uq`` (Dakota-native, normal-only, no
+    predictive-uncertainty injection) -- see test_metamodeling_analytical.py.
+
+    If ``preprocessor`` is given, samples are drawn/transformed/evaluated in
+    the preprocessor's mapped space and results are mapped back via
+    ``inverse_transform``; if omitted, ``input_vars``/``output_response`` are
+    used directly (sanitized for Dakota) and the returned samples live in the
+    file's own space -- the pathway the NIH worked example uses to propagate
+    in a hand-built log-transformed space without a ``DataPreprocessor``.
+
+    Returns:
+        A ``(n_histograms, num_samples)`` array of propagated output samples,
+        already inverse-transformed to the caller's original units. The
+        intermediates stay available via ``sample_and_propagate_uq`` (V53md);
+        this wrapper returns only the propagated grid.
     """
-    samples = create_manual_uq_samples(input_vars, distributions, num_samples, seed)
-    df_samples = pd.DataFrame(samples)
-    SAMPLES_FILE = run_dir / "correlation_samples.csv"
-    df_samples.to_csv(SAMPLES_FILE, index=False)
-
-    df_samples_transformed = preprocessor.transform(df_samples)
-    PROCESSED_SAMPLES_FILE = run_dir / "correlation_samples_processed.csv"
-    df_samples_transformed.to_csv(PROCESSED_SAMPLES_FILE, sep=" ", index=False)
-
-    mapped_input_vars = [
-        preprocessor.input_variables[var].mapped_name for var in input_vars
-    ]
-    mapped_response = preprocessor.output_variables[output_response].mapped_name
-    results = evaluate_sumo(
+    pieces = sample_and_propagate_uq(
         run_dir,
         PROCESSED_TRAINING_FILE,
-        PROCESSED_SAMPLES_FILE,
-        mapped_input_vars,
-        mapped_response,
-    )
-
-    prediction_key = mapped_response + "_hat"
-    if prediction_key not in results:
-        raise ValueError(
-            f"Cannot compute correlation indices without '{prediction_key}' "
-            f"predictions. Available keys: {list(results.keys())}."
-        )
-
-    predictions_original = preprocessor.inverse_transform(
-        {mapped_response: results[prediction_key]}
-    )
-    return compute_correlation_indices(
-        df_samples,
-        predictions_original[output_response],
         input_vars,
-        input_scales=input_scales,
-        output_scale=output_scale,
+        output_response,
+        distributions,
+        preprocessor,
+        num_samples,
+        n_histograms=n_histograms,
+        seed=seed,
     )
+    return np.asarray(pieces["propagated"])
 
 
 def summarize_uncertainty_samples(
@@ -867,78 +861,63 @@ def compute_cv_convergence(
 
 
 def fit_convergence_exponential(
-    n_samples: list[float], values: list[float]
+    n_samples: list[float], values: list[float], *, asymptotic: bool = False
 ) -> dict[str, float]:
-    """Fit `y = a * exp(-b * n)` to pooled convergence data via nonlinear least
-    squares, reporting the fit's `r_squared`.
+    """Fit an exponential decay to pooled convergence data (V18wp; T58md fold).
+
+    `asymptotic=False` (default) fits `y = a * exp(-b * n)`, whose zero
+    asymptote is the right shape for a quantity defined to be 0 at the
+    reference point (e.g. % deviation from a final value).
+    `asymptotic=True` fits `y = a * exp(-b * n) + c`: even at N->infinity a
+    surrogate keeps some irreducible error, so a raw error metric (MAE/RMSE
+    in physical units) should flatten at a positive floor `c`, not at 0 --
+    the result then carries `c` as well.
 
     Meant to run on every individual bootstrap draw as its own `(n, value)`
     pair (e.g. `compute_cv_convergence`'s `draws` per size, flattened; see
     NIH worked example § convergence), not just the per-size mean -- pooling
     the raw draws means `r_squared` reflects fit quality against the actual
     spread, not an already-smoothed curve. `nan` entries in `values` (e.g. an
-    all-NaN bootstrap draw) are dropped before fitting.
+    all-NaN bootstrap draw) are dropped before fitting; at least 3 valid
+    points are needed (4 with `asymptotic=True`, one per parameter).
     """
     n_arr = np.asarray(n_samples, dtype=float)
     y_arr = np.asarray(values, dtype=float)
     mask = ~np.isnan(y_arr)
     n_arr, y_arr = n_arr[mask], y_arr[mask]
-    if n_arr.size < 3:
+    min_points = 4 if asymptotic else 3
+    if n_arr.size < min_points:
         raise ValueError(
-            "Need at least 3 valid (n_samples, value) pairs to fit a 2-parameter exponential"
+            f"Need at least {min_points} valid (n_samples, value) pairs to fit a "
+            f"{3 if asymptotic else 2}-parameter exponential"
         )
 
-    def model(n: np.ndarray, a: float, b: float) -> np.ndarray:
-        return a * np.exp(-b * n)
+    if asymptotic:
 
-    a0 = y_arr[np.argmin(n_arr)]
-    p0 = (a0 if a0 != 0 else 1.0, 1.0 / max(float(n_arr.max()), 1.0))
-    (a, b), _ = curve_fit(model, n_arr, y_arr, p0=p0, maxfev=10000)
+        def model(n: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
+            return a * np.exp(-b * n) + c
 
-    y_pred = model(n_arr, a, b)
+        c0 = y_arr[np.argmax(n_arr)]
+        a0 = y_arr[np.argmin(n_arr)] - c0
+        p0 = (a0 if a0 != 0 else 1.0, 1.0 / max(float(n_arr.max()), 1.0), c0)
+        (a, b, c), _ = curve_fit(model, n_arr, y_arr, p0=p0, maxfev=10000)
+        y_pred = model(n_arr, a, b, c)
+    else:
+
+        def model(n: np.ndarray, a: float, b: float) -> np.ndarray:
+            return a * np.exp(-b * n)
+
+        a0 = y_arr[np.argmin(n_arr)]
+        p0 = (a0 if a0 != 0 else 1.0, 1.0 / max(float(n_arr.max()), 1.0))
+        (a, b), _ = curve_fit(model, n_arr, y_arr, p0=p0, maxfev=10000)
+        y_pred = model(n_arr, a, b)
     ss_res = float(np.sum((y_arr - y_pred) ** 2))
     ss_tot = float(np.sum((y_arr - np.mean(y_arr)) ** 2))
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
-    return {"a": float(a), "b": float(b), "r_squared": r_squared}
-
-
-def fit_convergence_exponential_asymptotic(
-    n_samples: list[float], values: list[float]
-) -> dict[str, float]:
-    """Fit `y = a * exp(-b * n) + c` to pooled convergence data (V18wp).
-
-    `fit_convergence_exponential`'s 2-parameter `a*exp(-b*n)` model decays to
-    a ZERO asymptote, which is the right shape for a quantity defined to be 0
-    at the reference point (e.g. % deviation from a final value) but the
-    WRONG shape for a raw error metric (MAE/RMSE in physical units): even at
-    N->infinity a surrogate keeps some irreducible error, so the curve should
-    flatten at a positive floor `c`, not at 0. Otherwise identical to
-    `fit_convergence_exponential` (nonlinear least squares, `nan` values
-    dropped, needs >=3 points -- one more than the 2-param fit since there
-    are 3 parameters to identify).
-    """
-    n_arr = np.asarray(n_samples, dtype=float)
-    y_arr = np.asarray(values, dtype=float)
-    mask = ~np.isnan(y_arr)
-    n_arr, y_arr = n_arr[mask], y_arr[mask]
-    if n_arr.size < 4:
-        raise ValueError(
-            "Need at least 4 valid (n_samples, value) pairs to fit a 3-parameter exponential"
-        )
-
-    def model(n: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
-        return a * np.exp(-b * n) + c
-
-    c0 = y_arr[np.argmax(n_arr)]
-    a0 = y_arr[np.argmin(n_arr)] - c0
-    p0 = (a0 if a0 != 0 else 1.0, 1.0 / max(float(n_arr.max()), 1.0), c0)
-    (a, b, c), _ = curve_fit(model, n_arr, y_arr, p0=p0, maxfev=10000)
-
-    y_pred = model(n_arr, a, b, c)
-    ss_res = float(np.sum((y_arr - y_pred) ** 2))
-    ss_tot = float(np.sum((y_arr - np.mean(y_arr)) ** 2))
-    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
-    return {"a": float(a), "b": float(b), "c": float(c), "r_squared": r_squared}
+    fit = {"a": float(a), "b": float(b), "r_squared": r_squared}
+    if asymptotic:
+        fit["c"] = float(c)
+    return fit
 
 
 def evaluate_sumo(

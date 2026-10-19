@@ -16,8 +16,9 @@ from itis_sumo import (
     compute_correlations,
     cross_validate,
     evaluate_along_axes,
-    evaluate_correlations,
     evaluate_sobol,
+    sample_uncertainty,
+    summarize_uncertainty,
 )
 from itis_sumo.diagnostics import analyze_dataset
 from itis_sumo.engine.evaluation import (
@@ -27,7 +28,6 @@ from itis_sumo.engine.evaluation import (
     compute_cv_diagnostics,
     compute_paired_ttest,
     fit_convergence_exponential,
-    fit_convergence_exponential_asymptotic,
     propagate_manual_uq_with_uncertainty,
 )
 
@@ -43,9 +43,9 @@ __all__ = [
     "compute_paired_ttest",
     "cross_validate",
     "evaluate_along_axes",
-    "evaluate_correlations",
     "evaluate_sobol",
     "fit_convergence_exponential",
-    "fit_convergence_exponential_asymptotic",
     "propagate_manual_uq_with_uncertainty",
+    "sample_uncertainty",
+    "summarize_uncertainty",
 ]

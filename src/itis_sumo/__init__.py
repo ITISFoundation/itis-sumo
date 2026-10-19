@@ -19,11 +19,7 @@ from importlib.metadata import version as package_version
 __version__ = package_version("itis-sumo")
 
 from itis_sumo.calibration import compute_coverage, compute_cv_diagnostics
-from itis_sumo.convergence import (
-    compute_cv_convergence,
-    fit_convergence_exponential,
-    fit_convergence_exponential_asymptotic,
-)
+from itis_sumo.convergence import compute_cv_convergence, fit_convergence_exponential
 from itis_sumo.diagnostics import analyze_dataset, detect_raw_outliers
 from itis_sumo.errors import (
     SumoEngineError,
@@ -55,12 +51,13 @@ from itis_sumo.types import (
     PreprocessingSpec,
     Scale,
     SobolResult,
-    UncertaintyResult,
+    UncertaintyDraws,
+    UncertaintySummary,
     VariableDiagnostics,
     VariableSpec,
 )
-from itis_sumo.uncertainty import evaluate_correlations, evaluate_uncertainty
-from itis_sumo.validation import cross_validate, evaluate_cv_metrics
+from itis_sumo.uncertainty import sample_uncertainty, summarize_uncertainty
+from itis_sumo.validation import cross_validate, cross_validation_metrics
 
 __all__ = [
     "DEFAULT_SEED",
@@ -86,7 +83,8 @@ __all__ = [
     "SumoError",
     "SumoInputError",
     "SumoResultError",
-    "UncertaintyResult",
+    "UncertaintyDraws",
+    "UncertaintySummary",
     "VariableDiagnostics",
     "VariableSpec",
     "__version__",
@@ -96,18 +94,17 @@ __all__ = [
     "compute_cv_convergence",
     "compute_cv_diagnostics",
     "cross_validate",
+    "cross_validation_metrics",
     "detect_raw_outliers",
     "evaluate_along_axes",
-    "evaluate_correlations",
-    "evaluate_cv_metrics",
     "evaluate_grid",
     "evaluate_sobol",
-    "evaluate_uncertainty",
     "fit",
     "fit_convergence_exponential",
-    "fit_convergence_exponential_asymptotic",
     "generate_grid_samples",
     "generate_lhs_samples",
     "load",
     "optimize",
+    "sample_uncertainty",
+    "summarize_uncertainty",
 ]

@@ -12,7 +12,6 @@ import dataclasses
 import json
 import math
 from collections.abc import Callable
-from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -27,15 +26,15 @@ from itis_sumo import (
     VariableSpec,
     compute_correlations,
     cross_validate,
+    cross_validation_metrics,
     evaluate_along_axes,
-    evaluate_correlations,
-    evaluate_cv_metrics,
     evaluate_grid,
     evaluate_sobol,
-    evaluate_uncertainty,
     generate_grid_samples,
     generate_lhs_samples,
     optimize,
+    sample_uncertainty,
+    summarize_uncertainty,
 )
 
 pytestmark = pytest.mark.integration
@@ -268,38 +267,108 @@ class TestDiagnostics:
             compute_correlations(samples, ["depth"], RESPONSE)
 
     def test_cv_metrics_compose_cross_validation(self, samples):
-        result = evaluate_cv_metrics(samples, VARIABLES, RESPONSE, seed=7)
+        result = cross_validation_metrics(samples, VARIABLES, RESPONSE, seed=7)
         assert result.response == RESPONSE
         assert result.seed == 7
         assert result.root_mean_squared >= 0.0
         assert result.mean_abs >= 0.0
 
 
+def _uq_summary(samples, variables, response, **kwargs):
+    """The old fused shape for tests: summarize whatever `sample_uncertainty`
+    produced. V52rc keeps data and summary apart; composing them in one line
+    here is the test-side expression of exactly that seam."""
+    return summarize_uncertainty(
+        sample_uncertainty(samples, variables, response, **kwargs)
+    )
+
+
+def _sampled_correlations(
+    samples,
+    variables,
+    response,
+    *,
+    distributions,
+    num_samples,
+    seed,
+    preprocessing=None,
+):
+    """The V52rc open composition replacing the retired fuse: draws -> a
+    caller-owned table -> `compute_correlations`, with the draw's provenance
+    attached so tests can pin which seed produced the numbers."""
+    draws = sample_uncertainty(
+        samples,
+        variables,
+        response,
+        distributions=distributions,
+        num_samples=num_samples,
+        n_histograms=1,
+        seed=seed,
+        preprocessing=preprocessing,
+    )
+    table = pd.DataFrame({**draws.draws, response: draws.predictions})
+    result = compute_correlations(
+        table, variables, response, preprocessing=preprocessing
+    )
+    return dataclasses.replace(result, seed=draws.seed)
+
+
 class TestUncertainty:
-    def test_propagates_uncertainty_in_original_units(self, samples):
-        distributions = {
+    def _dists(self):
+        return {
             "width": DistributionSpec("uniform", minimum=1.0, maximum=5.0),
             "height": DistributionSpec("uniform", minimum=100.0, maximum=500.0),
         }
-        result = evaluate_uncertainty(
+
+    def test_draws_carry_the_raw_material_in_original_units(self, samples):
+        draws = sample_uncertainty(
             samples,
             VARIABLES,
             RESPONSE,
-            distributions=distributions,
+            distributions=self._dists(),
             num_samples=50,
             n_histograms=10,
             seed=7,
         )
-        assert result.response == RESPONSE
-        assert result.seed == 7
-        assert result.bins_start < result.bins_end
-        assert result.q1 <= result.median <= result.q3
-        assert result.mean > 0.0
-        assert len(result.bin_means) == len(result.bin_stds)
+        assert draws.response == RESPONSE
+        assert draws.seed == 7
+        assert draws.num_samples == 50 and draws.n_histograms == 10
+        # V53md: per-variable input draws ...
+        assert set(draws.draws) == set(VARIABLES)
+        assert len(draws.draws["width"]) == 50
+        assert 1.0 <= min(draws.draws["width"])
+        assert max(draws.draws["width"]) <= 5.0
+        # ... per-draw predictions and spreads ...
+        assert len(draws.predictions) == 50
+        assert draws.prediction_stds and len(draws.prediction_stds) == 50
+        assert min(draws.prediction_stds) >= 0.0
+        # ... and the propagated grid the summary recomputes from.
+        assert len(draws.propagated) == 10
+        assert all(len(row) == 50 for row in draws.propagated)
+
+    def test_summarize_recomputes_the_bin_statistics_purely(self, samples):
+        draws = sample_uncertainty(
+            samples,
+            VARIABLES,
+            RESPONSE,
+            distributions=self._dists(),
+            num_samples=50,
+            n_histograms=10,
+            seed=7,
+        )
+        summary = summarize_uncertainty(draws)
+        assert summary.response == RESPONSE
+        assert summary.seed == 7
+        assert summary.bins_start < summary.bins_end
+        assert summary.q1 <= summary.median <= summary.q3
+        assert summary.mean > 0.0
+        assert len(summary.bin_means) == len(summary.bin_stds)
+        # V52rc: the summary is a function of its data -- twice is equal.
+        assert summarize_uncertainty(draws) == summary
 
     def test_requires_a_distribution_for_each_variable(self, samples):
         with pytest.raises(SumoInputError, match="cover variables exactly"):
-            evaluate_uncertainty(
+            sample_uncertainty(
                 samples,
                 VARIABLES,
                 RESPONSE,
@@ -481,7 +550,7 @@ class TestLogScaleUncertaintyAndMetrics:
     (SPEC T27fr -- 'log applied everywhere')."""
 
     def test_log_input_samples_log_uniform_skewing_response_low(self, samples):
-        linear = evaluate_uncertainty(
+        linear = _uq_summary(
             samples,
             VARIABLES,
             RESPONSE,
@@ -490,7 +559,7 @@ class TestLogScaleUncertaintyAndMetrics:
             n_histograms=5,
             seed=7,
         )
-        logw = evaluate_uncertainty(
+        logw = _uq_summary(
             samples,
             VARIABLES,
             RESPONSE,
@@ -509,7 +578,7 @@ class TestLogScaleUncertaintyAndMetrics:
         # V46rn: log composes with normal -- μ/σ stay in ln space, raw draws are
         # lognormal (positive by construction), and the propagated statistics
         # move relative to the linear draw.
-        linear = evaluate_uncertainty(
+        linear = _uq_summary(
             samples,
             VARIABLES,
             RESPONSE,
@@ -518,7 +587,7 @@ class TestLogScaleUncertaintyAndMetrics:
             n_histograms=5,
             seed=7,
         )
-        logw = evaluate_uncertainty(
+        logw = _uq_summary(
             samples,
             VARIABLES,
             RESPONSE,
@@ -540,7 +609,7 @@ class TestLogScaleUncertaintyAndMetrics:
             "height": _UQ_DISTS["height"],
         }
         with pytest.raises(SumoInputError, match="not strictly positive"):
-            evaluate_uncertainty(
+            _uq_summary(
                 samples,
                 VARIABLES,
                 RESPONSE,
@@ -552,8 +621,8 @@ class TestLogScaleUncertaintyAndMetrics:
             )
 
     def test_cv_metrics_honour_log_scale(self, samples):
-        linear = evaluate_cv_metrics(samples, VARIABLES, RESPONSE, seed=7)
-        log_response = evaluate_cv_metrics(
+        linear = cross_validation_metrics(samples, VARIABLES, RESPONSE, seed=7)
+        log_response = cross_validation_metrics(
             samples, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE, seed=7
         )
         assert linear.root_mean_squared >= 0.0
@@ -568,7 +637,7 @@ class TestLogScaleUncertaintyAndMetrics:
         bad = samples.copy()
         bad.loc[bad.index[0], RESPONSE] = -1.0
         with pytest.raises(SumoInputError, match="log-scale but hold values"):
-            evaluate_cv_metrics(bad, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE)
+            cross_validation_metrics(bad, VARIABLES, RESPONSE, preprocessing=_LOG_SCALE)
 
 
 class TestLogScaleSobol:
@@ -672,7 +741,7 @@ class TestScaleGapCoverage:
         assert np.allclose(diffs, diffs.mean(), rtol=1e-6)
 
     def test_uncertainty_log_response_spread_is_multiplicative(self, samples):
-        result = evaluate_uncertainty(
+        result = _uq_summary(
             samples,
             VARIABLES,
             RESPONSE,
@@ -774,12 +843,13 @@ class TestScaleAwareSamplers:
         )
 
 
-class TestEvaluateCorrelations:
-    """`evaluate_correlations` owns the MC-through-surrogate correlation
-    workflow (#470) so no consumer re-implements the sampling chain (V45ls)."""
+class TestSampledCorrelations:
+    """The MC-through-surrogate correlation workflow (#470) is open
+    composition under V52rc: `sample_uncertainty` -> caller-owned table ->
+    `compute_correlations`; the table mode keeps the scale contract (V45ls)."""
 
     def test_recovers_dominant_variable_over_shared_sample_set(self, samples):
-        result = evaluate_correlations(
+        result = _sampled_correlations(
             samples,
             VARIABLES,
             RESPONSE,
@@ -797,7 +867,7 @@ class TestEvaluateCorrelations:
         )
 
     def test_is_seed_reproducible(self, samples):
-        first = evaluate_correlations(
+        first = _sampled_correlations(
             samples,
             VARIABLES,
             RESPONSE,
@@ -805,7 +875,7 @@ class TestEvaluateCorrelations:
             num_samples=150,
             seed=11,
         )
-        second = evaluate_correlations(
+        second = _sampled_correlations(
             samples,
             VARIABLES,
             RESPONSE,
@@ -819,7 +889,7 @@ class TestEvaluateCorrelations:
         # NOTE: unlike table-mode correlation, log mode ALSO changes the draw
         # (log-uniform vs uniform), so only "the numbers move" is guaranteed --
         # no rank-invariance claim here.
-        linear = evaluate_correlations(
+        linear = _sampled_correlations(
             samples,
             VARIABLES,
             RESPONSE,
@@ -827,7 +897,7 @@ class TestEvaluateCorrelations:
             num_samples=300,
             seed=7,
         )
-        logw = evaluate_correlations(
+        logw = _sampled_correlations(
             samples,
             VARIABLES,
             RESPONSE,
@@ -843,7 +913,7 @@ class TestEvaluateCorrelations:
     def test_log_normal_variable_moves_the_coefficients(self, samples):
         # V46rn: log composes with normal -- the shared MC set is drawn
         # lognormal, so Pearson over the surrogate predictions moves.
-        linear = evaluate_correlations(
+        linear = _sampled_correlations(
             samples,
             VARIABLES,
             RESPONSE,
@@ -851,7 +921,7 @@ class TestEvaluateCorrelations:
             num_samples=300,
             seed=7,
         )
-        logw = evaluate_correlations(
+        logw = _sampled_correlations(
             samples,
             VARIABLES,
             RESPONSE,
@@ -870,7 +940,7 @@ class TestEvaluateCorrelations:
             "height": _UQ_DISTS["height"],
         }
         with pytest.raises(SumoInputError, match="only a uniform or normal"):
-            evaluate_correlations(
+            _sampled_correlations(
                 samples,
                 VARIABLES,
                 RESPONSE,
@@ -884,7 +954,7 @@ class TestEvaluateCorrelations:
             "height": _UQ_DISTS["height"],
         }
         with pytest.raises(SumoInputError, match="strictly positive"):
-            evaluate_correlations(
+            _sampled_correlations(
                 samples,
                 VARIABLES,
                 RESPONSE,
@@ -896,7 +966,7 @@ class TestEvaluateCorrelations:
 
     def test_distributions_must_cover_variables_exactly(self, samples):
         with pytest.raises(SumoInputError, match="cover variables exactly"):
-            evaluate_correlations(
+            _sampled_correlations(
                 samples,
                 VARIABLES,
                 RESPONSE,
@@ -905,13 +975,14 @@ class TestEvaluateCorrelations:
                 seed=7,
             )
 
-    def test_producer_requires_scales(self):
-        """V45ls structural tripwire on the new value-producing entry point."""
-        from itis_sumo.engine.evaluation import correlate_manual_uq_samples
+    def test_producer_requires_scales(self, samples):
+        """V45ls structural tripwire: the correlation producer cannot forget
+        to decide a scale -- required kwargs, never a silent linear default."""
+        from itis_sumo.tabular.processing import compute_correlation_indices
 
         with pytest.raises(TypeError):
-            correlate_manual_uq_samples(  # ty: ignore[missing-argument]
-                Path("."), Path("."), ["x"], "y", {}, None, 10, seed=1
+            compute_correlation_indices(  # ty: ignore[missing-argument]
+                samples, samples[RESPONSE].tolist(), VARIABLES
             )
 
     def test_table_entry_points_reject_unused_overrides(self, samples):
@@ -938,7 +1009,7 @@ class TestEvaluateCorrelations:
             "height": _UQ_DISTS["height"],
         }
         with pytest.raises(SumoInputError, match="upper bound"):
-            evaluate_uncertainty(
+            _uq_summary(
                 samples,
                 VARIABLES,
                 RESPONSE,
@@ -970,9 +1041,9 @@ class TestScaleFlipMatrix:
                 ),
             ),
             (
-                "evaluate_cv_metrics",
+                "cross_validation_metrics",
                 lambda p: self._fp(
-                    evaluate_cv_metrics(
+                    cross_validation_metrics(
                         samples, VARIABLES, RESPONSE, preprocessing=p, seed=7
                     ).root_mean_squared
                 ),
@@ -1010,9 +1081,9 @@ class TestScaleFlipMatrix:
                 ),
             ),
             (
-                "evaluate_uncertainty",
+                "summarize_uncertainty(sample_uncertainty)",
                 lambda p: self._fp(
-                    evaluate_uncertainty(
+                    _uq_summary(
                         samples,
                         VARIABLES,
                         RESPONSE,
@@ -1056,11 +1127,11 @@ class TestScaleFlipMatrix:
                 ),
             ),
             (
-                "evaluate_correlations",
+                "compute_correlations(sampled)",
                 lambda p: self._fp(
                     [
                         entry["pearson"]
-                        for entry in evaluate_correlations(
+                        for entry in _sampled_correlations(
                             samples,
                             VARIABLES,
                             RESPONSE,
@@ -1117,9 +1188,9 @@ class TestScaleFlipMatrix:
         (the pre-B19ps behaviour) and not silently stay linear."""
         cases: list[tuple[str, Callable[[PreprocessingSpec | None], list[float]]]] = [
             (
-                "evaluate_uncertainty",
+                "summarize_uncertainty(sample_uncertainty)",
                 lambda p: self._fp(
-                    evaluate_uncertainty(
+                    _uq_summary(
                         samples,
                         VARIABLES,
                         RESPONSE,
@@ -1136,11 +1207,11 @@ class TestScaleFlipMatrix:
             # there -- the scale flip over domain boxes is asserted in the
             # uniform matrix above.
             (
-                "evaluate_correlations",
+                "compute_correlations(sampled)",
                 lambda p: self._fp(
                     [
                         entry["pearson"]
-                        for entry in evaluate_correlations(
+                        for entry in _sampled_correlations(
                             samples,
                             VARIABLES,
                             RESPONSE,

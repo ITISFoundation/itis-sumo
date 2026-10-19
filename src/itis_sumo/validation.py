@@ -4,7 +4,7 @@ from __future__ import annotations
 
 __all__ = [
     "cross_validate",
-    "evaluate_cv_metrics",
+    "cross_validation_metrics",
 ]
 from collections.abc import Sequence
 from pathlib import Path
@@ -69,7 +69,7 @@ def cross_validate(
         return session.fit().cross_validate(folds=folds, seed=seed)
 
 
-def evaluate_cv_metrics(
+def cross_validation_metrics(
     samples: pd.DataFrame,
     variables: Sequence[str],
     response: str,
