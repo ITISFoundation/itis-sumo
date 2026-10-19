@@ -4,13 +4,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.data.tabular import (
+from itis_sumo.engine.lhs import lhs
+from itis_sumo.tabular.preprocessor import DataPreprocessor
+from itis_sumo.tabular.processing import (
     create_grid_samples,
     create_samples_along_axes,
     load_data,
 )
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
-from itis_sumo.sampling.lhs import lhs
 
 
 # ---------------------------------------------------------------------------

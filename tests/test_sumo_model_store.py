@@ -24,18 +24,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.core.sumo_model_store import (
+from itis_sumo.engine.evaluation import (
+    evaluate_sumo,
+    export_sumo_model,
+    import_sumo_model,
+)
+from itis_sumo.engine.sumo_model_store import (
     get_models_dir,
     load_model_metadata,
     stage_model_for_import,
     store_exported_model,
 )
-from itis_sumo.evaluate.sumo_evaluation import (
-    evaluate_sumo,
-    export_sumo_model,
-    import_sumo_model,
-)
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
+from itis_sumo.tabular.preprocessor import DataPreprocessor
 
 SEED = 42
 

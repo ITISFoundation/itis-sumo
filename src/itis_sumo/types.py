@@ -14,9 +14,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
-from itis_sumo.api.errors import SumoInputError
+from itis_sumo.errors import SumoInputError
 
 #: Seed used by every stochastic entrypoint unless the caller overrides it.
 #: Fixed rather than required, so that results are reproducible by default
@@ -24,6 +24,7 @@ from itis_sumo.api.errors import SumoInputError
 DEFAULT_SEED = 42
 
 Scale = Literal["linear", "log"]
+Distribution = Literal["constant", "uniform", "normal"]
 DistributionKind = Literal["constant", "uniform", "normal"]
 
 
@@ -281,3 +282,27 @@ class AlongAxesResult:
     response: str
     sweeps: dict[str, AxisSweep]
     effective_config: dict[str, VariableSpec]
+
+
+@dataclass
+class OutlierSummary:
+    count: int
+    indices: list[int]
+    fence_low: float
+    fence_high: float
+
+
+@dataclass
+class VariableDiagnostics:
+    name: str
+    scale: Scale
+    distribution: Distribution
+    confident: bool
+    outliers: OutlierSummary | None = None
+
+
+@dataclass
+class DatasetDiagnostics:
+    inputs: dict[str, VariableDiagnostics]
+    outputs: dict[str, VariableDiagnostics]
+    detail: dict[str, Any] | None = None

@@ -46,7 +46,7 @@ itis-sumo's Dakota layer expects standardized variable names (`x1, x2, …` /
 that mapping (plus optional normalization) both ways:
 
 ```python
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
+from itis_sumo.tabular.preprocessor import DataPreprocessor
 
 preprocessor = DataPreprocessor()
 preprocessor.setup_variables(["length", "width"], ["stress"])
@@ -57,13 +57,13 @@ training_file = run_dir / "df_processed_jobs.dat"
 train_processed.to_csv(training_file, sep=" ", index=False)
 ```
 
-`run_dir` is any writable directory — `itis_sumo.utils.helpers.create_run_dir`
+`run_dir` is any writable directory — `itis_sumo.engine.helpers.create_run_dir`
 makes one for you with a timestamp-scoped name.
 
 ## 4. Fit a surrogate and evaluate it
 
 ```python
-from itis_sumo.evaluate.sumo_evaluation import evaluate_sumo
+from itis_sumo.engine.evaluation import evaluate_sumo
 
 preds = evaluate_sumo(run_dir, training_file, eval_samples_file, ["x1", "x2"], "y1")
 y_hat = preds["y1_hat"]  # posterior mean prediction at each eval point
@@ -78,9 +78,9 @@ why itis-sumo uses one: [How Gaussian Processes work](../explanation/gaussian-pr
 ## 5. How good is it? Cross-validate
 
 ```python
-from itis_sumo.evaluate.sumo_evaluation import (
-    evaluate_sumo_manual_crossvalidation,
+from itis_sumo.engine.evaluation import (
     compute_cv_accuracy_metrics,
+    evaluate_sumo_manual_crossvalidation,
 )
 
 cv = evaluate_sumo_manual_crossvalidation(
@@ -98,7 +98,7 @@ full recipe including R² and convergence checks.
 ## 6. Which inputs actually matter? Sobol' sensitivity
 
 ```python
-from itis_sumo.evaluate.sumo_evaluation import evaluate_sobol_indices
+from itis_sumo.engine.evaluation import evaluate_sobol_indices
 
 sampling = {
     "length": {"minimum": 0.0, "maximum": 1.0},

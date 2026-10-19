@@ -1,6 +1,6 @@
 """Report-authoring surface (V49rp): the curated entrypoints automated report
 notebooks (marimo, T51np pattern; tissue-conductivity LHS instance, T52rv)
-build on — the report-facing counterpart of `itis_sumo.api` (which serves the
+build on — the report-facing counterpart of `itis_sumo` (which serves the
 flaskapi/mmux_vite request-response consumer, V16qf).
 
 One flat import (`from itis_sumo.report import ...`) for the whole authoring
@@ -10,7 +10,7 @@ bootstrap convergence sweep, asymptotic error fits) -> sensitivity & correlation
 refactors stay invisible to report code as long as this surface holds.
 """
 
-from itis_sumo.api import (
+from itis_sumo import (
     DEFAULT_SEED,
     DistributionSpec,
     compute_correlations,
@@ -19,8 +19,8 @@ from itis_sumo.api import (
     evaluate_correlations,
     evaluate_sobol,
 )
-from itis_sumo.data import analyze_dataset
-from itis_sumo.evaluate import (
+from itis_sumo.diagnostics import analyze_dataset
+from itis_sumo.engine.evaluation import (
     compute_coverage,
     compute_cv_accuracy_metrics,
     compute_cv_convergence,
@@ -28,8 +28,8 @@ from itis_sumo.evaluate import (
     compute_paired_ttest,
     fit_convergence_exponential,
     fit_convergence_exponential_asymptotic,
+    propagate_manual_uq_with_uncertainty,
 )
-from itis_sumo.evaluate.sumo_evaluation import propagate_manual_uq_with_uncertainty
 
 __all__ = [
     "DEFAULT_SEED",

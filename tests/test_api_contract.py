@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo import api
-from itis_sumo.api import (
+import itis_sumo as api
+from itis_sumo import (
     AlongAxesResult,
     AxisSweep,
     CrossValidationResult,
@@ -33,7 +33,7 @@ from itis_sumo.api import (
     evaluate_grid,
     generate_lhs_samples,
 )
-from itis_sumo.api._session import SumoSession, _minimum_samples
+from itis_sumo.surrogate._session import SumoSession, _minimum_samples
 
 pytestmark = pytest.mark.unit
 
@@ -53,35 +53,46 @@ def make_samples(n: int = 12) -> pd.DataFrame:
 class TestPublicSurface:
     def test_exports_only_the_documented_names(self):
         assert set(api.__all__) == {
-            "DEFAULT_SEED",
             "AlongAxesResult",
             "AxisSweep",
-            "CrossValidationResult",
             "CVAccuracyMetrics",
             "CorrelationResult",
+            "CrossValidationResult",
+            "DEFAULT_SEED",
+            "DatasetDiagnostics",
             "Direction",
             "DistributionSpec",
             "DomainSpec",
             "GridResult",
             "OrderMasses",
+            "OutlierSummary",
             "ParetoFrontResult",
             "PreprocessingSpec",
             "Scale",
             "SobolResult",
-            "UncertaintyResult",
             "SumoEngineError",
             "SumoError",
             "SumoInputError",
             "SumoResultError",
+            "UncertaintyResult",
+            "VariableDiagnostics",
             "VariableSpec",
+            "__version__",
+            "analyze_dataset",
             "compute_correlations",
+            "compute_coverage",
+            "compute_cv_convergence",
+            "compute_cv_diagnostics",
             "cross_validate",
+            "detect_raw_outliers",
             "evaluate_along_axes",
             "evaluate_correlations",
+            "evaluate_cv_metrics",
             "evaluate_grid",
             "evaluate_sobol",
-            "evaluate_cv_metrics",
             "evaluate_uncertainty",
+            "fit_convergence_exponential",
+            "fit_convergence_exponential_asymptotic",
             "generate_grid_samples",
             "generate_lhs_samples",
             "optimize",
@@ -137,7 +148,7 @@ class TestPublicSurface:
     def test_api_layer_is_free_of_web_and_platform_imports(self):
         """Sibling of SPEC V4ty, for the consumer-facing layer."""
         for module in list(sys.modules):
-            if module.startswith("itis_sumo.api"):
+            if module.startswith("itis_sumo"):
                 source = inspect.getsource(sys.modules[module])
                 assert "import flask" not in source
                 assert "osparc" not in source
@@ -314,7 +325,7 @@ class TestWorkingFileLifetime:
     def test_engine_failures_are_translated_and_carry_the_run_directory(
         self, monkeypatch
     ):
-        import itis_sumo.api._session as session_module
+        import itis_sumo.surrogate._session as session_module
 
         def explode(*args, **kwargs):
             raise IndexError("map::at")

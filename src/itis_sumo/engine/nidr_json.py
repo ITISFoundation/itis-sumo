@@ -224,11 +224,11 @@ def _infer_has_eval_id_column(training_samples_file: str) -> bool:
     V15zx) rather than restating the `"processed"` filename convention here.
 
     Imported lazily through the package's public surface: this module is itself
-    wired up by `itis_sumo.config/__init__.py`, so a top-level import of the
+    wired up by `itis_sumo.engine.nidr/__init__.py`, so a top-level import of the
     package would be a circular import whose success depends on module init
     order.
     """
-    from itis_sumo.config import infer_has_eval_id_column_from_filename
+    from itis_sumo.engine.nidr import infer_has_eval_id_column_from_filename
 
     return infer_has_eval_id_column_from_filename(training_samples_file)
 

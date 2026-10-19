@@ -1,6 +1,6 @@
 # Data preprocessing
 
-`itis_sumo.preprocess` -- an optional layer that sits *before* training and
+`itis_sumo.tabular.preprocessor` -- an optional layer that sits *before* training and
 *after* prediction.
 
 ## `DataPreprocessor` (`data_preprocessor.py`)

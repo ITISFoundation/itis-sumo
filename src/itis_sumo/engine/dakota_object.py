@@ -7,7 +7,7 @@ from pathlib import Path
 
 import dakota.environment as dakenv
 
-from itis_sumo.core.capture import capture_to_file
+from itis_sumo.engine.capture import capture_to_file
 
 logger = logging.getLogger(__name__)
 

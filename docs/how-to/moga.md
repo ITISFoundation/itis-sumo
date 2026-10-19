@@ -11,7 +11,7 @@ over **uniform-distribution bounds only** — see below.
 ## Run the optimization
 
 ```python
-from itis_sumo.evaluate.sumo_evaluation import perform_moga_optimization
+from itis_sumo.engine.evaluation import perform_moga_optimization
 
 distributions = {
     "length": {"distribution": "uniform", "min": 0.0, "max": 1.0},

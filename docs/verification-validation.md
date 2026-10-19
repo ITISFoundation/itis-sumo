@@ -47,7 +47,7 @@ Escalating complexity, from trivial to genuinely hard for a GP surrogate:
 ## Category A: Sampling Quality (LHS)
 
 Pure-Python, no Dakota involved — verifies the LHS implementation itself
-(`itis_sumo.sampling.lhs`), covered in `tests/test_unit_solver.py` /
+(`itis_sumo.engine.lhs`), covered in `tests/test_unit_solver.py` /
 `tests/test_property_invariants.py`.
 
 | Test | Pass criterion | Status |

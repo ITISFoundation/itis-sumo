@@ -24,12 +24,12 @@ import pytest
 from dakota.spec import DakotaStudy
 from pydantic import ValidationError
 
-from itis_sumo.config import (
+from itis_sumo.engine.evaluation import evaluate_sumo
+from itis_sumo.engine.nidr_json import (
     create_sumo_evaluation_json,
     start_dakota_json_file,
     validate_json_study,
 )
-from itis_sumo.evaluate import evaluate_sumo
 
 
 @pytest.fixture

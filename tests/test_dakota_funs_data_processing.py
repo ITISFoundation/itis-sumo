@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.data.tabular import (
+from itis_sumo.tabular.processing import (
     _filter_data,
     _parse_data,
     auto_select_distributions,

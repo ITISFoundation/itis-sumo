@@ -7,7 +7,7 @@ turn results back the other way, into your original names and scales.
 ## Map and fit
 
 ```python
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
+from itis_sumo.tabular.preprocessor import DataPreprocessor
 
 preprocessor = DataPreprocessor()
 preprocessor.setup_variables(

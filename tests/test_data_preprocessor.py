@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from itis_sumo.preprocess.data_preprocessor import DataPreprocessor
+from itis_sumo.tabular.preprocessor import DataPreprocessor
 
 
 class TestDataPreprocessor:

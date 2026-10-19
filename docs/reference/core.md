@@ -1,11 +1,11 @@
 # Dakota engine core
 
-`itis_sumo.core` — the thin layer that actually talks to the Dakota wheel.
+`itis_sumo.engine` — the thin layer that actually talks to the Dakota wheel.
 
 ## `DakotaObject` (`core/dakota_object.py`)
 
 The single entry point for running Dakota. Composes a NIDR input string
-(from `itis_sumo.config`), executes it, and returns the run directory
+(from `itis_sumo.engine.nidr`), executes it, and returns the run directory
 containing whatever output files that study type produces
 (`dakota_stdout.txt`, `dakota_stderr.txt`, `*.dat` tabular data,
 `*.sps`/`*.alg` surrogate archives for the export/import pathway).

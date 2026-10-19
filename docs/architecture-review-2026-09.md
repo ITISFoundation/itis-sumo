@@ -9,7 +9,7 @@ All three files are intentionally **untracked** on the feature branch — land t
 
 Prior art: no `CONTEXT.md`, no `docs/adr/`. SPEC.md §G/§I + `docs/VERIFICATION_VALIDATION_PLAN.md`
 are the governing notes. Constraints they record that these proposals must respect:
-- **V16qf** — `itis_sumo.api` is the only consumer-facing layer; engine import direction never inverts.
+- **V16qf** — `itis_sumo` is the only consumer-facing layer; engine import direction never inverts.
 - **T26eq** — the api's fit-step/query-step split is *deliberate*: a future "hold a fitted surrogate"
   handle reuses session methods verbatim. Candidates below advance that, they don't fight it.
 
