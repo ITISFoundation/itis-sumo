@@ -76,23 +76,30 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest
 
-      - name: Install wheel and run tests
+      - name: Install the core wheel and run the gate selection
         run: |
           set -euo pipefail
           wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
-          # V54hz: presentation deps stay OUT of core, so the bare wheel cannot
-          # import tests/report/* (plotly) — installing core-only here made the
-          # suite die at collection and silently blocked every alpha publish.
-          # Install the extra the suite exercises: this also proves the extra's
-          # metadata resolves from the built wheel, not just from the source tree.
-          python -m pip install "${wheel}[report]"
-          python -m pytest
+          # This is a SANITY gate: bare core wheel, no extras, no presentation deps (V54hz keeps
+          # plotly/marimo in `[report]`). Same selection as CI's unit leg; the canonical string and
+          # its drift guard live in tests/repo/test_test_taxonomy.py. Installing the extras here is
+          # what an earlier revision of this job did — it made the release gate depend on the heavy
+          # half it exists to skip, and died at collection (B25vx).
+          python -m pip install "$wheel"
+          python -m pytest -m "not integration and not analytical"
 
-      - name: Core stays presentation-free (V54hz)
+      - name: The built wheel advertises its presentation extra
         run: |
           set -euo pipefail
-          python -m pip uninstall -y plotly marimo
-          python -c "import itis_sumo; print('core imports with no presentation deps')"
+          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          # The one thing the CI matrix structurally cannot catch: its plotly arrives via
+          # `uv sync --all-extras --dev` (plotly is also in the dev group), never from this
+          # metadata, so a typo in [project.optional-dependencies].report would ship a wheel whose
+          # `[report]` extra resolves to nothing while all four platforms stay green.
+          unzip -p "$wheel" '*/METADATA' \
+            | grep -E 'Requires-Dist: (plotly|marimo).*extra == "report"' \
+            | grep -q . \
+            || { echo "built wheel advertises no [report] presentation requirements"; exit 1; }
 
 
   # Configure Trusted Publishers for this workflow in both package indexes:

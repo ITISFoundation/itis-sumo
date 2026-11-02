@@ -98,9 +98,16 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ["-v", "--tb=short", "--strict-markers"]
+# The taxonomy is NEGATION-based: a test is gate-eligible unless it carries one of these
+# marks, so UNMARKED means "runs against the bare core wheel", which is what publish.yml's
+# verify step installs. `unit` used to be declared as well but nothing selected on it — a
+# decorative label that let a plotly-importing module claim gate eligibility (B25vx) — so it
+# is gone, and `--strict-markers` rejects any reintroduction. `slow` is gone too (zero
+# usages ever). A module that imports a presentation dep must ALSO be registered in
+# tests/conftest.py's PRESENTATION_MODULES: pytest imports a DESELECTED module while collecting, so
+# the mark alone does not keep it out of the gate. Recurrence guard:
+# tests/repo/test_test_taxonomy.py (V57jk).
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-    "analytical: marks tests that spawn a real Dakota subprocess against known analytical functions",
+    "integration: needs more than the bare core wheel (engine execution, or the [report] extra)",
+    "analytical: spawns a real Dakota subprocess against known analytical functions",
 ]

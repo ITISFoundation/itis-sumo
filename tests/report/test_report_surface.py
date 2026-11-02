@@ -45,7 +45,11 @@ from itis_sumo.types import (
 
 REPO = Path(__file__).resolve().parents[2]
 
-pytestmark = pytest.mark.unit
+# `integration`, NOT a gate-eligible test: this module imports plotly, and V54hz keeps
+# presentation deps in the `[report]` extra, so it cannot run against the bare core wheel
+# that publish.yml's gate installs. Calling it `unit` is what silently blocked every alpha
+# publish from 0.2.0a8 to 0.2.0a12 (B25vx).
+pytestmark = pytest.mark.integration
 
 
 def test_report_all_importable_and_sorted() -> None:

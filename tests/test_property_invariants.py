@@ -16,7 +16,6 @@ from itis_sumo.tabular.processing import (
 # ---------------------------------------------------------------------------
 # P1. LHS Invariants
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestLHSInvariants:
     def test_bounds(self):
         """All LHS values must be in [0, 1]."""
@@ -121,7 +120,6 @@ class TestGridSampleInvariants:
 # ---------------------------------------------------------------------------
 # P3. Axis Sweep Invariants
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestAxisSweepInvariants:
     def test_total_points(self, tmp_path):
         """Total rows = NSAMPLESPERVAR * number of input variables."""
@@ -188,7 +186,6 @@ class TestAxisSweepInvariants:
 # ---------------------------------------------------------------------------
 # P4. DataPreprocessor Roundtrip
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestDataPreprocessorRoundtrip:
     def _make_df(self):
         return pd.DataFrame(
@@ -249,7 +246,6 @@ class TestDataPreprocessorRoundtrip:
 # ---------------------------------------------------------------------------
 # P5. Normalization Invariants (DataPreprocessor)
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestNormalizationInvariants:
     def _make_df(self):
         return pd.DataFrame(
