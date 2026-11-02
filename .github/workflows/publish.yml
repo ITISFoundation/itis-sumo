@@ -78,8 +78,21 @@ jobs:
 
       - name: Install wheel and run tests
         run: |
-          python -m pip install dist/*.whl
+          set -euo pipefail
+          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          # V54hz: presentation deps stay OUT of core, so the bare wheel cannot
+          # import tests/report/* (plotly) — installing core-only here made the
+          # suite die at collection and silently blocked every alpha publish.
+          # Install the extra the suite exercises: this also proves the extra's
+          # metadata resolves from the built wheel, not just from the source tree.
+          python -m pip install "${wheel}[report]"
           python -m pytest
+
+      - name: Core stays presentation-free (V54hz)
+        run: |
+          set -euo pipefail
+          python -m pip uninstall -y plotly marimo
+          python -c "import itis_sumo; print('core imports with no presentation deps')"
 
 
   # Configure Trusted Publishers for this workflow in both package indexes:
