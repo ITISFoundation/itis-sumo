@@ -20,12 +20,9 @@ from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
-import plotly.graph_objects as go
 import pytest
 
 import itis_sumo
-from itis_sumo import report
-from itis_sumo.report import Section, sections
 from itis_sumo.types import (
     AlongAxesResult,
     AxisSweep,
@@ -43,12 +40,22 @@ from itis_sumo.types import (
     VariableDiagnostics,
 )
 
+try:
+    import plotly.graph_objects as go
+
+    from itis_sumo import report
+    from itis_sumo.report import Section, sections
+
+    print("report-depencencies imported correctly")
+
+except ImportError:
+    print("report import failed. Make sure report-extra-dependencies are installed.")
+
+
 REPO = Path(__file__).resolve().parents[2]
 
-# `integration`, NOT a gate-eligible test: this module imports plotly, and V54hz keeps
-# presentation deps in the `[report]` extra, so it cannot run against the bare core wheel
-# that publish.yml's gate installs. Calling it `unit` is what silently blocked every alpha
-# publish from 0.2.0a8 to 0.2.0a12 (B25vx).
+# this module imports plotly which is a "report" extra dependency
+# thus cannot run against core itis-sumo package
 pytestmark = pytest.mark.integration
 
 
