@@ -41,22 +41,27 @@ from itis_sumo.types import (
     VariableDiagnostics,
 )
 
+# plotly, and with it the report namespace, is the optional `[report]` extra (V54hz): this module
+# cannot be IMPORTED against the bare core wheel. Deselection cannot save it either — pytest imports
+# every test module while collecting, before `-m` filters anything — so a missing extra has to SKIP
+# this module rather than raise through it. A swallowed import (a bare `except ImportError:` that
+# only printed) is what let collection run one statement further into
+# `NameError: name 'sections' is not defined`: `verify` died, `publish` was skipped, and `v0.2.0a15`
+# was tagged but never reached TestPyPI (B25vx, B27qx, V57jk). `tests/repo/test_test_taxonomy.py`
+# rehearses this with the extra made genuinely unimportable, so removing the skip fails a PR.
 try:
     import plotly.graph_objects as go
 
     from itis_sumo import report
     from itis_sumo.report import Section, sections
-
-    print("report-depencencies imported correctly")
-
-except ImportError:
-    print("report import failed. Make sure report-extra-dependencies are installed.")
+except ImportError as missing_extra:
+    pytest.skip(f"needs the [report] extra: {missing_extra}", allow_module_level=True)
 
 
 REPO = Path(__file__).resolve().parents[2]
 
-# this module imports plotly which is a "report" extra dependency
-# thus cannot run against core itis-sumo package
+# Belt AND braces: the skip above makes this module leave *collection*, the marker keeps it out of
+# the gate's *selection* as well — so the bare wheel never runs it, and CI's heavy leg owns it.
 pytestmark = pytest.mark.integration
 
 
