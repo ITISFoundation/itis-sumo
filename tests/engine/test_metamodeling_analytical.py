@@ -29,10 +29,12 @@ import pytest
 from scipy.special import erfinv
 
 from itis_sumo.engine.evaluation import (
+    compute_cv_convergence,
     evaluate_sumo,
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
+    fit_convergence_exponential,
 )
 from itis_sumo.tabular.processing import create_manual_uq_samples
 
@@ -235,6 +237,50 @@ class TestSurrogateAccuracy:
             rmses[n] = _rmse(expected, result["y_hat"])
 
         assert rmses[60] < rmses[15] < rmses[6]
+
+    def test_cv_convergence_returns_the_metric_family_with_training_size(self, run_dir):
+        """`compute_cv_convergence` on f(x) = sin(x): one sweep, every metric (V55nw).
+
+        Three things at once on the SAME CV passes: a non-RMSE metric equals the
+        diagnostics bundle's own MAE (V16wq); the accuracy trend is monotone with
+        training-sample count while the coverage trio stays nested at every size;
+        and calibration does not get worse as points are added. The training rows
+        are shuffled so each first-n-rows subset is a random draw over the whole
+        domain, not a growing prefix.
+        """
+        x = np.linspace(0.0, 6 * np.pi, 24)
+        order = np.random.default_rng(7).permutation(24)
+        x, y = x[order], np.sin(x[order])
+        train_file = _write_processed(
+            pd.DataFrame({"x": x, "y": y}), run_dir / "train_processed.txt"
+        )
+
+        series = compute_cv_convergence(
+            run_dir, train_file, ["x"], "y", min_samples=10, max_points=3
+        )
+
+        assert [point["n_samples"] for point in series] == [10, 17, 24]
+        maes = [point["metrics"]["mae"] for point in series]
+        assert maes[0] > maes[1] > maes[2]
+        for point in series:
+            # the family number IS the bundle number for this subset (no rerun)
+            assert point["metrics"]["mae"] == pytest.approx(
+                point["diagnostics"][0]["mean_abs"]
+            )
+            # nested intervals: 1sigma-inside can never exceed 3sigma-inside
+            assert (
+                point["metrics"]["coverage68"]
+                <= point["metrics"]["coverage95"]
+                <= point["metrics"]["coverage99"]
+            )
+        # more data does not make the surrogate's own spread less trustworthy
+        assert series[-1]["metrics"]["coverage95"] >= series[0]["metrics"]["coverage95"]
+
+        # and a trend fit reads any metric's column, not just RMSE (V18wp)
+        fit = fit_convergence_exponential(
+            [point["n_samples"] for point in series], maes, asymptotic=False
+        )
+        assert fit["r_squared"] > 0.9
 
     def test_variance_near_zero_at_training_points_grows_away(self, run_dir):
         """B8: predictive variance ~0 at training points, larger when extrapolating far away."""

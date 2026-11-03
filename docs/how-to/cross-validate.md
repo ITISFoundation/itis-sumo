@@ -45,21 +45,34 @@ A low p-value (e.g. < 0.05) means the surrogate's errors aren't just noise —
 they're skewed in a consistent direction.
 
 Accuracy closeness is half the question; the other half is whether the
-surrogate's **own reported spread** earns trust. Coverage compares, at the
-1σ/2σ/3σ nominal masses, how many observations actually fall within
-`predicted ± z·predicted_std`:
+surrogate's **own reported spread** earns trust. Coverage asks, at a level you
+name, how many observations actually fall within `predicted ± z·predicted_std`
+(z is that level's two-sided Gaussian multiple — derived, never an input):
 
 ```python
 from itis_sumo import compute_coverage
 
-coverage = compute_coverage(cv.observed, cv.predicted, cv.predicted_std)
-coverage["levels"], coverage["empirical"]  # compare entry-wise
+# one call answers ONE level: which level is the question you are asking
+coverage = [
+    compute_coverage(cv.observed, cv.predicted, cv.predicted_std, level)
+    for level in (0.68, 0.95, 0.99)
+]
+[(c["level"], c["empirical"], c["n_points"]) for c in coverage]
 ```
+
+`0.95` means "did the interval that should catch 95% catch 95%" (z = 1.96);
+`0.68` is the one-sigma question (z = 0.99), `0.99` the tail (z = 2.58). A result
+is `{level, empirical, n_points}` — `n_points` matters, because a fraction
+measured over 4 points is not a calibration reading. If you think in sigmas,
+`level` is the mass and not the multiple: ±1σ is `0.6827`, ±2σ `0.9545`, ±3σ
+`0.9973`. Levels are separate calls because that is cheap (arithmetic on points
+already in memory) and it keeps the choice of levels with you rather than in a
+default.
 
 A persistent (non-shrinking) gap between empirical and nominal is a
 miscalibrated variance model, not a data shortage (V19cz). Both readings have
-renderings: `itis_sumo.report.render_cv_diagnostics`,
-`render_coverage`.
+renderings: `itis_sumo.report.render_cv_diagnostics`, and `render_coverage` for
+the list above (one bar per level, each compared against its own nominal).
 
 ## Check that more data actually helps
 
@@ -72,7 +85,8 @@ poor design coverage) rather than "just needs more points":
 from itis_sumo import compute_cv_convergence, fit_convergence_exponential
 
 curve = compute_cv_convergence(run_dir, training_file, ["width", "height"], "stress")
-# series of {n_samples, metric, metric_std, n_bootstrap, draws, diagnostics}
+# one point per subset size: {n_samples, metrics, metrics_std, draws_by_metric,
+#                             n_bootstrap, metric, metric_std, draws, diagnostics}
 
 fit = fit_convergence_exponential(
     [e["n_samples"] for e in curve for _ in e["draws"]],
@@ -81,6 +95,51 @@ fit = fit_convergence_exponential(
 )
 fit["c"], fit["r_squared"]  # irreducible floor + fit quality
 ```
+
+### Which metric to look at
+
+The sweep takes **no metric argument**: every point already carries all of them,
+because the CV pass produces all of them — asking for MAE or the tails instead of
+RMSE costs **no extra cross-validation** (V16wq, V55nw). You choose at
+presentation time instead of paying for another sweep:
+
+```python
+from itis_sumo.report import render_convergence
+
+render_convergence(curve, metric="coverage95")  # axis and reference line follow the metric
+coverage95 = [point["metrics"]["coverage95"] for point in curve]  # or take the numbers
+```
+
+| token | what it is | units |
+| --- | --- | --- |
+| `rmse` | root mean squared error — the default, and what a point's `metric` / `metric_std` / `draws` keys still mean | your QoI's units |
+| `mae` | mean absolute error | your QoI's units |
+| `bias` | mean **signed** error, `mean(actual − predicted)` — the systematic over/under-prediction RMSE and MAE can net away | your QoI's units, signed |
+| `coverage68` | fraction of held-out observations inside `predicted ± 0.99σ·predicted_std` — the one-sigma interval at a round 68% target | fraction, 0…1 |
+| `coverage95` | … inside `predicted ± 1.96σ·predicted_std` (V19cz) | fraction, 0…1 |
+| `coverage99` | … inside `predicted ± 2.58σ·predicted_std` — the tail, and the level that needs the most points before it says anything | fraction, 0…1 |
+
+The levels are the round 68 / 95 / 99 because a metric token ends up as an axis
+label, and `coverage99` reads as what was asked where `coverage99.73` has to be
+decoded. Nothing is approximated by that: each level uses its own exact two-sided
+Gaussian multiple, and `compute_coverage` takes any target you prefer (`0.6827`,
+`0.9545`, `0.9973` if you want the ±1σ/±2σ/±3σ intervals themselves).
+
+Read the coverage trio together: short of 0.68 already at `coverage68` means
+the variance model is off everywhere; fine at 68 but short at 99 means the
+centre is right and the tails are too narrow; `metrics_std` says whether the
+shortfall is larger than the redraw noise.
+
+Aggregation differs by kind on purpose. An accuracy metric is the **mean over
+draws**; a coverage metric is computed over all draws' held-out points **pooled**
+(one draw's tail coverage is noise below ~50 points, V19cz) — so a coverage number
+is not the mean of its own `draws_by_metric`, which keep each draw's value. Each
+point also keeps the whole `compute_cv_diagnostics` bundle per draw in
+`diagnostics`, so a number that is not in the table is one line of arithmetic
+away. `fit_convergence_exponential` is metric-agnostic — feed it any token's
+column; for coverage the floor is the interesting number: `fit["c"] ≈ 0.95` means
+coverage settles **at** nominal, `fit["c"] < 0.95` means the variance model stays
+miscalibrated no matter how much data you add.
 
 !!! note "The one explicitly-staged function"
     `compute_cv_convergence` re-runs K-fold CV per subset size, so it is the
