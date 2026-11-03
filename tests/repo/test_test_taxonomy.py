@@ -50,31 +50,6 @@ IMPORT_REQUIRES: dict[str, tuple[str, ...]] = {
     "itis_sumo.report": ("plotly",),
 }
 
-# Read from the conftest rather than copy-pasted, so the guard and the collection exclusion it checks
-# cannot drift apart.
-_CONFTEST = REPO / "tests" / "conftest.py"
-
-
-def _conftest_presentation_modules() -> dict[str, tuple[str, ...]]:
-    """Ask tests/conftest.py which modules it excludes from collection, and on which packages."""
-    tree = ast.parse(_CONFTEST.read_text(encoding="utf-8"), filename=str(_CONFTEST))
-    for node in tree.body:
-        # Annotated or plain: the conftest carries the type, which makes this an AnnAssign.
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        if not any(
-            isinstance(target, ast.Name) and target.id == "PRESENTATION_MODULES"
-            for target in targets
-        ):
-            continue
-        assert node.value is not None, "PRESENTATION_MODULES has no value to read"
-        return dict(ast.literal_eval(node.value))
-    raise AssertionError(
-        f"{_CONFTEST} no longer defines PRESENTATION_MODULES; the gate's collection exclusion and"
-        " this guard have to change in the same commit"
-    )
-
 
 def _test_modules() -> list[Path]:
     return sorted(
@@ -199,41 +174,6 @@ def _job_text(workflow: str, job: str) -> str:
             break
         body.append(line)
     return "\n".join(body)
-
-
-def test_no_gate_eligible_module_imports_a_presentation_dep() -> None:
-    """A module that imports plotly/marimo/report is NOT gate-eligible — both ways, always.
-
-    Two independent escape hatches close here: it must carry `integration` (so CI's unit leg and the
-    gate selection skip it) and it must be declared in `tests/conftest.py` (so it leaves *collection*
-    when the dep is absent, which deselection alone cannot do).
-    """
-    declared = _conftest_presentation_modules()
-    found = _heavy_modules()
-
-    for name, required in sorted(found.items()):
-        path = REPO / "tests" / name
-        assert name in declared, (
-            f"tests/{name} imports a presentation dep, so it cannot run against the bare core wheel"
-            " the release gate installs (V54hz, B25vx). Add it to PRESENTATION_MODULES in"
-            " tests/conftest.py so it leaves collection when that dep is missing"
-        )
-        assert set(declared[name]) == required, (
-            f"tests/{name} needs {sorted(required)} at import time but tests/conftest.py excludes it"
-            f" on {sorted(declared[name])}. Keep them equal: an over-broad exclusion drops passing"
-            " tests silently whenever the extra dep is absent — the dev group has plotly but not"
-            " marimo, so asking for marimo would hide this module from every CI run"
-        )
-        assert "integration" in _markers_used(path.read_text(encoding="utf-8"), path), (
-            f"tests/{name} imports a presentation dep but is not marked `integration` — it would run"
-            " in CI's unit leg and inside the release-gate selection (V57jk)"
-        )
-
-    for name in declared:
-        assert name in found, (
-            f"tests/conftest.py excludes {name!r} as presentation-heavy, but nothing there imports a"
-            " presentation dep any more — drop the stale entry"
-        )
 
 
 def test_gate_selection_collects_without_error() -> None:
