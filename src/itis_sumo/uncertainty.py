@@ -125,4 +125,6 @@ def summarize_uncertainty(
         std=summary["std"],
         minimum=summary["min"],
         maximum=summary["max"],
+        p95=summary["p95"],
+        p99=summary["p99"],
     )

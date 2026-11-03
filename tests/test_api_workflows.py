@@ -361,6 +361,8 @@ class TestUncertainty:
         assert summary.seed == 7
         assert summary.bins_start < summary.bins_end
         assert summary.q1 <= summary.median <= summary.q3
+        # the upper tail travels with the result too (mmux_vite #458)
+        assert summary.q3 <= summary.p95 <= summary.p99 <= summary.maximum
         assert summary.mean > 0.0
         assert len(summary.bin_means) == len(summary.bin_stds)
         # V52rc: the summary is a function of its data -- twice is equal.

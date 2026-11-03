@@ -34,6 +34,7 @@ from itis_sumo.types import (
 __all__ = [
     "render_along_axes",
     "render_convergence",
+    "render_convergence_uq",
     "render_correlations",
     "render_coverage",
     "render_cross_validation",
@@ -59,6 +60,18 @@ _METRIC_PRESENTATION: dict[str, tuple[str, float | None]] = {
     "coverage95": ("95% interval coverage (fraction)", 0.95),
     "coverage99": ("99% interval coverage (fraction)", 0.99),
 }
+
+
+# The statistics `render_convergence_uq` draws, in reading order (centre first,
+# tail last). Their names and values are the payload's; this table only decides
+# which of them get a line and in what order (V54hz: presentation, not a
+# statistic).
+_UQ_SERIES: tuple[tuple[str, str], ...] = (
+    ("mean", "mean"),
+    ("median", "median"),
+    ("p95", "p95"),
+    ("p99", "p99"),
+)
 
 
 def _convergence_point_metric(entry: dict, metric: str) -> tuple[float, float, list]:
@@ -521,5 +534,61 @@ def render_convergence(series: list, **kwargs) -> go.Figure:
             line={"dash": "dot", "color": "black"},
             annotation_text=f"nominal {nominal * 100:g}%",
         )
+    fig.update_layout(**kwargs)
+    return fig
+
+
+def render_convergence_uq(series: list, **kwargs) -> go.Figure:
+    """The predictive distribution settling (or not) as training data grows.
+
+    One line per CV-replay statistic the series' own `uq` block already holds —
+    `mean`, `median`, `p95`, `p99` — so the eye can catch the case an accuracy
+    curve hides: RMSE flat while the centre and the upper tail are still moving.
+    Error bars are `uq["draw_spread"]`, verbatim; nothing here is recomputed and
+    the engine is never touched (V54hz). The numbers are a Gaussian CV-replay of
+    the CV run's own `predicted`/`predicted_std`, in the response's original
+    units — not a fresh UQ propagation (`compute_cv_convergence`'s docstring
+    states the assumption, and itis-sumo#81 is the propagation).
+
+    kwargs pass through to the plotly layout; escape hatch: the returned
+    Figure (`fig.write_html(...)`, `fig.to_image(...)`, or take `fig.data` apart).
+    """
+    fig = go.Figure()
+    uq_blocks = [entry.get("uq") or {} for entry in series]
+    for key, label in _UQ_SERIES:
+        values = [block.get(key) for block in uq_blocks]
+        spread = [(block.get("draw_spread") or {}).get(key) for block in uq_blocks]
+        # `draw_spread` is None where there was only one draw: no comparison, so
+        # no bar — plotly gets a 0.0 array plus an explicit hide rather than a
+        # missing value it would have to guess about.
+        error_y = {
+            "type": "data",
+            "array": [
+                value if isinstance(value, float) and not math.isnan(value) else 0.0
+                for value in spread
+            ],
+            "visible": any(
+                isinstance(value, float) and value > 0.0 for value in spread
+            ),
+        }
+        fig.add_trace(
+            go.Scatter(
+                x=[entry["n_samples"] for entry in series],
+                y=values,
+                mode="lines+markers",
+                name=label,
+                error_y=error_y,
+                customdata=[block.get("n_points") for block in uq_blocks],
+                hovertemplate=(
+                    f"n=%{{x}}<br>{label} %{{y:.4g}}<br>%{{customdata}} held-out"
+                    " points with a usable std<extra></extra>"
+                ),
+            )
+        )
+    fig.update_layout(
+        title="Predictive distribution vs training samples (CV replay)",
+        xaxis_title="training samples",
+        yaxis_title="response (original units)",
+    )
     fig.update_layout(**kwargs)
     return fig

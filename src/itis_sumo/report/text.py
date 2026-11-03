@@ -127,6 +127,8 @@ def render_uncertainty_summary(result: UncertaintySummary, **kwargs) -> pd.DataF
         "q1": result.q1,
         "median": result.median,
         "q3": result.q3,
+        "p95": result.p95,
+        "p99": result.p99,
         "whisker_min": result.whisker_min,
         "whisker_max": result.whisker_max,
         "n_outliers": len(result.outliers),

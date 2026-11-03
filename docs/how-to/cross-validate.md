@@ -86,7 +86,7 @@ from itis_sumo import compute_cv_convergence, fit_convergence_exponential
 
 curve = compute_cv_convergence(run_dir, training_file, ["width", "height"], "stress")
 # one point per subset size: {n_samples, metrics, metrics_std, draws_by_metric,
-#                             n_bootstrap, metric, metric_std, draws, diagnostics}
+#                             n_bootstrap, metric, metric_std, draws, diagnostics, uq}
 
 fit = fit_convergence_exponential(
     [e["n_samples"] for e in curve for _ in e["draws"]],
@@ -141,13 +141,56 @@ column; for coverage the floor is the interesting number: `fit["c"] ≈ 0.95` me
 coverage settles **at** nominal, `fit["c"] < 0.95` means the variance model stays
 miscalibrated no matter how much data you add.
 
+### Watching the distribution settle, not just the error
+
+An accuracy curve can plateau while the **predictive distribution** is still
+moving — its centre drifting, its upper tail still fat. Each series point
+therefore carries a `uq` block beside the metric family: the surrogate's own
+predictive distribution at that training-sample count, from the same single sweep.
+
+```python
+from itis_sumo import compute_cv_convergence
+from itis_sumo.report import render_convergence, render_convergence_uq
+
+curve = compute_cv_convergence(run_dir, training_file, ["width", "height"], "stress")
+for point in curve:
+    uq = point["uq"]
+    print(
+        point["n_samples"],
+        point["metrics"]["mae"],
+        uq["mean"], uq["median"], uq["p95"], uq["p99"], uq["n_points"],
+    )
+
+render_convergence(curve, metric="mae")  # axis labelled MAE, draws as a cloud
+render_convergence_uq(curve)             # mean / median / p95 / p99 vs sample count
+```
+
+`uq` holds `mean`, `median`, `std`, `p95`, `p99` (in your QoI's units),
+`n_points`/`n_draws`, `quantiles_per_point`, and `draw_spread` — how much each
+statistic still moves when the whole subset is redrawn (a single-draw point has
+no redraw to compare with, so those entries are `None`, not a flattering `0.0`).
+
+!!! warning "This is a CV replay, not a fresh UQ propagation"
+    The `uq` numbers are rebuilt from the `predicted`/`predicted_std` arrays the
+    CV run already returned — Gaussian per held-out point, evaluated on a fixed
+    50-point quantile grid, pooled over points and draws. That is why they cost
+    nothing, and why they describe the **surrogate's** predictive distribution
+    over whatever region your CV design happens to cover. For a propagation of
+    *stated* input uncertainty, use `sample_uncertainty` +
+    `summarize_uncertainty` (which now reports `p95`/`p99` too); points whose
+    `predicted_std` is missing or non-positive are excluded, exactly as
+    `compute_coverage` excludes them, so a zero-spread column yields `None`
+    statistics rather than invented ones. Propagating per subset size instead of
+    replaying it is itis-sumo#81.
+
 !!! note "The one explicitly-staged function"
     `compute_cv_convergence` re-runs K-fold CV per subset size, so it is the
     only manifest function that asks for an explicit run directory and
     space-separated training file (e.g. staged via
     `fit(..., workspace=...)`) instead of a `SuMo` handle. Everything else on
     this page runs through the handle. `render_convergence` /
-    `render_convergence_fit` present the curve and the fit.
+    `render_convergence_fit` present the curve and the fit,
+    `render_convergence_uq` the distribution statistics.
 
 ## Reading the numbers
 
@@ -161,3 +204,8 @@ miscalibrated no matter how much data you add.
   [Latin Hypercube sampling](../reference/functions.md#sampling), not more of
   whatever design you started with), or reconsider whether the target
   function is a good surrogate candidate at all.
+- **Convergence `uq` percentiles** (`p95`, `p99`) — same units as your output
+  variable, and read them against the physics: a `p99` still sitting outside the
+  physically possible range means the surrogate's tails are unresolved even when
+  MAE already looks flat. Flat accuracy + moving `uq` = the model has stopped
+  improving where you measure it but has not become trustworthy yet.

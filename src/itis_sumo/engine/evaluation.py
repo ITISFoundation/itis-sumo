@@ -277,13 +277,27 @@ def summarize_uncertainty_samples(
     ``values`` is ``(n_histograms, num_samples)``: histogram bin heights are
     averaged (with their std) across histogram realisations, while boxplot and
     summary statistics are computed on the flattened pool of all samples.
+
+    This is the single place UQ summaries are formed (V58rw), so the percentile
+    vocabulary lives here: ``q1``/``median``/``q3`` (the box), ``whisker_min``/
+    ``whisker_max`` and ``outliers`` (the Tukey view of the same pool), plus the
+    upper-tail percentiles ``p95``/``p99`` the UQ reader asks for. Note
+    ``bins_start``/``bins_end`` are the CLIPPED histogram range (p1/p99, widened
+    only for a degenerate pool) while ``p95``/``p99`` are the pool's own
+    percentiles — they are not the same pair of numbers.
     """
     all_values_flat = values.flatten()
     if num_bins is None:
         num_bins = min(50, max(10, values.shape[1] // 10))
 
+    p95 = float(np.percentile(all_values_flat, 95))
+    p99 = float(np.percentile(all_values_flat, 99))
+    # the histogram RANGE is only clipped at p1/p99; p95/p99 are reported as
+    # percentiles in their own right below (a UQ reader asks for the upper tail,
+    # and `hist_max` moves when the range has to be widened for a constant
+    # column — the percentile must not).
     hist_min = float(np.percentile(all_values_flat, 1))
-    hist_max = float(np.percentile(all_values_flat, 99))
+    hist_max = p99
     if hist_min == hist_max:
         hist_range = max(1e-10, abs(hist_min) * 1e-6)
         hist_min -= hist_range
@@ -317,6 +331,8 @@ def summarize_uncertainty_samples(
         "q1": q1,
         "median": median,
         "q3": q3,
+        "p95": p95,
+        "p99": p99,
         "whisker_min": whisker_min,
         "whisker_max": whisker_max,
         "outliers": outliers.tolist(),
@@ -891,6 +907,111 @@ def _cv_spread(values: list[float]) -> float:
     return float(np.std(valid)) if valid else float("nan")
 
 
+# --- CV-replay predictive statistics ------------------------------------------
+# Deterministic (midpoint) standard-normal quantile grid: a quadrature stand-in
+# for Monte-Carlo draws of N(0, 1). It is antisymmetric, so pooling
+# `mu + sigma * z` over points leaves the pool's MEAN at mean(mu) exactly, and
+# its percentiles converge to the mixture percentiles of the per-point
+# Gaussians as the grid refines. 50 points per held-out SAMPLE is enough to
+# resolve p99 of a pool that is itself tens-to-hundreds of points wide, at a
+# cost indistinguishable from zero next to one Dakota fold run.
+_UQ_PREDICTIVE_QUANTILES = 50
+_UQ_STAT_KEYS: tuple[str, ...] = ("mean", "median", "std", "p95", "p99")
+
+
+def _uq_quantile_grid(n: int) -> np.ndarray:
+    if n < 1:
+        raise ValueError("the predictive quantile grid needs at least one point")
+    u = (np.arange(n, dtype=float) + 0.5) / n
+    return np.sqrt(2.0) * erfinv(2.0 * u - 1.0)
+
+
+def _predictive_pool_statistics(pool: np.ndarray) -> dict[str, float]:
+    """Centre/spread/tail of one pooled predictive sample.
+
+    Routed through `summarize_uncertainty_samples` -- the single place UQ
+    summaries are formed (V58rw) -- so these numbers and a `summarize_uncertainty`
+    row cannot drift apart. Only the scalars are kept: the pool is a quantile
+    representation of a distribution, so its histogram bins would be fiction.
+    """
+    summary = summarize_uncertainty_samples(pool.reshape(1, -1))
+    return {key: summary[key] for key in _UQ_STAT_KEYS}
+
+
+def _cv_predictive_summary(
+    draw_diagnostics: list[dict[str, Any]],
+    *,
+    quantiles_per_point: int = _UQ_PREDICTIVE_QUANTILES,
+) -> dict[str, Any]:
+    """Predictive-distribution statistics at one training-sample count.
+
+    A CV-REPLAY estimate (V56qx): each held-out CV point carries the surrogate's
+    own centre and spread (`predicted`, `predicted_std` = `{output}_std_hat`,
+    V8df) already in the diagnostics bundle, so the predictive distribution is
+    reconstituted from data in hand -- NO extra Dakota/engine run. The
+    assumption is Gaussian per point (the same one `compute_coverage` tests), so
+    this is not a fresh UQ propagation over an input distribution: it says where
+    the SURROGATE'S predictive distribution sits at this N, over the input
+    region the CV design happens to cover. For a propagation over stated input
+    uncertainty use `sample_uncertainty` + `summarize_uncertainty` (and see
+    itis-sumo#81 for doing that per subset size).
+
+    NaN/non-positive `predicted_std` points are EXCLUDED, never counted -- the
+    rule `compute_coverage` already applies (a fold that never wrote
+    variances.dat, or a surrogate reporting no spread at all). A column whose
+    predictive std is constant-zero therefore contributes nothing. A statistic
+    that cannot be formed (no usable point at all, or a draw-spread with a
+    single draw) is reported as `None` rather than NaN, so the whole series
+    stays JSON-serialisable (V22rs) and reproducible comparisons stay
+    meaningful.
+    """
+    z_grid = _uq_quantile_grid(quantiles_per_point)
+    pools: list[np.ndarray] = []
+    per_draw: list[dict[str, float]] = []
+    n_points = 0
+    for diagnostics in draw_diagnostics:
+        mu = np.asarray(diagnostics["predicted"], dtype=float)
+        sigma = np.asarray(diagnostics["predicted_std"], dtype=float)
+        if mu.size == 0 or sigma.size != mu.size:
+            continue
+        usable = np.isfinite(mu) & np.isfinite(sigma) & (sigma > 0.0)
+        if not usable.any():
+            continue
+        pool = (mu[usable][:, None] + sigma[usable][:, None] * z_grid[None, :]).ravel()
+        pools.append(pool)
+        per_draw.append(_predictive_pool_statistics(pool))
+        n_points += int(usable.sum())
+
+    if not pools:
+        return {
+            "basis": "cv-replay-gaussian",
+            **{key: None for key in _UQ_STAT_KEYS},
+            "n_points": 0,
+            "n_draws": 0,
+            "quantiles_per_point": quantiles_per_point,
+            "draw_spread": {key: None for key in _UQ_STAT_KEYS},
+        }
+
+    statistics = _predictive_pool_statistics(np.concatenate(pools))
+    # spread ACROSS bootstrap draws: how much the statistic itself still moves
+    # when the whole subset is redrawn -- the "is it settled?" signal. One draw
+    # carries no spread information, so it is None (not a misleading 0.0).
+    draw_spread = {
+        key: float(np.std([stats[key] for stats in per_draw]))
+        if len(per_draw) > 1
+        else None
+        for key in _UQ_STAT_KEYS
+    }
+    return {
+        "basis": "cv-replay-gaussian",
+        **statistics,
+        "n_points": n_points,
+        "n_draws": len(per_draw),
+        "quantiles_per_point": quantiles_per_point,
+        "draw_spread": draw_spread,
+    }
+
+
 def compute_cv_convergence(
     run_dir: Path,
     training_file: Path,
@@ -950,7 +1071,31 @@ def compute_cv_convergence(
                 "draws": [float, ...],       # == draws_by_metric["rmse"]
                 "diagnostics": [dict, ...],  # per-draw compute_cv_diagnostics
                                              # bundle (aligned with `draws`)
+                "uq": {...},                 # the predictive-DISTRIBUTION view of
+                                             # this subset (see below)
             }
+
+        `uq` answers a question the metric family cannot: the error can stop
+        moving while the model's own spread is still settling. It is a
+        GAUSSIAN CV REPLAY (V56qx) of the run's `predicted`/`predicted_std`, not
+        a fresh propagation, and the payload says so:
+
+            {
+                "basis": "cv-replay-gaussian",   # marker: NOT a propagation
+                "mean"/"median"/"std": float,    # centre + spread, original units
+                "p95"/"p99": float,              # upper tail, original units
+                "n_points": int,   # held-out points with a usable predicted_std
+                "n_draws": int,    # bootstrap draws pooled into this summary
+                "quantiles_per_point": int,  # Gaussian quadrature resolution
+                "draw_spread": {mean, median, std, p95, p99},  # std of each
+                                 # statistic across draws; None when n_draws < 2
+            }
+
+        A statistic that cannot be formed (no held-out point with a usable
+        `predicted_std`, i.e. `n_points: 0`) comes back as `None`, not NaN --
+        JSON-clean for a consumer, and the same exclusion rule
+        `compute_coverage` applies: a zero-std (no-spread) column yields no
+        statistics rather than a fabricated point mass.
 
         The three RMSE-named keys are this series' historical shape and
         mean exactly what they meant before: each is the `rmse` entry of the
@@ -975,6 +1120,14 @@ def compute_cv_convergence(
         `compute_coverage` call. The exact sigma masses (0.6827 / 0.9545 / 0.9973)
         are not approximated anywhere -- ask `compute_coverage` for those levels
         directly if you want them; nothing is rounded, only the naming.
+
+        The `uq` numbers assume the surrogate's predictive distribution is
+        Gaussian per held-out point and evaluate it on a deterministic 50-point
+        midpoint quantile grid, pooled over the subset's held-out points and over
+        bootstrap draws. It is a replay of the CV run's own numbers, so it costs
+        no engine time and it is bounded by whatever input region the CV design
+        covers -- a real per-subset propagation over stated input uncertainty is
+        itis-sumo#81.
 
         A coverage number is only as trustworthy as the surrogate's own reported
         spread (`{output}_std_hat`, V8df): folds whose `variances.dat` Dakota
@@ -1060,6 +1213,9 @@ def compute_cv_convergence(
                 # per-draw compute_cv_diagnostics bundles, aligned with `draws`
                 # (V16wq): the data every number above was read off
                 "diagnostics": draw_diagnostics,
+                # the same subset's predictive distribution, replayed from those
+                # bundles (V56qx): no engine call, no extra CV pass
+                "uq": _cv_predictive_summary(draw_diagnostics),
             }
         )
 

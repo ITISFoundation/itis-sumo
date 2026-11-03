@@ -24,6 +24,7 @@ and core never imports this package).
 from itis_sumo.report.figures import (
     render_along_axes,
     render_convergence,
+    render_convergence_uq,
     render_correlations,
     render_coverage,
     render_cross_validation,
@@ -48,6 +49,7 @@ __all__ = [
     "render_along_axes",
     "render_convergence",
     "render_convergence_fit",
+    "render_convergence_uq",
     "render_correlations",
     "render_coverage",
     "render_cross_validation",

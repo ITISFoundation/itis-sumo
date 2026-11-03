@@ -12,10 +12,11 @@ directly and no cell recomputes a statistic; renderings are deletable serving
 suggestions, and `sections()` is the catalog of which renderings exist.
 
 The version stamp travels in the title cell: every generated report records
-the itis-sumo build that produced its numbers. The `convergence` /
-`convergence_fit` sections have renderings in the catalog but need a run
-directory by hand (`compute_cv_convergence` is engine-level); they are left
-out here on purpose — this template only shows what the manifest offers.
+the itis-sumo build that produced its numbers. The `convergence`,
+`convergence_fit` and `convergence_uq` sections have renderings in the catalog
+but need a run directory by hand (`compute_cv_convergence` is engine-level), so
+they are left out here on purpose — this template only shows what the manifest
+offers.
 """
 
 # %% ── version stamp

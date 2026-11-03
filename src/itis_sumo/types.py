@@ -161,6 +161,11 @@ class UncertaintySummary:
     std: float
     minimum: float
     maximum: float
+    #: Upper-tail percentiles of the propagated pool (original units). Added
+    #: after the fact, so they default to NaN rather than breaking a caller
+    #: that still builds this result from the original field list.
+    p95: float = float("nan")
+    p99: float = float("nan")
 
 
 @dataclass(frozen=True)

@@ -239,12 +239,14 @@ class TestSurrogateAccuracy:
         assert rmses[60] < rmses[15] < rmses[6]
 
     def test_cv_convergence_returns_the_metric_family_with_training_size(self, run_dir):
-        """`compute_cv_convergence` on f(x) = sin(x): one sweep, every metric (V55nw).
+        """`compute_cv_convergence` on f(x) = sin(x): one sweep, every metric ∧ the
+        predictive distribution (V55nw, V56qx).
 
-        Three things at once on the SAME CV passes: a non-RMSE metric equals the
+        Four things at once on the SAME CV passes: a non-RMSE metric equals the
         diagnostics bundle's own MAE (V16wq); the accuracy trend is monotone with
         training-sample count while the coverage trio stays nested at every size;
-        and calibration does not get worse as points are added. The training rows
+        calibration does not get worse as points are added; and the CV-replay `uq`
+        block shows the predictive distribution settling in the response's units. The training rows
         are shuffled so each first-n-rows subset is a random draw over the whole
         domain, not a growing prefix.
         """
@@ -273,8 +275,23 @@ class TestSurrogateAccuracy:
                 <= point["metrics"]["coverage95"]
                 <= point["metrics"]["coverage99"]
             )
+            # the distribution view rides along on the SAME passes (V56qx), in the
+            # response's own units, with a usable point per held-out row
+            uq = point["uq"]
+            assert uq["basis"] == "cv-replay-gaussian"
+            assert uq["n_points"] == point["n_samples"]
+            assert all(
+                np.isfinite(uq[key]) for key in ("mean", "median", "std", "p95", "p99")
+            )
+            assert uq["p99"] > uq["p95"] > uq["median"]
         # more data does not make the surrogate's own spread less trustworthy
         assert series[-1]["metrics"]["coverage95"] >= series[0]["metrics"]["coverage95"]
+        # and the distribution settles as the error shrinks: at 10 training points
+        # the surrogate's own 99th percentile sits far outside sin's range, by the
+        # full sample it is inside it — the thing an accuracy number cannot show
+        assert series[0]["uq"]["p99"] > 1.5
+        assert abs(series[-1]["uq"]["mean"]) < abs(series[0]["uq"]["mean"])
+        assert series[-1]["uq"]["p99"] < 1.2
 
         # and a trend fit reads any metric's column, not just RMSE (V18wp)
         fit = fit_convergence_exponential(

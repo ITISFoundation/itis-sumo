@@ -18,6 +18,7 @@ from itis_sumo.engine.evaluation import (
     _CV_COVERAGE_METRICS,
     _CV_METRICS,
     _convergence_subset_sizes,
+    _uq_quantile_grid,
     compute_coverage,
     compute_cv_accuracy_metrics,
     compute_cv_convergence,
@@ -615,11 +616,11 @@ class TestFitConvergenceExponential:
 
 
 # ---------------------------------------------------------------------------
-# The metric family one convergence sweep returns.
+# The metric family one convergence sweep returns, and the `uq` block beside it.
 #
-# Every metric is read from data the CV pass ALREADY produces (V16wq), so every
-# test here also pins the cost claim: exactly one CV rerun per (subset, draw),
-# whatever number of metrics the point ends up reporting.
+# Every metric and every predictive statistic is read from data the CV pass
+# ALREADY produces (V16wq, V56qx), so every test here also pins the cost claim:
+# exactly one CV rerun per (subset, draw), whatever the point reports.
 # ---------------------------------------------------------------------------
 
 
@@ -829,6 +830,7 @@ class TestComputeCvConvergenceMetricFamily:
                 "metrics",
                 "metrics_std",
                 "draws_by_metric",
+                "uq",
             }
             assert point["metric"] == point["metrics"]["rmse"]
             assert point["metric_std"] == point["metrics_std"]["rmse"]
@@ -968,6 +970,192 @@ class TestComputeCvConvergenceMetricFamily:
 
         # sizes [5, 7, 10]: two draws below full size, one at it
         assert len(seen) == sum(point["n_bootstrap"] for point in series) == 2 + 2 + 1
+
+
+class TestComputeCvConvergenceUq:
+    """The per-size predictive-distribution summary (CV replay, Gaussian, V56qx)."""
+
+    def test_percentiles_match_a_known_gaussian_predictive_spread(
+        self, tmp_path, monkeypatch
+    ):
+        """Every held-out point reports N(1.0, 0.2^2), so the pooled predictive
+        sample is that same Gaussian whatever the subset: p95/p99 must land on
+        1.0 + 0.2 * Phi^-1(0.95 / 0.99) — the percentiles mmux_vite #458 asks
+        for, not a boxplot quartile wearing a new name."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=21
+        )
+        fake, _ = _recording_cv(
+            lambda subset: subset["y"].astype(float) - 1.0, _FLAT_STD
+        )  # predicted == 1.0 for every held-out row
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        series = compute_cv_convergence(
+            tmp_path,
+            training_file,
+            ["x1"],
+            "y",
+            min_samples=5,
+            max_points=2,
+            n_bootstrap=3,
+        )
+        uq = series[0]["uq"]
+
+        assert uq["basis"] == "cv-replay-gaussian"
+        assert uq["mean"] == pytest.approx(1.0)  # symmetric grid: mean == mean(mu)
+        assert uq["median"] == pytest.approx(1.0)
+        # the deterministic midpoint grid resolves Phi^-1(0.95)/Phi^-1(0.99)
+        # itself, so the pooled percentiles land right on the Gaussian tail
+        grid = _uq_quantile_grid(uq["quantiles_per_point"])
+        assert grid[47] == pytest.approx(1.6448536, abs=1e-5)  # Phi^-1(0.95)
+        assert grid[-1] == pytest.approx(2.3263479, abs=1e-5)  # Phi^-1(0.99)
+        assert uq["p95"] == pytest.approx(1.0 + 0.2 * 1.6448536, rel=2e-3)
+        assert uq["p99"] == pytest.approx(1.0 + 0.2 * 2.3263479, rel=2e-3)
+        assert uq["p99"] > uq["p95"] > uq["median"]
+        assert uq["std"] == pytest.approx(0.2, rel=0.05)
+        assert uq["n_points"] == 5 * 3  # 5 held-out points x 3 draws
+        assert uq["n_draws"] == 3
+
+    def test_a_vanishing_spread_collapses_to_the_prediction_percentiles(
+        self, tmp_path, monkeypatch
+    ):
+        """sigma -> 0 is the deterministic limit: the predictive sample IS the
+        set of held-out predictions, so the CV-replay percentiles must reproduce
+        their plain empirical percentiles."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 41, seed=22
+        )
+        fake, seen = _recording_cv(_RESIDUAL_CYCLE, 1e-9)
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        series = compute_cv_convergence(
+            tmp_path, training_file, ["x1"], "y", min_samples=41, max_points=1
+        )
+        assert len(series) == 1 == len(seen)
+        predicted = np.asarray(seen[0]["predicted"], dtype=float)
+        uq = series[0]["uq"]
+
+        assert uq["n_points"] == 41
+        assert uq["mean"] == pytest.approx(predicted.mean())
+        for key, level in (("median", 50), ("p95", 95)):
+            assert uq[key] == pytest.approx(np.percentile(predicted, level), abs=1e-6)
+        # p99 of a 41-point tail interpolates between the two largest held-out
+        # predictions differently in a 2050-value pool than in a 41-value one —
+        # the honest bound is that interpolation span, not a made-up tolerance
+        top_gap = float(np.diff(np.sort(predicted)[-2:])[0])
+        assert abs(uq["p99"] - np.percentile(predicted, 99)) <= top_gap + 1e-6
+
+    def test_points_without_a_usable_predicted_std_are_excluded(
+        self, tmp_path, monkeypatch
+    ):
+        """Numerical hygiene matches `compute_coverage`: NaN or non-positive std
+        is dropped, never silently counted."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=23
+        )
+        nan = float("nan")
+        fake, seen = _recording_cv(_RESIDUAL_CYCLE, [0.2, nan, 0.0, -1.0])
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        series = compute_cv_convergence(
+            tmp_path,
+            training_file,
+            ["x1"],
+            "y",
+            min_samples=5,
+            max_points=2,
+            n_bootstrap=2,
+        )
+        expected = sum(
+            sum(1 for s in pairs["predicted_std"] if np.isfinite(s) and s > 0.0)
+            for pairs in seen[:2]
+        )
+        assert series[0]["uq"]["n_points"] == expected
+        assert 0 < expected < 5 * 2  # some points really were dropped
+        assert np.isfinite(series[0]["uq"]["p95"])
+
+    def test_zero_spread_column_yields_none_not_a_point_mass(
+        self, tmp_path, monkeypatch
+    ):
+        """A surrogate that reports no spread at all (constant zero std, e.g. a
+        fold that never wrote variances.dat) has no predictive distribution to
+        summarise: `None` statistics with n_points == 0, no fabricated mass."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=24
+        )
+        fake, _ = _recording_cv(_RESIDUAL_CYCLE, [0.0])
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        uq = compute_cv_convergence(
+            tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=2
+        )[0]["uq"]
+
+        assert uq["n_points"] == 0 and uq["n_draws"] == 0
+        for key in ("mean", "median", "std", "p95", "p99"):
+            assert uq[key] is None
+            assert uq["draw_spread"][key] is None
+
+    def test_draw_spread_needs_two_draws(self, tmp_path, monkeypatch):
+        """One subset carries no information about how far a statistic would move
+        on a redraw: None, not a reassuring 0.0."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=25
+        )
+        fake, _ = _recording_cv(_RESIDUAL_CYCLE, [0.05, 0.2, 0.4])
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        single = compute_cv_convergence(
+            tmp_path / "single", training_file, ["x1"], "y", min_samples=5, max_points=2
+        )[0]["uq"]
+        assert all(value is None for value in single["draw_spread"].values())
+        assert single["n_draws"] == 1
+
+        bootstrapped = compute_cv_convergence(
+            tmp_path / "boot",
+            training_file,
+            ["x1"],
+            "y",
+            min_samples=5,
+            max_points=2,
+            n_bootstrap=3,
+        )[0]["uq"]
+        assert bootstrapped["n_draws"] == 3
+        assert bootstrapped["draw_spread"]["mean"] > 0.0
+        assert bootstrapped["draw_spread"]["p99"] > 0.0
+
+    def test_the_uq_block_costs_no_extra_cv_rerun(self, tmp_path, monkeypatch):
+        """V56qx with the V16wq cost claim: adding the distribution view to every
+        point must not add ONE more CV pass."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=26
+        )
+        fake, seen = _recording_cv(_RESIDUAL_CYCLE, _FLAT_STD)
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        series = compute_cv_convergence(
+            tmp_path,
+            training_file,
+            ["x1"],
+            "y",
+            min_samples=5,
+            max_points=3,
+            n_bootstrap=2,
+        )
+
+        assert all("uq" in point for point in series)
+        assert len(seen) == sum(point["n_bootstrap"] for point in series)
 
 
 class TestFitConvergenceExponentialIsMetricAgnostic:

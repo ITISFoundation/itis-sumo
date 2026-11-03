@@ -195,12 +195,45 @@ def _convergence_series() -> list[dict[str, Any]]:
             },
         ),
     ]
+    # the `uq` block of the same two sizes: centre/spread/tail plus how far each
+    # still moves across the two redraws (V56qx), none of it equal by accident
+    per_size_uq = {
+        10: {
+            "mean": 4.5,
+            "median": 4.4,
+            "std": 1.0,
+            "p95": 6.1,
+            "p99": 6.9,
+            "draw_spread": {
+                "mean": 0.2,
+                "median": 0.2,
+                "std": 0.05,
+                "p95": 0.3,
+                "p99": 0.4,
+            },
+        },
+        20: {
+            "mean": 4.6,
+            "median": 4.5,
+            "std": 0.8,
+            "p95": 5.9,
+            "p99": 6.4,
+            "draw_spread": {
+                "mean": 0.1,
+                "median": 0.1,
+                "std": 0.03,
+                "p95": 0.15,
+                "p99": 0.2,
+            },
+        },
+    }
     series = []
     for n_samples, metrics in per_size:
         draws_by_metric = {
             name: [value - _CONVERGENCE_SPREAD, value + _CONVERGENCE_SPREAD]
             for name, value in metrics.items()
         }
+        uq = per_size_uq[n_samples]
         series.append(
             {
                 "n_samples": n_samples,
@@ -212,6 +245,14 @@ def _convergence_series() -> list[dict[str, Any]]:
                 "metric_std": _CONVERGENCE_SPREAD,
                 "draws": draws_by_metric["rmse"],
                 "diagnostics": [],
+                "uq": {
+                    "basis": "cv-replay-gaussian",
+                    **{k: v for k, v in uq.items() if k != "draw_spread"},
+                    "n_points": n_samples,
+                    "n_draws": 2,
+                    "quantiles_per_point": 50,
+                    "draw_spread": uq["draw_spread"],
+                },
             }
         )
     return series
@@ -244,6 +285,8 @@ def _synthetics() -> dict[str, Any]:
         outliers=[7.5],
         mean=4.5,
         std=1.0,
+        p95=6.2,
+        p99=6.8,
         minimum=2.5,
         maximum=6.5,
     )
@@ -293,6 +336,7 @@ def _synthetics() -> dict[str, Any]:
             "actual": [1.0, 2.0],  # non-scalar: must be left out of the table
         },
         "convergence": _convergence_series(),
+        "convergence_uq": _convergence_series(),
         "convergence_fit": {"a": 1.0, "b": 0.1, "r_squared": 0.98},
         "sobol": _sobol_result(),
         "correlations": CorrelationResult(
@@ -381,6 +425,7 @@ def test_uncertainty_summary_renders_scalars_only_and_bins_separately() -> None:
     summary = _synthetics()["uncertainty_summary"]
     row = report.render_uncertainty_summary(summary)
     assert list(row.columns) != ["response"] and "median" in row.columns
+    assert {"p95", "p99"} <= set(row.columns)  # the upper tail is on the row
     assert "outliers" not in row.columns  # the LIST became a count
     assert row["n_outliers"].iloc[0] == 1
     bins = report.render_uncertainty_bins(summary)
@@ -504,6 +549,37 @@ def test_every_engine_metric_wears_a_label() -> None:
 
     assert set(_CV_METRICS) <= set(presentation)
     assert all(label for label, _ in presentation.values())
+
+
+def test_render_convergence_uq_plots_the_payloads_own_statistics() -> None:
+    """One line per statistic the payload already holds, error bars are its own
+    `draw_spread`, nothing recomputed (V54hz)."""
+    figure = report.render_convergence_uq(_synthetics()["convergence"])
+
+    assert [trace.name for trace in figure.data] == ["mean", "median", "p95", "p99"]
+    mean_trace = figure.data[0]
+    assert list(mean_trace.y) == pytest.approx([4.5, 4.6])
+    assert list(mean_trace.error_y.array) == pytest.approx([0.2, 0.1])
+    assert list(mean_trace.x) == [10, 20]
+
+
+def test_render_convergence_uq_survives_a_spread_less_series() -> None:
+    """Single-draw series carry draw_spread=None: no error bar, not a fake zero."""
+    series = [
+        {
+            **entry,
+            "uq": {
+                **entry["uq"],
+                "draw_spread": {key: None for key in entry["uq"]["draw_spread"]},
+            },
+        }
+        for entry in _synthetics()["convergence"]
+    ]
+
+    figure = report.render_convergence_uq(series)
+
+    assert all(not trace.error_y.visible for trace in figure.data)
+    assert all(list(trace.error_y.array) == [0.0, 0.0] for trace in figure.data)
 
 
 def test_cv_diagnostics_table_drops_the_pair_arrays() -> None:

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from itis_sumo.report.figures import (
     render_along_axes,
     render_convergence,
+    render_convergence_uq,
     render_correlations,
     render_coverage,
     render_cross_validation,
@@ -83,6 +84,12 @@ _SECTIONS: tuple[Section, ...] = (
         "compute_cv_convergence() result",
         "does more data still help, with its bootstrap spread visible; the `metric` "
         "option picks which of the returned family to draw",
+    ),
+    Section(
+        "convergence_uq",
+        render_convergence_uq,
+        "compute_cv_convergence() result",
+        "does the predictive distribution settle, not just the error shrink",
     ),
     Section(
         "convergence_fit",
