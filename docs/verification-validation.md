@@ -47,7 +47,7 @@ Escalating complexity, from trivial to genuinely hard for a GP surrogate:
 ## Category A: Sampling Quality (LHS)
 
 Pure-Python, no Dakota involved — verifies the LHS implementation itself
-(`itis_sumo.sampling.lhs`), covered in `tests/test_unit_solver.py` /
+(`itis_sumo.engine.lhs`), covered in `tests/test_unit_solver.py` /
 `tests/test_property_invariants.py`.
 
 | Test | Pass criterion | Status |
@@ -55,8 +55,6 @@ Pure-Python, no Dakota involved — verifies the LHS implementation itself
 | Stratification | every 1D projection has exactly one sample per `[i/k, (i+1)/k)` | ✅ |
 | Value range | all values in `[0, 1]` | ✅ |
 | Reproducibility | same seed ⟹ identical output | ✅ |
-| Maximin | `_lhsmaximin` min pairwise distance ≥ `_lhsclassic` | ✅ |
-| Correlation | `_lhscorrelate` max off-diagonal correlation ≤ `_lhsclassic` | ✅ |
 | Marginal uniformity | empirical CDF ≈ uniform (KS test) for large k | ✅ |
 
 ## Category B: Surrogate Model Accuracy
@@ -78,7 +76,7 @@ analytical values (`tests/test_metamodeling_analytical.py`, real Dakota).
 ## Evaluation pathways (Categories C–E)
 
 Axis sweep, grid evaluation, and cross-validation — see
-[Evaluate: core evaluation & cross-validation](reference/evaluate.md).
+[Evaluate: core evaluation & cross-validation](reference/functions.md).
 
 | Category | What | Status |
 |---|---|---|
@@ -86,18 +84,19 @@ Axis sweep, grid evaluation, and cross-validation — see
 | D — Grid evaluation | 2D grid predictions, dimension-consistency, fixed non-grid variables | ✅ |
 | E — Cross-validation | Manual K-fold CV metrics, convergence with more data, ~95% prediction-interval coverage | ✅ |
 
-**E4** (manual vs. built-in Dakota CV) documents a known discrepancy: the
-two pathways agree only to within ~20%, not exactly — this is the observed
-signature of the built-in-CV parsing gap in [known limitations](#known-limitations),
-not a bug in the manual path (which is the one whose absolute accuracy is
-independently verified by B1-B8-style checks).
+**E4** (manual vs. built-in Dakota CV) and the built-in pathway itself
+were retired together (ponytail A2): the ~20%-only agreement between the
+two was the observed signature of the built-in-CV parsing gap in
+[known limitations](#known-limitations), no src caller used the built-in
+chain, and the manual path's absolute accuracy is independently verified
+by B1-B8-style checks — so the comparison lost both inputs at once.
 
 ## Category F: UQ Propagation
 
 Tests the pathway actually reachable from the web UI — manual per-variable
 sampling (`create_manual_uq_samples`) + surrogate evaluation + erfinv-based
 predictive-uncertainty injection (see
-[Sensitivity & UQ propagation](reference/sensitivity-uq.md)) —
+[Sensitivity & UQ propagation](reference/functions.md#sensitivity)) —
 against closed-form output distributions.
 
 | Test | Function | Input | Analytical output | Status |
@@ -112,7 +111,7 @@ against closed-form output distributions.
 
 ## Category G: MOGA Optimization
 
-See [MOGA optimization](reference/moga.md) for the known
+See [MOGA optimization](reference/functions.md#optimization) for the known
 `max_function_evaluations` limitation.
 
 | Test | What | Status |
@@ -124,7 +123,7 @@ See [MOGA optimization](reference/moga.md) for the known
 
 ## Category H: Data Preprocessor
 
-See [Data preprocessing](reference/preprocess.md).
+See [Data preprocessing](reference/engine.md).
 
 | Test | What | Status |
 |---|---|---|
@@ -152,8 +151,8 @@ breaks with `TypeError`, it can never silently default.
 | I6 | MOGA: log variable explored in ln-space (domain mapped, positivity-guarded); log objective exp-restored for **both** minimize and maximize (sign-after-log inverse order verified) | ✅ |
 | I7 | Sobol: log input shifts the variance decomposition in the expected direction (log-uniform box draws compress toward the low end, so the variable explains less); a DECLARED narrow box concentrates sensitivity onto the other variable — the decomposition follows the sampled domain, not the training spread (V26dd) | ✅ |
 | I8 | Flip matrix: all 11 public value-producing entry points' outputs move when a column turns log, ∀ 2 `distributions`-taking entry points also move when a NORMAL column turns log (V46rn; Sobol's box is domain-only after V26dd, so its flip rides on DOMAIN boxes and it has no NORMAL matrix row) — the V45ls machine guard against any silent scale-ignore, shipped or future | ✅ |
-| I9 | MC-through-surrogate correlation (`evaluate_correlations`, #470 workflow): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, engine producer requires its scales (`TypeError` tripwire) | ✅ |
-| I10 | Boundary input guards (V47st): `DomainSpec`/`DistributionSpec` reject inverted/degenerate bounds at construction; unused `preprocessing` overrides rejected by the table-mode + sampler entry points (not just the session path); log-uniform upper bound required ∧ ordered at the api boundary; a variable missing from the correlator's `input_scales` raises instead of defaulting to linear | ✅ |
+| I9 | MC-through-surrogate correlation (#470 workflow, now open composition per V52rc: `sample_uncertainty` draws → caller-owned table → `compute_correlations`): dominant variable recovered over the shared sample set, seed-reproducible, log-scale coefficients move (uniform ∧ normal, V46rn), log+constant / log+non-positive / non-covering distributions rejected, correlation producer requires its scales (`TypeError` tripwire) | ✅ |
+| I10 | Boundary input guards (V47st): `DomainSpec`/`DistributionSpec` reject inverted/degenerate bounds at construction; unused `preprocessing` overrides rejected by the table-mode + sampler entry points (not just the handle path); log-uniform upper bound required ∧ ordered at the input boundary; a variable missing from the correlator's `input_scales` raises instead of defaulting to linear | ✅ |
 | I11 | Domain⊥distribution split (V26dd): `evaluate_sobol` samples the exploration DOMAIN (explicit `DomainSpec` boxes echoed verbatim ∧ auto-inferred from observed bounds when omitted), ⊥ modeller distributions ∧ ⊥ a box re-derived from `mean±3σ`; a column constant in the samples is pinned (reports in `fixed`, indices zero, ⊥ a fabricated box); explicitly `fixed` factors pin at the caller's value (zero indices, ⊥ boxed∧fixed overlap); unknown domain names rejected; log-scale domain non-positive rejected at the boundary | ✅ |
 
 Tests: `tests/test_api_workflows.py` (`TestLogScale*`, `TestScaleGapCoverage`,
@@ -215,10 +214,11 @@ Carried over from the original test plan, still true of the pinned engine
 (`itis-dakota==6.24.13`):
 
 - **Built-in Dakota CV parsing is unreliable** — `log_output` comes back
-  hardcoded empty on some study configurations, which is why
-  `evaluate_sumo_manual_crossvalidation` (Python-side K-fold) is the
-  correctness-verified cross-validation pathway, not
-  `evaluate_sumo_crossvalidation`.
+  hardcoded empty on some study configurations. The package's only CV
+  pathway is therefore `evaluate_sumo_manual_crossvalidation` (Python-side
+  K-fold, seeded-permutation folds); the built-in chain that parsed those
+  logs never had a src caller and was removed (ponytail A2), so the engine
+  quirk is recorded here for anyone tempted to reintroduce it.
 - **MOGA `max_function_evaluations` is not enforced** — deprecated
   parameter on the Dakota side; use iteration/generation controls instead.
 - **GP interpolation vs. approximation tradeoffs** — surrogate accuracy
@@ -229,10 +229,10 @@ Carried over from the original test plan, still true of the pinned engine
 - **Grid reshaping complexity for >2 dimensions** — `evaluate_sumo_on_grid`
   is verified for 2D grids; higher-dimensional grid reshaping is less
   exercised.
-- **`propagate_uq` (Dakota-native UQ)** is implemented and tested but not
-  the pathway actually wired to the web UI — see
-  [Evaluate § Uncertainty propagation](reference/evaluate.md#uncertainty-propagation).
-  Don't assume it's the one production traffic exercises.
+- **No Dakota-native UQ propagation** — the `propagate_uq` chain was dead
+  on every real pathway and has been removed (ponytail A4). UQ for web-UI
+  traffic is the manual composition — see
+  [Evaluate § Uncertainty propagation](reference/functions.md#uncertainty).
 
 ## Summary
 

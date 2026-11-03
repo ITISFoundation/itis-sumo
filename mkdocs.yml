@@ -59,6 +59,16 @@ markdown_extensions:
 
 plugins:
   - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_object_full_path: false
+            show_source: false
+            heading_level: 3
 
 extra_css:
   - assets/css/workflow.css
@@ -78,18 +88,15 @@ nav:
       - Cross-validate a surrogate: how-to/cross-validate.md
       - Run a sensitivity analysis: how-to/sensitivity-analysis.md
       - Find a Pareto front with MOGA: how-to/moga.md
-      - Preprocess data: how-to/preprocess.md
+      - Scale & preprocessing: how-to/preprocess.md
   - Reference:
       - Overview: reference/index.md
       - Glossary: reference/glossary.md
-      - Consumer API: reference/api.md
-      - Dakota engine core: reference/core.md
-      - Config (NIDR composers): reference/config.md
-      - Sampling: reference/sampling.md
-      - Surrogate evaluation & cross-validation: reference/evaluate.md
-      - Sensitivity (Sobol) & UQ propagation: reference/sensitivity-uq.md
-      - MOGA optimization: reference/moga.md
-      - Data preprocessing: reference/preprocess.md
+      - SuMo handle: reference/su-mo.md
+      - Function modules: reference/functions.md
+      - Types & errors: reference/types.md
+      - Report renderings: reference/report.md
+      - Engine internals: reference/engine.md
   - Background:
       - Why surrogate modeling: explanation/surrogate-modeling.md
       - How Gaussian Processes work: explanation/gaussian-processes.md

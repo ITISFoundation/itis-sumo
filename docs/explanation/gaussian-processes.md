@@ -1,6 +1,6 @@
 # How Gaussian Processes work (and why itis-sumo uses them)
 
-Background theory — see [Reference → Config](../reference/config.md) for how
+Background theory — see [Reference → Config](../reference/engine.md#nidr-string-composers) for how
 the `gaussian_process surfpack` block is actually composed and shipped to
 Dakota, and [Worked examples](../tutorials/examples.md) for a runnable fit.
 
@@ -83,7 +83,7 @@ penalizes kernels that are needlessly wiggly/informative), which is why GPs
 don't typically need a separate regularization hyperparameter tuned by hand
 the way, say, ridge regression does. In itis-sumo, this whole fitting step
 happens inside the Dakota/Surfpack `gaussian_process surfpack` engine — see
-[Reference → Config](../reference/config.md) for the NIDR block that
+[Reference → Config](../reference/engine.md#nidr-string-composers) for the NIDR block that
 requests it; itis-sumo itself never touches the kernel machinery directly, it
 only supplies training data and reads back predictions.
 
@@ -99,19 +99,19 @@ only supplies training data and reads back predictions.
 The decisive reason for this codebase specifically: **every downstream
 consumer of the surrogate needs the variance, not just the mean.**
 
-- [Cross-validation](../reference/evaluate.md#cross-validation)
+- [Cross-validation](../reference/functions.md#validation)
   metrics (RMSE, R²) only need the mean — but
 - Prediction-interval coverage checks
   ([Category F](../verification-validation.md#category-f-uq-propagation))
   need \(\sigma(\mathbf{x})\) to construct the interval in the first place.
 - The manual UQ-propagation pathway
-  ([Reference → Evaluate](../reference/evaluate.md#uncertainty-propagation))
+  ([Reference → Evaluate](../reference/functions.md#uncertainty))
   explicitly injects each prediction's own \(\hat\sigma\) via an erfinv
   transform before propagating — this only works because the surrogate
   reports per-point variance natively (`V8df` in [SPEC.md](../about/spec.md) — the
   `{output}_std_hat` column comes straight from the GP posterior, not a
   side-channel estimate).
-- MOGA optimization ([Reference → MOGA](../reference/moga.md)) over a
+- MOGA optimization ([Reference → MOGA](../reference/functions.md#optimization)) over a
   surrogate is only trustworthy in regions the GP is actually confident about
   — a design that looks optimal purely because the surrogate is
   under-constrained there (wide \(\sigma\)) is a modeling artifact, not a real

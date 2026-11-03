@@ -7,7 +7,9 @@ workflow it implements — **LHS sampling → grid/axis sampling → surrogate m
 cross-validation → uncertainty quantification → (MOGA, deferred)** — rather than by source file.
 
 - **Tier 1 & 2** are pure/near-pure function tests and their mathematical invariants. They run fast,
-  need no Dakota execution, and are tagged `@pytest.mark.unit`.
+  need no Dakota execution, and are deliberately **unmarked** — the taxonomy is negation-based, so
+  unmarked means "runs in the release gate" (the retired `@pytest.mark.unit` label is gone; nothing
+  ever selected on it, and see *Conventions* below).
 - **Tier 3** is new: it runs the real Dakota solver (not mocked) against small analytical functions
   and checks the outputs match known answers. Tagged `@pytest.mark.analytical`, run as a distinct CI
   step since each test spawns a real Dakota subprocess.
@@ -184,8 +186,8 @@ full `VERIFICATION_VALIDATION_PLAN.md` (which remains the later, separate delive
 functions, Categories A–H, pass/fail tables, plots, MOGA).
 
 Location: `tests/test_metamodeling_analytical.py`. All tests tagged `@pytest.mark.analytical`
-and excluded from the default `pytest -m "not analytical"` run (see Implementation) since each spawns a real
-Dakota subprocess.
+and excluded from the default `pytest -m "not integration and not analytical"` run (see
+Implementation) since each spawns a real Dakota subprocess.
 
 **Implementation note:** `add_surrogate_model` only omits the `eval_id` tabular column when the
 training file path contains `"processed"` (`funs_create_dakota_conf.py:180`) — fixture files must be
@@ -296,9 +298,19 @@ convergence, bound compliance) reusing `VERIFICATION_VALIDATION_PLAN.md`'s G1–
 - **Fixtures**: use `tmp_path` for file I/O tests; no Dakota mocking needed anywhere (Tier 1/2 don't
   touch Dakota at all; Tier 3 deliberately runs the real solver)
 - **Parametrize**: use `@pytest.mark.parametrize` for multi-case tests
-- **Markers**: `@pytest.mark.unit` for Tier 1/2, `@pytest.mark.analytical` for Tier 3
-- **Running**: `pytest -m "not analytical"` runs Tier 1/2 (fast, default); `pytest -m analytical`
-  runs Tier 3 separately since each test spawns a real Dakota subprocess
+- **Markers**: only `@pytest.mark.integration` (needs more than the bare core wheel: engine
+  execution, or the `[report]` extra) and `@pytest.mark.analytical` (real Dakota subprocess against
+  known answers) exist. Tier 1/2 tests carry NEITHER — unmarked *is* the tier-1/2 label. The old
+  `@pytest.mark.unit` was retired (B25vx): nothing selected on it, so a module could claim "unit"
+  while importing plotly, which is exactly how the alpha channel died for five releases.
+- **Running**: `pytest -m "not integration and not analytical"` is the gate selection — the fast
+  default, and literally what `publish.yml` runs against the built core wheel; `pytest -m
+  "integration or analytical"` runs the heavy half. `tests/repo/test_test_taxonomy.py` guards both
+  the selection and the workflow copies (`--strict-markers` guards the other direction).
+- **Importing a presentation dep**: marking such a module `integration` is NOT enough — pytest
+  imports a *deselected* module while collecting, so it still breaks the core-only gate. Register it
+  in `tests/conftest.py`'s `PRESENTATION_MODULES` (per module, on the package that module actually
+  imports) so it leaves collection when the dep is absent. The guard enforces both halves.
 
 ## Test Count Estimate
 

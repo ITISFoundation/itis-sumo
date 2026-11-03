@@ -25,8 +25,8 @@ updates:
       python-dependencies:
         patterns:
           - "*"
-    # Engine bumps are a wheel-matrix decision (py floor, platform wheels,
-    # R5-shim re-verification on the real wheel — SPEC V20qx), not a bot
-    # auto-bump. Active engine task: T55kd.
+    # Engine bumps are a wheel-matrix decision (py floor, platform coverage,
+    # R5-shim re-verification on the real wheel — SPEC V20qx/R5, T16mo rung
+    # ladder), not a bot auto-bump.
     ignore:
       - dependency-name: "itis-dakota"

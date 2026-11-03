@@ -18,8 +18,9 @@ quantify sensitivity with honest uncertainty bars.
 
 ---
 
-![A trained surrogate (blue) with 95% prediction-interval uncertainty bands
-tracking the true response (black).](assets/examples/gp_fit_uncertainty.png)
+<figure markdown>
+  <iframe src="assets/examples/gp_fit_uncertainty.html" width="100%" height="440" style="border:none" title="A trained surrogate (blue) with 95% prediction-interval uncertainty bands tracking the true response (black)"></iframe>
+</figure>
 
 **Scope:** itis-sumo is a headless computational core with no Flask, oSPARC,
 or web-UI dependency. For the web UI, see the separate `mmux_documentation`
@@ -47,12 +48,16 @@ site.
   Find Pareto fronts with MOGA without leaving the Python API.
 
 - :material-filter: __Preprocess__
-  Normalize / rename training variables before fit and inverse-transform
-  after, via `DataPreprocessor`.
+  Tell the engine a column is log-scale or minimize-direction via
+  `PreprocessingSpec`; transforms stay internal, results stay in your units.
 
 - :material-book-open-page-variant: __Worked examples__
   Real Dakota fits validated against closed-form analytical solutions, with
-  figures.
+  interactive plotly figures.
+
+- :material-palette-outline: __Render it__
+  `itis_sumo.report` renderings: one result in, one plotly figure or table
+  out — the same visual language as the mmux front-end.
 
 </div>
 

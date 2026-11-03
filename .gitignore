@@ -32,3 +32,4 @@ NIHinSilico*.pdf
 
 # private environment variables
 .env
+src/itis_sumo/_version.py

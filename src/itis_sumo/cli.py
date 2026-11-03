@@ -4,8 +4,8 @@
 import argparse
 import sys
 
-from itis_sumo.utils.config_guard import validate_nidr_config
-from itis_sumo.utils.helpers import validate_dakota_installation
+from itis_sumo.engine.config_guard import validate_nidr_config
+from itis_sumo.engine.helpers import validate_dakota_installation
 
 
 def main() -> int:

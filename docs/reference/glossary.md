@@ -40,6 +40,8 @@ draw from. They are configured separately.
 |---|---|
 | **surrogate**, **SuMo** | The trained metamodel that stands in for an expensive simulation. |
 | **surrogate model ID** (`sumo_model_id`) | The server-minted UUID identifying a persisted surrogate in the model store. |
+| **catalog** | Everything queryable from a fitted `SuMo`: its methods ∧ `report.sections()`. You ask a fitted model, you don't hunt functions. |
+| **rendering** | The presentation of exactly ONE function result: an opinionated plotly Figure or pandas DataFrame, kwargs documented, hover traceable. A deletable "serving suggestion" — never the contract. |
 
 ## What you pass, and what stays hidden
 

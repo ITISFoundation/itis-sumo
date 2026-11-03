@@ -1,69 +1,36 @@
-# Algorithms overview
+# Reference overview
 
-itis-sumo wraps the [Dakota](https://dakota.sandia.gov/) 6.24 engine (via the
-`itis-dakota==6.24.13` PyPI wheel) behind a Python API. Every "algorithm" here
-is really a **NIDR config composer** (build the Dakota input block as a
-string) paired with a **run + parse** step (execute the wheel, read back its
-tabular/results output as a DataFrame). No Dakota binary is ever shelled
-out to — everything runs in-process through `dakota.environment.study`.
+The public surface is small on purpose (V50kv): the root manifest
+`itis_sumo.__all__`, the methods on the `SuMo` handle, and the rendering
+namespace `itis_sumo.report`. The pages on the left are generated from the
+function docstrings themselves — the docstring is the visible product surface,
+so these pages cannot drift from the code.
 
-## Pipeline shape
+## The three doors
 
-<div class="tip-workflow">
-  <a class="tip-workflow__step twf-blue" href="sampling.md">Sampling</a>
-  <span class="tip-workflow__arrow">→</span>
-  <a class="tip-workflow__step twf-indigo" href="config.md">Config</a>
-  <span class="tip-workflow__arrow">→</span>
-  <a class="tip-workflow__step twf-orange" href="core.md">Core</a>
-  <span class="tip-workflow__arrow">→</span>
-  <a class="tip-workflow__step twf-teal" href="evaluate.md">Evaluate</a>
-</div>
+| Door | What it is | Where |
+|---|---|---|
+| `fit` / `load` → `SuMo` | the fitted-model handle; its **methods are the catalog** of everything you can ask a trained surrogate | [SuMo handle](su-mo.md) |
+| one-shot functions | fit-and-forget compositions per module (≤2 public functions each) | [Function modules](functions.md) |
+| `itis_sumo.report` | renderings: one function result in, one plotly Figure or pandas DataFrame out | [Report renderings](report.md) |
 
-Two capabilities sit alongside that straight-line pipeline:
+```python
+from itis_sumo import fit
 
-<div class="tip-workflow">
-  <a class="tip-workflow__step twf-rose" href="sensitivity-uq.md">Sensitivity (Sobol) &amp; UQ</a>
-  <span class="tip-workflow__arrow">·</span>
-  <a class="tip-workflow__step twf-amber" href="preprocess.md">Preprocessing</a>
-</div>
+model = fit(samples, ["width", "height"], "stress")   # -> SuMo handle
+cv = model.cross_validate(folds=5, seed=42)           # a typed result
+from itis_sumo.report import render_cross_validation
+render_cross_validation(cv)                           # a deletable figure
+```
 
-1. **[Sampling](sampling.md)** — draw design points (Latin Hypercube, grid,
-   manual-UQ) or take user-supplied training data.
-2. **[Config](config.md)** — compose the Dakota NIDR input string for the
-   requested study type (surrogate fit, cross-validation, MOGA, UQ
-   propagation).
-3. **[Core](core.md)** — hand that string to `dakota.environment.study(...)`
-   in a `ProcessPoolExecutor` worker, capture stdout/stderr, return the
-   run directory.
-4. **[Evaluate](evaluate.md)** — parse the run's `.dat`/tabular output back
-   into a DataFrame, compute derived quantities (RMSE, R², prediction
-   intervals, Pareto fronts, Sobol indices).
+Everything the result carries is in your units under your column names
+(V22rs); everything that happened inside — Dakota names, normalization, run
+directories — is engine business ([Engine internals](engine.md)).
 
-Two capabilities not part of that straight-line pipeline:
+## Vocabulary
 
-- **[Sensitivity (Sobol) & UQ propagation](sensitivity-uq.md)** — sits on
-  top of `evaluate_sumo`: draws Saltelli/QMC sample sets or per-variable UQ
-  distributions in pure Python, evaluates the already-built surrogate on
-  them, and post-processes with `scipy.stats`.
-- **[Data preprocessing](preprocess.md)** — an optional layer
-  (`DataPreprocessor`) that normalizes/renames variables before training
-  and inverse-transforms predictions after, independent of which study type
-  ran.
-
-!!! warning "Design invariants"
-    These are enforced by the test suite (see [`SPEC.md`](../about/spec.md) §V for
-    the full, authoritative list):
-
-    - **No global RNG state** — every sampling function takes an explicit seed
-      (`np.random.Generator`), never reaches into `numpy`'s or `scipy`'s global
-      random state (`V3er`).
-    - **No flask/oSPARC imports in core modules** — `core`, `config`, `data`,
-      `sampling`, `evaluate` have zero web-framework dependencies; test-enforced
-      (`V4ty`). Only `preprocess` carries the pydantic job models from the web layer.
-    - **Run directories are explicit paths** — the only implicit `os.chdir` is
-      scoped to the Dakota worker process via a context-manager guard, never
-      left dangling on the caller's process (`V2qw`).
-    - **Variable names preserve literal `-`** — `sanitize_varnames` treats
-      hyphens as legal characters rather than substitution targets (`V6op`).
-    - **Malformed rows are healed-or-dropped with a trace, never silently
-      wiped** (`V7as`).
+One word per concept, everywhere. The [Glossary](glossary.md) is the
+authority — and the spec's VOCAB block is kept in sync with it: a **sample**
+is a row, a **variable** is an input column, a **response** an output column,
+a **catalog** is what a fitted `SuMo` can answer, and a **rendering** is the
+presentation of exactly one result.
