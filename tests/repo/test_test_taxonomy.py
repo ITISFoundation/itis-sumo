@@ -9,16 +9,22 @@ never reached TestPyPI.
 
 Marker deselection cannot save that job, either: pytest IMPORTS every test module during collection
 BEFORE `-m` filters anything, so a heavy module that is merely deselected still raises
-`ModuleNotFoundError` and interrupts the run. So heavy modules must leave *collection* when their
-dependency is absent — `tests/conftest.py` — and these tests are the cheap rehearsal that keeps both
-halves honest: an AST pass over the test tree plus a couple of collect-only runs, no engine, no wheel
-build. A misclassification then dies on the PR instead of two weeks later at a release.
+`ModuleNotFoundError` and interrupts the run. So a heavy module must leave *collection* when its
+dependency is absent, by SKIPPING itself at module level (`pytest.skip(..., allow_module_level=True)`
+around the imports it cannot satisfy — per module, keyed on what that module actually imports). And
+these tests are the cheap rehearsal that keeps the rule honest: an AST pass over the test tree plus
+collect-only runs, one of them with the presentation extra made genuinely unimportable. No engine, no
+wheel build. A misclassification then dies on the PR instead of two weeks later at a release — because
+a rule that lives only in prose is how `0.2.0a15` was tagged and never published (B27qx).
 """
 
 import ast
+import contextlib
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -50,6 +56,34 @@ IMPORT_REQUIRES: dict[str, tuple[str, ...]] = {
     "itis_sumo.report": ("plotly",),
 }
 
+# A pytest plugin that makes named top-level packages unimportable. `-p` plus PYTHONPATH rehearses
+# the BARE-WHEEL gate inside a dev interpreter that does have the extras — the only cheap way to
+# catch B25vx's failure mode on a PR rather than on a tag that silently never publishes.
+IMPORT_BLOCKER_MODULE = "sumo_import_blocker"
+
+_IMPORT_BLOCKER_SOURCE = '''
+"""Make the packages named in SUMO_BLOCK_IMPORTS unimportable for one pytest run."""
+
+import os
+import sys
+
+BLOCKED = {name for name in os.environ.get("SUMO_BLOCK_IMPORTS", "").split(",") if name}
+
+
+class _Blocker:
+    """RAISE rather than return None — returning None only means "someone else may answer"."""
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in BLOCKED:
+            raise ModuleNotFoundError(f"{fullname!r} is blocked for this run", name=fullname)
+        return None
+
+
+def pytest_configure(config):
+    if BLOCKED:
+        sys.meta_path.insert(0, _Blocker())
+'''
+
 
 def _test_modules() -> list[Path]:
     return sorted(
@@ -71,11 +105,27 @@ def _dotted(node: ast.AST) -> str | None:
     return None
 
 
+def _import_statements(body: list[ast.stmt]) -> list[ast.stmt]:
+    """The import statements an IMPORT of this module executes.
+
+    That includes the body of a module-level `try:` — `try: import plotly / except ImportError:
+    pytest.skip(...)` is still an import-time import, and skipping the scan past it would hide the
+    very modules the release gate cannot survive (the guard this file exists for).
+    """
+    statements: list[ast.stmt] = []
+    for node in body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            statements.append(node)
+        elif isinstance(node, ast.Try):
+            statements.extend(_import_statements(node.body))
+    return statements
+
+
 def _module_level_imports(source: str, path: Path) -> list[str]:
     """Dotted names a module imports at top level — exactly what a collection pass executes."""
     found: list[str] = []
     tree = ast.parse(source, filename=str(path))
-    for node in tree.body:
+    for node in _import_statements(tree.body):
         if isinstance(node, ast.Import):
             found.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -124,27 +174,93 @@ def _declared_markers() -> list[str]:
     return [entry.split(":", 1)[0].strip() for entry in declared]
 
 
-def _collect(selector: str) -> tuple[int, str]:
-    """Collect one selection in a fresh interpreter: the same filter the gate applies, minus running."""
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "--collect-only",
-            "-p",
-            "no:cacheprovider",
-            "-m",
-            selector,
-            "tests",
-        ],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def _collect(selector: str, block_imports: tuple[str, ...] = ()) -> tuple[int, str]:
+    """Collect one selection in a fresh interpreter: the same filter the gate applies, minus running.
+
+    `block_imports` makes those packages unimportable in the subprocess, so a dev checkout can
+    collect the gate the way the BARE wheel does. Without it the interpreter is this one, extras
+    included — which is exactly how a gate-breaking import slipped past this file once (B25vx).
+    """
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        *(["-p", IMPORT_BLOCKER_MODULE] if block_imports else []),
+        "-q",
+        "--collect-only",
+        "-p",
+        "no:cacheprovider",
+    ]
+    environment: dict[str, str] | None = None
+    with contextlib.ExitStack() as stack:
+        if block_imports:
+            plugin_dir = Path(stack.enter_context(tempfile.TemporaryDirectory()))
+            (plugin_dir / f"{IMPORT_BLOCKER_MODULE}.py").write_text(
+                _IMPORT_BLOCKER_SOURCE, encoding="utf-8"
+            )
+            environment = {
+                **os.environ,
+                "PYTHONPATH": str(plugin_dir),
+                "SUMO_BLOCK_IMPORTS": ",".join(block_imports),
+            }
+        command += ["-m", selector, "tests"]
+        result = subprocess.run(
+            command,
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=environment,
+        )
     return result.returncode, result.stdout + result.stderr
+
+
+def _skips_on_missing_extra(source: str, path: Path) -> bool:
+    """Whether this module leaves COLLECTION when a presentation import fails (V57jk).
+
+    The shape that survives is a module-level `try: import heavy / except ImportError:
+    pytest.skip(..., allow_module_level=True)`. Two near-misses both shipped an unpublished tag: a
+    bare `except ImportError:` that only printed (collection ran on into a NameError, B27qx), and an
+    UNGUARDED module-level skip would silence the module in every environment — a quieter way to lose
+    tests than to lose the release.
+    """
+    tree = ast.parse(source, filename=str(path))
+    for node in tree.body:
+        if not isinstance(node, ast.Try):
+            continue
+        for handler in node.handlers:
+            if not _handler_catches_import_error(handler):
+                continue
+            if any(_skips_module_level(call) for call in ast.walk(handler)):
+                return True
+    return False
+
+
+def _skips_module_level(node: ast.AST) -> bool:
+    """A `pytest.skip(..., allow_module_level=True)` call."""
+    return (
+        isinstance(node, ast.Call)
+        and _dotted(node.func) == "pytest.skip"
+        and any(
+            keyword.arg == "allow_module_level"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+            for keyword in node.keywords
+        )
+    )
+
+
+def _handler_catches_import_error(handler: ast.ExceptHandler) -> bool:
+    """Does this `except` clause catch a missing package (the only skip that can save collection)?"""
+    names: list[ast.expr | None] = (
+        list(handler.type.elts)
+        if isinstance(handler.type, ast.Tuple)
+        else [handler.type]
+    )
+    return any(
+        isinstance(name, ast.Name) and name.id in {"ImportError", "ModuleNotFoundError"}
+        for name in names
+    )
 
 
 # pytest phrases the count differently depending on whether anything was deselected, so accept the
@@ -198,6 +314,72 @@ def test_gate_selection_is_not_degenerate() -> None:
     assert selected > 100, (
         f"the release-gate selection is implausibly small ({selected} tests) — an accidentally"
         " narrow selection fails green"
+    )
+
+
+def test_gate_selection_collects_with_the_presentation_extra_absent() -> None:
+    """The gate the release ACTUALLY runs: bare wheel, so plotly is not importable (B25vx, V57jk).
+
+    `_collect` without `block_imports` runs in this interpreter, where the dev group carries plotly —
+    which is why `verify` passed its own rehearsal while the tag it guarded died twice. Blocking the
+    import is the cheap version of building the wheel and installing it into a clean venv.
+    """
+    blocked = sorted(
+        {package for packages in _heavy_modules().values() for package in packages}
+    )
+    assert blocked, (
+        "no test module imports a presentation dep; this guard has nothing to pin"
+    )
+
+    code, output = _collect(RELEASE_GATE_SELECTOR, block_imports=tuple(blocked))
+    assert code == 0, (
+        f"`pytest -m {RELEASE_GATE_SELECTOR!r}` dies when {'/'.join(blocked)} is unimportable —"
+        " that IS publish.yml's verify job. Deselection cannot help: pytest imports the module while"
+        " collecting, so it must skip itself at module level"
+        " (`pytest.skip(..., allow_module_level=True)` around the imports it cannot satisfy), never"
+        f" swallow the ImportError and carry on.\n{output[-2000:]}"
+    )
+
+
+def test_gate_survival_does_not_lose_gate_eligible_tests() -> None:
+    """A heavy module leaving the gate must cost it nothing it could have run (V57jk).
+
+    A module that skips at module level unconditionally, or that is gate-eligible and only survives
+    because its imports failed, shrinks the sanity gate every time the extra is missing — silently,
+    because the gate stays green. Heavy modules are integration-marked precisely so that this
+    comparison is exact: the same count with and without the extras.
+    """
+    blocked = sorted(
+        {package for packages in _heavy_modules().values() for package in packages}
+    )
+    baseline = _selected_count(_collect(RELEASE_GATE_SELECTOR)[1])
+    code, output = _collect(RELEASE_GATE_SELECTOR, block_imports=tuple(blocked))
+    assert code == 0, output[-2000:]
+
+    selected = _selected_count(output)
+    assert selected == baseline, (
+        f"the gate selects {baseline} tests with the extras present but {selected} without them:"
+        " a module that skipped its way out of collection was contributing gate-eligible tests."
+        " Mark it `integration` instead of leaning on the skip"
+    )
+
+
+def test_every_heavy_module_skips_instead_of_breaking_collection() -> None:
+    """Name the module that would take `verify` down, rather than only failing the rehearsal.
+
+    The functional guard above (`test_gate_selection_collects_with_the_presentation_extra_absent`)
+    proves the mechanism works; this one says WHICH module broke it, and rejects the two shapes that
+    look right: a bare `except ImportError:` that carries on, and an unconditional module-level skip
+    that also silences the module in CI's heavy leg.
+    """
+    unguarded = []
+    for module in sorted(_heavy_modules()):
+        path = REPO / "tests" / module
+        if not _skips_on_missing_extra(path.read_text(encoding="utf-8"), path):
+            unguarded.append(module)
+    assert not unguarded, (
+        f"these modules import a presentation dep at module level without skipping on"
+        f" ImportError, so they break the bare-wheel release gate: {unguarded} (V57jk, B25vx)"
     )
 
 
