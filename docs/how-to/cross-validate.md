@@ -45,21 +45,34 @@ A low p-value (e.g. < 0.05) means the surrogate's errors aren't just noise —
 they're skewed in a consistent direction.
 
 Accuracy closeness is half the question; the other half is whether the
-surrogate's **own reported spread** earns trust. Coverage compares, at the
-1σ/2σ/3σ nominal masses, how many observations actually fall within
-`predicted ± z·predicted_std`:
+surrogate's **own reported spread** earns trust. Coverage asks, at a level you
+name, how many observations actually fall within `predicted ± z·predicted_std`
+(z is that level's two-sided Gaussian multiple — derived, never an input):
 
 ```python
 from itis_sumo import compute_coverage
 
-coverage = compute_coverage(cv.observed, cv.predicted, cv.predicted_std)
-coverage["levels"], coverage["empirical"]  # compare entry-wise
+# one call answers ONE level: which level is the question you are asking
+coverage = [
+    compute_coverage(cv.observed, cv.predicted, cv.predicted_std, level)
+    for level in (0.68, 0.95, 0.99)
+]
+[(c["level"], c["empirical"], c["n_points"]) for c in coverage]
 ```
+
+`0.95` means "did the interval that should catch 95% catch 95%" (z = 1.96);
+`0.68` is the one-sigma question (z = 0.99), `0.99` the tail (z = 2.58). A result
+is `{level, empirical, n_points}` — `n_points` matters, because a fraction
+measured over 4 points is not a calibration reading. If you think in sigmas,
+`level` is the mass and not the multiple: ±1σ is `0.6827`, ±2σ `0.9545`, ±3σ
+`0.9973`. Levels are separate calls because that is cheap (arithmetic on points
+already in memory) and it keeps the choice of levels with you rather than in a
+default.
 
 A persistent (non-shrinking) gap between empirical and nominal is a
 miscalibrated variance model, not a data shortage (V19cz). Both readings have
-renderings: `itis_sumo.report.render_cv_diagnostics`,
-`render_coverage`.
+renderings: `itis_sumo.report.render_cv_diagnostics`, and `render_coverage` for
+the list above (one bar per level, each compared against its own nominal).
 
 ## Check that more data actually helps
 
@@ -102,12 +115,18 @@ coverage95 = [point["metrics"]["coverage95"] for point in curve]  # or take the 
 | `rmse` | root mean squared error — the default, and what a point's `metric` / `metric_std` / `draws` keys still mean | your QoI's units |
 | `mae` | mean absolute error | your QoI's units |
 | `bias` | mean **signed** error, `mean(actual − predicted)` — the systematic over/under-prediction RMSE and MAE can net away | your QoI's units, signed |
-| `coverage68.27` | fraction of held-out observations inside `predicted ± 1σ·predicted_std` | fraction, 0…1 |
+| `coverage68` | fraction of held-out observations inside `predicted ± 0.99σ·predicted_std` — the one-sigma interval at a round 68% target | fraction, 0…1 |
 | `coverage95` | … inside `predicted ± 1.96σ·predicted_std` (V19cz) | fraction, 0…1 |
-| `coverage99.73` | … inside `predicted ± 3σ·predicted_std` — the tail, and the level that needs the most points before it says anything | fraction, 0…1 |
+| `coverage99` | … inside `predicted ± 2.58σ·predicted_std` — the tail, and the level that needs the most points before it says anything | fraction, 0…1 |
 
-Read the coverage trio together: short of 0.68 already at `coverage68.27` means
-the variance model is off everywhere; fine at 68.27 but short at 99.73 means the
+The levels are the round 68 / 95 / 99 because a metric token ends up as an axis
+label, and `coverage99` reads as what was asked where `coverage99.73` has to be
+decoded. Nothing is approximated by that: each level uses its own exact two-sided
+Gaussian multiple, and `compute_coverage` takes any target you prefer (`0.6827`,
+`0.9545`, `0.9973` if you want the ±1σ/±2σ/±3σ intervals themselves).
+
+Read the coverage trio together: short of 0.68 already at `coverage68` means
+the variance model is off everywhere; fine at 68 but short at 99 means the
 centre is right and the tails are too narrow; `metrics_std` says whether the
 shortfall is larger than the redraw noise.
 

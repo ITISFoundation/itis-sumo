@@ -5,6 +5,7 @@ convergence-series orchestration (Dakota-dependent `evaluate_sumo_manual_crossva
 call is monkeypatched to keep the tests fast and deterministic).
 """
 
+import inspect
 import math
 from typing import Any
 
@@ -195,16 +196,63 @@ class TestComputeCvDiagnostics:
 
 
 class TestComputeCoverage:
-    def test_well_calibrated_gaussian_matches_nominal_levels(self):
+    """One call answers ONE level (V19cz): `level` is a required coverage TARGET
+    and the cross-level reading is the caller's list of calls."""
+
+    def test_a_well_calibrated_gaussian_matches_its_own_nominal_level(self):
+        """N(0,1) residuals with std 1 reported: each level's own z multiple must
+        catch exactly the mass that level promises."""
         rng = np.random.default_rng(0)
-        n = 5000
+        n = 20000
         actual = rng.normal(loc=0.0, scale=1.0, size=n)
         predicted = np.zeros(n)
         predicted_std = np.ones(n)
-        result = compute_coverage(actual, predicted, predicted_std)
-        assert result["n_points"] == n
-        for empirical, nominal in zip(result["empirical"], result["levels"]):
-            assert empirical == pytest.approx(nominal, abs=0.02)
+
+        for level in (0.68, 0.95, 0.99):
+            result = compute_coverage(actual, predicted, predicted_std, level)
+            assert result["level"] == level
+            assert result["n_points"] == n
+            assert result["empirical"] == pytest.approx(level, abs=0.01)
+
+    def test_the_sigma_exact_targets_behave_like_the_sigmas_they_stand_for(self):
+        """The conversion a sigma-thinking caller needs: 1sigma = 0.6827,
+        2sigma = 0.9545, 3sigma = 0.9973 two-sided mass. Those are what the
+        sweep's ROUND tokens (68/95/99) stand for, and `level` takes either
+        spelling -- it is always the target mass, never the multiple."""
+        rng = np.random.default_rng(0)
+        n = 20000
+        actual = rng.normal(loc=0.0, scale=1.0, size=n)
+        predicted = np.zeros(n)
+        predicted_std = np.ones(n)
+
+        for target in (0.6827, 0.9545, 0.9973):
+            assert compute_coverage(actual, predicted, predicted_std, target)[
+                "empirical"
+            ] == pytest.approx(target, abs=0.01)
+
+    def test_the_result_names_the_single_level_it_answers(self):
+        """BREAKING shape (T65ux): the vector `levels`/`empirical` pair is gone. A
+        result is one level, so `empirical` is a fraction rather than a list to
+        index, and it carries its own nominal for a chart to compare itself to."""
+        result = compute_coverage([1.0, 2.0], [1.0, 2.0], [1.0, 1.0], 0.95)
+
+        assert set(result) == {"level", "empirical", "n_points"}
+        assert result["level"] == 0.95
+        assert isinstance(result["empirical"], float)
+
+    def test_the_level_is_required_not_defaulted(self):
+        """There is no default level: "at which level" is the caller's question, so
+        defaulting it would decide the question for whoever forgets to ask."""
+        parameter = inspect.signature(compute_coverage).parameters["level"]
+
+        assert parameter.default is inspect.Parameter.empty
+
+    def test_a_level_must_be_a_probability(self):
+        """0 and 1 have no z multiple (erfinv diverges), and a mass outside 0..1 is
+        not a question -- fail at the boundary rather than return NaN coverage."""
+        for bad in (0.0, 1.0, 1.5, -0.5):
+            with pytest.raises(ValueError, match="strictly between 0 and 1"):
+                compute_coverage([1.0, 2.0], [1.0, 2.0], [1.0, 1.0], bad)
 
     def test_overconfident_std_undercounts_coverage(self):
         """A predicted_std much smaller than the actual residual spread should
@@ -215,24 +263,29 @@ class TestComputeCoverage:
         actual = rng.normal(loc=0.0, scale=1.0, size=n)
         predicted = np.zeros(n)
         predicted_std = np.full(n, 0.2)  # much narrower than the true scale=1.0
-        result = compute_coverage(actual, predicted, predicted_std, levels=(0.6827,))
-        assert result["empirical"][0] < 0.6827 - 0.05
+
+        result = compute_coverage(actual, predicted, predicted_std, 0.68)
+
+        assert result["empirical"] < 0.68 - 0.05
 
     def test_shape_mismatch_raises(self):
         with pytest.raises(ValueError, match="same shape"):
-            compute_coverage([1.0, 2.0], [1.0, 2.0, 3.0], [1.0, 1.0, 1.0])
+            compute_coverage([1.0, 2.0], [1.0, 2.0, 3.0], [1.0, 1.0, 1.0], 0.95)
 
     def test_nan_and_nonpositive_std_excluded(self):
         actual = [1.0, 2.0, 3.0, 4.0]
         predicted = [1.0, 2.0, 3.0, 4.0]
         predicted_std = [1.0, float("nan"), 0.0, -1.0]
-        result = compute_coverage(actual, predicted, predicted_std, levels=(0.6827,))
+
+        result = compute_coverage(actual, predicted, predicted_std, 0.68)
+
         assert result["n_points"] == 1
 
     def test_empty_after_filtering_returns_nan_not_raise(self):
-        result = compute_coverage([1.0], [1.0], [float("nan")], levels=(0.6827,))
+        result = compute_coverage([1.0], [1.0], [float("nan")], 0.68)
+
         assert result["n_points"] == 0
-        assert np.isnan(result["empirical"][0])
+        assert np.isnan(result["empirical"])
 
 
 class TestFitConvergenceExponentialAsymptotic:
@@ -648,15 +701,16 @@ _FLAT_STD = 0.2
 
 # The vocabulary, spelled out here so widening it in the engine has to be a
 # deliberate decision in two places rather than a silent one.
-_FAMILY = {"rmse", "mae", "bias", "coverage68.27", "coverage95", "coverage99.73"}
+_FAMILY = {"rmse", "mae", "bias", "coverage68", "coverage95", "coverage99"}
 _ACCURACY = ("rmse", "mae", "bias")
 _ACCURACY_KEYS = {
     "rmse": "root_mean_squared",
     "mae": "mean_abs",
     "bias": "mean_signed_error",
 }
-# accuracy tokens, and the fraction each coverage token means (V19cz's trio)
-_LEVELS = {"coverage68.27": 0.6827, "coverage95": 0.95, "coverage99.73": 0.9973}
+# accuracy tokens, and the coverage target each coverage token means
+# (the sweep's round 68/95/99 spelling, V19cz's calibration question)
+_LEVELS = {"coverage68": 0.68, "coverage95": 0.95, "coverage99": 0.99}
 
 
 class TestComputeCvConvergenceMetricFamily:
@@ -691,10 +745,10 @@ class TestComputeCvConvergenceMetricFamily:
 
     def test_the_family_is_what_the_engine_documents(self):
         """The test vocabulary above and the engine's own tokens agree (it also
-        pins how a coverage level spells its token: 0.9973 -> coverage99.73)."""
+        pins how a coverage level spells its token: 0.95 -> coverage95)."""
         assert set(_CV_METRICS) == _FAMILY
         assert _CV_ACCURACY_METRICS == _ACCURACY
-        assert _CV_COVERAGE_METRICS == ("coverage68.27", "coverage95", "coverage99.73")
+        assert _CV_COVERAGE_METRICS == ("coverage68", "coverage95", "coverage99")
 
     def test_every_metric_equals_the_bundles_own_number_for_the_same_subset(
         self, tmp_path, monkeypatch
@@ -730,18 +784,19 @@ class TestComputeCvConvergenceMetricFamily:
                 assert point["draws_by_metric"][name] == [pytest.approx(metrics[key])]
                 # the bundle riding along agrees with the series number
                 assert point["metrics"][name] == pytest.approx(bundle[key])
-            coverage = compute_coverage(
-                pairs["actual"],
-                pairs["predicted"],
-                pairs["predicted_std"],
-                levels=tuple(_LEVELS.values()),
-            )
-            for token, empirical in zip(_LEVELS, coverage["empirical"], strict=True):
-                assert point["metrics"][token] == pytest.approx(empirical)
+            for token, level in _LEVELS.items():
+                assert point["metrics"][token] == pytest.approx(
+                    compute_coverage(
+                        pairs["actual"],
+                        pairs["predicted"],
+                        pairs["predicted_std"],
+                        level,
+                    )["empirical"]
+                )
 
     def test_the_rmse_named_keys_stay_the_rmse_reading(self, tmp_path, monkeypatch):
-        """Additive-only growth (V23rp): the pre-family keys keep their meaning,
-        so an old consumer of this series still gets the RMSE sweep it expects."""
+        """Additive-only growth: the pre-family keys keep their meaning, so an
+        old consumer of this series still gets the RMSE sweep it expects."""
         training_file = _write_training_file(
             tmp_path / "df_processed_jobs.dat", 10, seed=13
         )
@@ -807,9 +862,9 @@ class TestComputeCvConvergenceMetricFamily:
         assert metrics["bias"] > 0.0
 
     def test_the_coverage_levels_are_nested_and_ordered(self, tmp_path, monkeypatch):
-        """One sigma inside is a subset of two sigma inside, so the trio must come
-        out ordered — a `coverage99.73` below its `coverage68.27` would mean the
-        levels got mixed up on the way out, which no single-level test could see."""
+        """A 68% interval sits inside a 99% interval, so the trio must come out
+        ordered — a `coverage99` below its `coverage68` would mean the levels got
+        mixed up on the way out, which no single-level test could see."""
         training_file = _write_training_file(
             tmp_path / "df_processed_jobs.dat", 10, seed=15
         )
@@ -822,15 +877,11 @@ class TestComputeCvConvergenceMetricFamily:
             tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=2
         )[0]["metrics"]
 
-        assert (
-            metrics["coverage68.27"]
-            <= metrics["coverage95"]
-            <= metrics["coverage99.73"]
-        )
-        # the fixture's residuals straddle the 1sigma/2sigma/3sigma multiples, so
+        assert metrics["coverage68"] <= metrics["coverage95"] <= metrics["coverage99"]
+        # the fixture's residuals straddle the 68%/95%/99% multiples, so
         # the ordering is informative here rather than three copies of one number
-        assert metrics["coverage68.27"] < metrics["coverage99.73"]
-        assert 0.0 <= metrics["coverage68.27"] and metrics["coverage99.73"] <= 1.0
+        assert metrics["coverage68"] < metrics["coverage99"]
+        assert 0.0 <= metrics["coverage68"] and metrics["coverage99"] <= 1.0
 
     def test_coverage_is_pooled_over_draws_while_draws_stay_per_draw(
         self, tmp_path, monkeypatch
@@ -868,15 +919,15 @@ class TestComputeCvConvergenceMetricFamily:
                 [v for pairs in draws for v in pairs["actual"]],
                 [v for pairs in draws for v in pairs["predicted"]],
                 [v for pairs in draws for v in pairs["predicted_std"]],
-                levels=(level,),
-            )["empirical"][0]
+                level,
+            )["empirical"]
             expected_draws = [
                 compute_coverage(
                     pairs["actual"],
                     pairs["predicted"],
                     pairs["predicted_std"],
-                    levels=(level,),
-                )["empirical"][0]
+                    level,
+                )["empirical"]
                 for pairs in draws
             ]
             assert small["metrics"][token] == pytest.approx(expected_metric)
@@ -888,7 +939,7 @@ class TestComputeCvConvergenceMetricFamily:
                 full["draws_by_metric"][token][0]
             )
         assert 0.0 < small["metrics"]["coverage95"] < 1.0  # a straddle, not 0/1
-        # the draws genuinely differ at 95%; at 99.73 this fixture saturates at
+        # the draws genuinely differ at 95%; at 99 this fixture saturates at
         # 1.0, which is the level-dependence V19cz warns about
         assert len({round(v, 12) for v in small["draws_by_metric"]["coverage95"]}) > 1
         assert full["n_bootstrap"] == 1

@@ -591,33 +591,52 @@ def _paired_cohens_d(actual: np.ndarray, predicted: np.ndarray) -> float:
     return float(np.mean(diff) / diff_std) if diff_std > 0 else float("nan")
 
 
-# The intervals the engine reports coverage at by default: the two-sided Gaussian
-# mass inside +-1sigma / +-1.96sigma / +-3sigma, which is V19cz's 68.27/95/99.7%
-# trio. ONE constant because `compute_coverage` and the CV convergence sweep must
-# name the SAME intervals -- the sweep's coverage metric tokens are spelled from
-# these numbers, and a level added here appears in both.
-_DEFAULT_COVERAGE_LEVELS: tuple[float, ...] = (0.6827, 0.95, 0.9973)
-
-
 def compute_coverage(
     actual: list[float] | np.ndarray,
     predicted: list[float] | np.ndarray,
     predicted_std: list[float] | np.ndarray,
-    levels: tuple[float, ...] = _DEFAULT_COVERAGE_LEVELS,
+    level: float,
 ) -> dict[str, Any]:
-    """Empirical vs. nominal prediction-interval coverage (V19cz): for each
-    `levels` entry (default 1sigma/2sigma/3sigma two-sided Gaussian mass),
-    what fraction of `actual` fall within `predicted +- z*predicted_std`,
-    z = sqrt(2)*erfinv(level) (same two-sided-z convention as `create_manual_uq_samples`).
-    Tests whether the surrogate's OWN reported uncertainty
-    (`{output}_std_hat`, V8df) is trustworthy, not just whether point predictions
-    are close -- a persistent (non-shrinking-with-N) gap between empirical and
-    nominal coverage flags a miscalibrated variance model, not a data-shortage.
+    """Empirical vs. nominal prediction-interval coverage at ONE `level` (V19cz):
+    what fraction of `actual` fall within `predicted +- z*predicted_std`, z the
+    two-sided Gaussian multiple of `level` = sqrt(2)*erfinv(level) (same
+    two-sided-z convention as `create_manual_uq_samples`).
 
-    Points with NaN/non-positive `predicted_std` are dropped (Dakota can omit
-    variances.dat for a fold, B23) -- coverage is reported over however many
-    points have a usable std, `n_points` says how many that was.
+    `level` is a coverage TARGET (the mass the interval promises to catch), not a
+    sigma multiple: 0.95 asks "did the 95% interval deliver 95%" (z 1.96), 0.68
+    asks the one-sigma question (z 0.99), 0.99 the tail (z 2.58). A sigma
+    multiple k is not a level -- convert it with `2*Phi(k) - 1` (1 sigma -> 0.6827,
+    2 -> 0.9545, 3 -> 0.9973) if that interval is the one you mean.
+
+    There is deliberately no default level and no vector of levels: which level
+    is the question being asked, so the function answers exactly one, and the
+    cross-level comparison belongs to the caller's list -- which is also what
+    lets a report chart show the levels it chose instead of a fixed trio
+    (`report.render_coverage` takes that list, one bar per result). Several
+    levels are simply several calls: the work is arithmetic on points already in
+    memory, so it is never the expensive part.
+
+    Tests whether the surrogate's OWN reported uncertainty (`{output}_std_hat`,
+    V8df) is trustworthy, not just whether point predictions are close -- a
+    persistent (non-shrinking-with-N) gap between empirical and nominal coverage
+    flags a miscalibrated variance model, not a data-shortage.
+
+    Returns `{"level": level, "empirical": fraction, "n_points": int}`. Points
+    with NaN/non-positive `predicted_std` are dropped (Dakota can omit
+    variances.dat for a fold, B23) -- coverage is measured over however many
+    points have a usable std, and `n_points` says how many that was, which is how
+    a level measured over 3 points announces itself as unreadable.
+
+    Raises:
+        ValueError: the three inputs disagree on shape, or `level` is not a
+            probability strictly between 0 and 1 (those intervals have no z).
     """
+    level = float(level)
+    if not 0.0 < level < 1.0:
+        raise ValueError(
+            f"level must be a coverage target strictly between 0 and 1 (the mass the "
+            f"interval promises to catch), got {level!r}"
+        )
     actual_arr = np.asarray(actual, dtype=float)
     predicted_arr = np.asarray(predicted, dtype=float)
     std_arr = np.asarray(predicted_std, dtype=float)
@@ -638,18 +657,15 @@ def compute_coverage(
 
     n_points = int(actual_arr.size)
     if n_points == 0:
-        return {
-            "levels": list(levels),
-            "empirical": [float("nan")] * len(levels),
-            "n_points": 0,
-        }
+        return {"level": level, "empirical": float("nan"), "n_points": 0}
 
     z_scores = (actual_arr - predicted_arr) / std_arr
-    empirical = []
-    for level in levels:
-        z_crit = np.sqrt(2) * erfinv(level)
-        empirical.append(float(np.mean(np.abs(z_scores) <= z_crit)))
-    return {"levels": list(levels), "empirical": empirical, "n_points": n_points}
+    z_crit = np.sqrt(2) * erfinv(level)
+    return {
+        "level": level,
+        "empirical": float(np.mean(np.abs(z_scores) <= z_crit)),
+        "n_points": n_points,
+    }
 
 
 def compute_cv_diagnostics(
@@ -781,9 +797,9 @@ def _cv_subset_diagnostics(
 #   coverage<p>     calibration: fraction of held-out observations inside
 #                   predicted +- z*predicted_std, z the two-sided Gaussian
 #                   multiple of p (V19cz) -- does the surrogate's OWN spread earn
-#                   trust as N grows. The levels are _DEFAULT_COVERAGE_LEVELS:
-#                   coverage68.27 (+-1sigma), coverage95 (+-1.96sigma),
-#                   coverage99.73 (+-3sigma).
+#                   trust as N grows. The sweep's levels are the conventional
+#                   round percentages so the tokens read cleanly: coverage68
+#                   (z=0.99), coverage95 (z=1.96), coverage99 (z=2.58).
 # Accuracy metrics aggregate across bootstrap draws by averaging the per-draw
 # value. Coverage aggregates POOLED (V19cz: per-draw tail coverage is meaningless
 # below N~50 held-out points, and more so the higher the level): its value is the
@@ -800,30 +816,44 @@ def _coverage_metric_name(level: float) -> str:
     """The token naming one coverage level: `coverage` + its percentage.
 
     Spelled FROM the level so a name cannot drift from the interval it means
-    (0.95 -> "coverage95", 0.9973 -> "coverage99.73"); trailing zeros are trimmed
+    (0.95 -> "coverage95", 0.999 -> "coverage99.9"); trailing zeros are trimmed
     because this token is what a rendering labels its axis with.
     """
     return f"coverage{level * 100:.4f}".rstrip("0").rstrip(".")
 
 
+# The levels the sweep reports coverage at. ROUND percentages because a metric
+# token ends up as an axis label: "coverage99" says what was asked where
+# "coverage99.73" makes the reader decode it. Nothing is approximated -- each
+# level gets its exact two-sided Gaussian multiple (68% -> z 0.99, 95% -> 1.96,
+# 99% -> 2.58), only the NAME is round. `compute_coverage` has no default level
+# to agree or disagree with: a caller wanting the exact sigma masses passes 0.6827
+# / 0.9545 / 0.9973 and gets those.
+_CV_COVERAGE_LEVELS: tuple[float, ...] = (0.68, 0.95, 0.99)
 _CV_ACCURACY_METRICS: tuple[str, ...] = tuple(_CV_ACCURACY_KEYS)
 _CV_COVERAGE_METRICS: tuple[str, ...] = tuple(
-    _coverage_metric_name(level) for level in _DEFAULT_COVERAGE_LEVELS
+    _coverage_metric_name(level) for level in _CV_COVERAGE_LEVELS
 )
 # the ONE vocabulary a convergence point reports, in plotting order
 _CV_METRICS: tuple[str, ...] = (*_CV_ACCURACY_METRICS, *_CV_COVERAGE_METRICS)
 
 
 def _cv_draw_metrics(diagnostics: dict[str, Any]) -> dict[str, float]:
-    """Every metric of one bootstrap draw, read out of its diagnostics bundle."""
+    """Every metric of one bootstrap draw, read out of its diagnostics bundle.
+
+    The accuracy trio comes out of the bundle itself (V16wq); each coverage token
+    is `compute_coverage`'s arithmetic on the pairs the same bundle carries -- one
+    call per level (V19cz: a call answers one level), at the sweep's own
+    `_CV_COVERAGE_LEVELS`. No second CV pass, no engine call.
+    """
     metrics = {name: float(diagnostics[key]) for name, key in _CV_ACCURACY_KEYS.items()}
-    coverage = compute_coverage(
-        diagnostics["actual"],
-        diagnostics["predicted"],
-        diagnostics["predicted_std"],
-        levels=_DEFAULT_COVERAGE_LEVELS,
-    )
-    metrics.update(zip(_CV_COVERAGE_METRICS, coverage["empirical"], strict=True))
+    for level in _CV_COVERAGE_LEVELS:
+        metrics[_coverage_metric_name(level)] = compute_coverage(
+            diagnostics["actual"],
+            diagnostics["predicted"],
+            diagnostics["predicted_std"],
+            level,
+        )["empirical"]
     return metrics
 
 
@@ -836,13 +866,15 @@ def _cv_pooled_coverage(draw_diagnostics: list[dict[str, Any]]) -> dict[str, flo
         key: [value for diag in draw_diagnostics for value in diag[key]]
         for key in ("actual", "predicted", "predicted_std")
     }
-    coverage = compute_coverage(
-        pairs["actual"],
-        pairs["predicted"],
-        pairs["predicted_std"],
-        levels=_DEFAULT_COVERAGE_LEVELS,
-    )
-    return dict(zip(_CV_COVERAGE_METRICS, coverage["empirical"], strict=True))
+    return {
+        _coverage_metric_name(level): compute_coverage(
+            pairs["actual"],
+            pairs["predicted"],
+            pairs["predicted_std"],
+            level,
+        )["empirical"]
+        for level in _CV_COVERAGE_LEVELS
+    }
 
 
 def _cv_mean(values: list[float]) -> float:
@@ -905,9 +937,9 @@ def compute_cv_convergence(
                 "n_samples": int,            # training samples in this subset
                 "metrics": {token: float},   # EVERY metric at this size: the
                                              # accuracy trio rmse|mae|bias plus
-                                             # the coverage family
-                                             # coverage68.27|coverage95|
-                                             # coverage99.73 (V19cz)
+                                             # the coverage family coverage68|
+                                             # coverage95|coverage99 (V19cz's
+                                             # calibration question)
                 "metrics_std": {token: float},  # spread across bootstrap draws
                                              # (0.0 for a single deterministic
                                              # subset)
@@ -920,7 +952,7 @@ def compute_cv_convergence(
                                              # bundle (aligned with `draws`)
             }
 
-        The three RMSE-named keys are this series' historical shape (V23rp) and
+        The three RMSE-named keys are this series' historical shape and
         mean exactly what they meant before: each is the `rmse` entry of the
         family map beside it. `draws_by_metric` holds the raw (pre-aggregation)
         value per bootstrap draw -- length 1 when `n_bootstrap<=1` or at the
@@ -937,6 +969,12 @@ def compute_cv_convergence(
         outside" means anything), so a coverage `metrics` value is NOT the mean of
         its own draws -- `draws_by_metric` keeps each draw's value so the spread
         stays visible. `metrics_std` is the spread across draws either way.
+
+        The coverage levels here are the round 68/95/99%, named that way because a
+        metric token ends up as an axis label, and each one costs exactly one
+        `compute_coverage` call. The exact sigma masses (0.6827 / 0.9545 / 0.9973)
+        are not approximated anywhere -- ask `compute_coverage` for those levels
+        directly if you want them; nothing is rounded, only the naming.
 
         A coverage number is only as trustworthy as the surrogate's own reported
         spread (`{output}_std_hat`, V8df): folds whose `variances.dat` Dakota
@@ -1014,7 +1052,7 @@ def compute_cv_convergence(
                 "metrics_std": spread,
                 "draws_by_metric": draws_by_metric,
                 "n_bootstrap": n_draws,
-                # the series' historical RMSE reading (V23rp): three keys that
+                # the series' historical RMSE reading: three keys that
                 # predate the family maps, each exactly its `rmse` entry
                 "metric": aggregate["rmse"],
                 "metric_std": spread["rmse"],

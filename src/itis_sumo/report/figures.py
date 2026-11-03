@@ -55,9 +55,9 @@ _METRIC_PRESENTATION: dict[str, tuple[str, float | None]] = {
     "rmse": ("RMSE (original units)", None),
     "mae": ("MAE (original units)", None),
     "bias": ("signed bias (original units)", None),
-    "coverage68.27": ("68.27% interval coverage (fraction)", 0.6827),
+    "coverage68": ("68% interval coverage (fraction)", 0.68),
     "coverage95": ("95% interval coverage (fraction)", 0.95),
-    "coverage99.73": ("99.73% interval coverage (fraction)", 0.9973),
+    "coverage99": ("99% interval coverage (fraction)", 0.99),
 }
 
 
@@ -387,22 +387,41 @@ def render_pareto(result: ParetoFrontResult, **kwargs) -> go.Figure:
     return fig
 
 
-def render_coverage(coverage: dict, **kwargs) -> go.Figure:
+def render_coverage(coverage: list, **kwargs) -> go.Figure:
     """Empirical vs nominal prediction-interval coverage (V19cz).
 
-    Bars are the result's `empirical` fractions; markers are its own `levels`
-    (nominal). A bar sitting off its marker is miscalibration evidence, not a
-    data shortage — the reading is the plot.
+    `compute_coverage` answers ONE level, so this consumes the LIST of its
+    results — one entry per level you asked about, in the order you want them
+    read. Bars are each result's `empirical` fraction, markers are each result's
+    own `level` (nominal), and the point count each fraction was measured over
+    rides on the hover: a 95% bar computed over 4 points looks identical to one
+    computed over 400 until you ask. A bar sitting off its marker is
+    miscalibration evidence, not a data shortage — the reading is the plot.
 
     kwargs pass through to the plotly layout; escape hatch: the returned
     Figure (`fig.write_html(...)`, `fig.to_image(...)`, or take `fig.data` apart).
     """
-    levels = [float(level) for level in coverage["levels"]]
-    empirical = [float(value) for value in coverage["empirical"]]
+    if isinstance(coverage, dict):
+        raise TypeError(
+            "render_coverage takes the LIST of compute_coverage results, one per "
+            f"level it should plot; got a single {coverage.get('level')!r} result "
+            "— pass [result] for one level"
+        )
+    levels = [float(entry["level"]) for entry in coverage]
+    empirical = [float(entry["empirical"]) for entry in coverage]
     labels = [f"{level:.1%}" for level in levels]
     fig = go.Figure(
         [
-            go.Bar(x=labels, y=empirical, name="empirical"),
+            go.Bar(
+                x=labels,
+                y=empirical,
+                name="empirical",
+                customdata=[int(entry["n_points"]) for entry in coverage],
+                hovertemplate=(
+                    "%{x}: %{y:.1%} empirical<br>measured over %{customdata} "
+                    "points<extra></extra>"
+                ),
+            ),
             go.Scatter(
                 x=labels,
                 y=levels,
@@ -414,7 +433,7 @@ def render_coverage(coverage: dict, **kwargs) -> go.Figure:
         ]
     )
     fig.update_layout(
-        title=f"Prediction-interval coverage (n={coverage['n_points']})",
+        title="Prediction-interval coverage",
         xaxis_title="nominal interval mass",
         yaxis_title="empirical fraction",
         yaxis_range=[0.0, 1.0],
@@ -428,8 +447,8 @@ def render_convergence(series: list, **kwargs) -> go.Figure:
 
     `compute_cv_convergence` returns the whole metric family at every size, so
     WHICH curve you look at is this rendering's one option, `metric` (default
-    `"rmse"`): a token of that family — `"mae"`, `"bias"`, `"coverage68.27"`,
-    `"coverage95"`, `"coverage99.73"`. The line and its error bars are the
+    `"rmse"`): a token of that family — `"mae"`, `"bias"`, `"coverage68"`,
+    `"coverage95"`, `"coverage99"`. The line and its error bars are the
     series' own value and `metrics_std` for that token, the faint markers are its
     `draws_by_metric` — spread is shown, never re-derived, and no metric is
     recomputed here (V54hz). An unknown token fails loudly, listing the tokens the

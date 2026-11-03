@@ -67,8 +67,9 @@ _SECTIONS: tuple[Section, ...] = (
     Section(
         "coverage",
         render_coverage,
-        "compute_coverage() result",
-        "does the surrogate's own spread earn trust (V19cz)",
+        "compute_coverage() results",
+        "does the surrogate's own spread earn trust (V19cz), one bar per level "
+        "the caller asked about",
     ),
     Section(
         "cv_diagnostics",

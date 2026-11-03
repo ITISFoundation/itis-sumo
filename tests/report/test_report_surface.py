@@ -165,8 +165,8 @@ _CONVERGENCE_SPREAD = 0.1
 def _convergence_series() -> list[dict[str, Any]]:
     """A two-size convergence series in the shape `compute_cv_convergence` returns.
 
-    Every metric family token at each size (the accuracy trio plus V19cz's
-    coverage levels), the three legacy RMSE keys that mean its `rmse` entry, and
+    Every metric family token at each size (the accuracy trio plus the
+    sweep's coverage levels), the three legacy RMSE keys that mean its `rmse` entry, and
     two bootstrap draws per metric at a fixed spread — enough for a rendering to
     show a line, an error bar and a cloud per metric without any of them being
     equal by accident.
@@ -178,9 +178,9 @@ def _convergence_series() -> list[dict[str, Any]]:
                 "rmse": 0.5,
                 "mae": 0.42,
                 "bias": 0.1,
-                "coverage68.27": 0.62,
+                "coverage68": 0.62,
                 "coverage95": 0.90,
-                "coverage99.73": 0.97,
+                "coverage99": 0.97,
             },
         ),
         (
@@ -189,9 +189,9 @@ def _convergence_series() -> list[dict[str, Any]]:
                 "rmse": 0.3,
                 "mae": 0.25,
                 "bias": -0.02,
-                "coverage68.27": 0.68,
+                "coverage68": 0.68,
                 "coverage95": 0.94,
-                "coverage99.73": 0.99,
+                "coverage99": 0.99,
             },
         ),
     ]
@@ -277,11 +277,11 @@ def _synthetics() -> dict[str, Any]:
             mean_signed_error=0.05,
             seed=7,
         ),
-        "coverage": {
-            "levels": [0.6827, 0.95, 0.9973],
-            "empirical": [0.7, 0.94, 0.99],
-            "n_points": 100,
-        },
+        "coverage": [
+            {"level": 0.68, "empirical": 0.7, "n_points": 100},
+            {"level": 0.95, "empirical": 0.94, "n_points": 100},
+            {"level": 0.99, "empirical": 0.99, "n_points": 100},
+        ],
         "cv_diagnostics": {
             "root_mean_squared": 0.2,
             "mean_abs": 0.15,
@@ -388,6 +388,29 @@ def test_uncertainty_summary_renders_scalars_only_and_bins_separately() -> None:
     assert bins["bin_end"].iloc[0] == pytest.approx(bins["bin_start"].iloc[1])
 
 
+def test_render_coverage_compares_the_levels_the_caller_asked_for() -> None:
+    """`compute_coverage` answers one level, so the level comparison is a LIST of
+    results: one bar per entry, each marker at its own result's nominal level, and
+    the point count each fraction was measured over kept visible."""
+    results = _synthetics()["coverage"]
+
+    figure = report.render_coverage(results)
+
+    assert [bar.name for bar in figure.data] == ["empirical", "nominal"]
+    assert list(figure.data[0].x) == ["68.0%", "95.0%", "99.0%"]
+    assert list(figure.data[0].y) == pytest.approx([0.7, 0.94, 0.99])
+    # the nominal markers are the results' own levels, not a fixed trio
+    assert list(figure.data[1].y) == pytest.approx([0.68, 0.95, 0.99])
+    assert list(figure.data[0].customdata) == [100, 100, 100]
+
+    # one level asked is one level plotted
+    assert len(report.render_coverage(results[:1]).data[0].y) == 1
+
+    # a single result passed by mistake says what to pass instead of failing oddly
+    with pytest.raises(TypeError, match="LIST of compute_coverage results"):
+        report.render_coverage(results[0])
+
+
 def test_render_convergence_plots_the_metric_you_ask_for() -> None:
     """One sweep returns every metric, so WHICH curve you see is decided here:
     line, legend name and axis all follow `metric`, and nothing is recomputed."""
@@ -412,20 +435,20 @@ def test_render_convergence_plots_the_metric_you_ask_for() -> None:
 
 def test_render_convergence_frames_coverage_against_its_own_nominal_level() -> None:
     """A coverage curve is a fraction read against a level: the 0-1 axis and that
-    level's line come from the token in play, so 68.27 and 99.73 do not render as
+    level's line come from the token in play, so 68 and 99 do not render as
     the same question."""
     series = _synthetics()["convergence"]
 
-    tail = report.render_convergence(series, metric="coverage99.73")
+    tail = report.render_convergence(series, metric="coverage99")
     assert list(tail.data[0].y) == pytest.approx([0.97, 0.99])
-    assert tail.layout.yaxis.title.text == "99.73% interval coverage (fraction)"
+    assert tail.layout.yaxis.title.text == "99% interval coverage (fraction)"
     assert list(tail.layout.yaxis.range) == [0.0, 1.0]
     assert tail.layout.shapes, "a coverage plot needs its nominal reference line"
-    assert tail.layout.shapes[0].y0 == pytest.approx(0.9973)
+    assert tail.layout.shapes[0].y0 == pytest.approx(0.99)
 
-    one_sigma = report.render_convergence(series, metric="coverage68.27")
-    assert one_sigma.layout.yaxis.title.text == "68.27% interval coverage (fraction)"
-    assert one_sigma.layout.shapes[0].y0 == pytest.approx(0.6827)
+    one_sigma = report.render_convergence(series, metric="coverage68")
+    assert one_sigma.layout.yaxis.title.text == "68% interval coverage (fraction)"
+    assert one_sigma.layout.shapes[0].y0 == pytest.approx(0.68)
 
 
 def test_render_convergence_reads_spread_from_the_series() -> None:
@@ -450,7 +473,7 @@ def test_render_convergence_fails_loud_on_a_metric_it_cannot_plot() -> None:
 
 
 def test_render_convergence_still_renders_a_series_without_a_metric_family() -> None:
-    """Back-compat (V23rp): a hand-built or pre-family series carries only the
+    """Back-compat: a hand-built or pre-family series carries only the
     historical RMSE keys and renders as the RMSE sweep it always was; asking it
     for another metric says so instead of plotting RMSE under a MAE label."""
     legacy = [

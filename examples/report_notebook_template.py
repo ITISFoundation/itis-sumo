@@ -54,6 +54,10 @@ samples["stress"] = 3.0 * samples["width"] + 0.01 * samples["height"]
 
 VARIABLES = ["width", "height"]
 RESPONSE = "stress"
+# `compute_coverage` answers ONE level per call, so the calibration chart's
+# levels are this list — the choice of levels belongs to the report, not to a
+# default. 0.68 is the one-sigma question, 0.99 the tail.
+COVERAGE_LEVELS = (0.68, 0.95, 0.99)
 
 model = fit(samples, VARIABLES, RESPONSE)
 
@@ -88,7 +92,10 @@ from itis_sumo import (
 
 diagnostics = analyze_dataset(samples)
 accuracy = cross_validation_metrics(samples, VARIABLES, RESPONSE, seed=DEFAULT_SEED)
-coverage = compute_coverage(cv.observed, cv.predicted, cv.predicted_std or [])
+coverage = [
+    compute_coverage(cv.observed, cv.predicted, cv.predicted_std or [], level)
+    for level in COVERAGE_LEVELS
+]
 diagnostics_bundle = compute_cv_diagnostics(
     cv.observed, cv.predicted, cv.predicted_std or []
 )

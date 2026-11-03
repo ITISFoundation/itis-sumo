@@ -269,9 +269,9 @@ class TestSurrogateAccuracy:
             )
             # nested intervals: 1sigma-inside can never exceed 3sigma-inside
             assert (
-                point["metrics"]["coverage68.27"]
+                point["metrics"]["coverage68"]
                 <= point["metrics"]["coverage95"]
-                <= point["metrics"]["coverage99.73"]
+                <= point["metrics"]["coverage99"]
             )
         # more data does not make the surrogate's own spread less trustworthy
         assert series[-1]["metrics"]["coverage95"] >= series[0]["metrics"]["coverage95"]
