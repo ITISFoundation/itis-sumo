@@ -238,12 +238,13 @@ class TestSurrogateAccuracy:
 
         assert rmses[60] < rmses[15] < rmses[6]
 
-    def test_cv_convergence_tracks_mae_with_training_size(self, run_dir):
-        """`compute_cv_convergence` on f(x) = sin(x), metric="mae".
+    def test_cv_convergence_returns_the_metric_family_with_training_size(self, run_dir):
+        """`compute_cv_convergence` on f(x) = sin(x): one sweep, every metric (V55nw).
 
-        Two things at once, on the SAME CV passes: a non-RMSE metric is
-        selectable and equals the diagnostics bundle's own MAE (V16wq), and the
-        accuracy trend is monotone with training-sample count. The training rows
+        Three things at once on the SAME CV passes: a non-RMSE metric equals the
+        diagnostics bundle's own MAE (V16wq); the accuracy trend is monotone with
+        training-sample count while the coverage trio stays nested at every size;
+        and calibration does not get worse as points are added. The training rows
         are shuffled so each first-n-rows subset is a random draw over the whole
         domain, not a growing prefix.
         """
@@ -255,20 +256,29 @@ class TestSurrogateAccuracy:
         )
 
         series = compute_cv_convergence(
-            run_dir, train_file, ["x"], "y", min_samples=10, max_points=3, metric="mae"
+            run_dir, train_file, ["x"], "y", min_samples=10, max_points=3
         )
 
         assert [point["n_samples"] for point in series] == [10, 17, 24]
-        assert all(point["metric_name"] == "mae" for point in series)
-        metrics = [point["metric"] for point in series]
-        assert metrics[0] > metrics[1] > metrics[2]
+        maes = [point["metrics"]["mae"] for point in series]
+        assert maes[0] > maes[1] > maes[2]
         for point in series:
-            # the series number IS the bundle number for this subset (no rerun)
-            assert point["metric"] == pytest.approx(point["diagnostics"][0]["mean_abs"])
+            # the family number IS the bundle number for this subset (no rerun)
+            assert point["metrics"]["mae"] == pytest.approx(
+                point["diagnostics"][0]["mean_abs"]
+            )
+            # nested intervals: 1sigma-inside can never exceed 3sigma-inside
+            assert (
+                point["metrics"]["coverage68.27"]
+                <= point["metrics"]["coverage95"]
+                <= point["metrics"]["coverage99.73"]
+            )
+        # more data does not make the surrogate's own spread less trustworthy
+        assert series[-1]["metrics"]["coverage95"] >= series[0]["metrics"]["coverage95"]
 
-        # and a trend fit reads any metric series, not just RMSE (V18wp)
+        # and a trend fit reads any metric's column, not just RMSE (V18wp)
         fit = fit_convergence_exponential(
-            [point["n_samples"] for point in series], metrics, asymptotic=False
+            [point["n_samples"] for point in series], maes, asymptotic=False
         )
         assert fit["r_squared"] > 0.9
 

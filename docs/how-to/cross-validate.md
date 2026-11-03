@@ -72,8 +72,8 @@ poor design coverage) rather than "just needs more points":
 from itis_sumo import compute_cv_convergence, fit_convergence_exponential
 
 curve = compute_cv_convergence(run_dir, training_file, ["width", "height"], "stress")
-# series of {n_samples, metric, metric_std, n_bootstrap, draws, diagnostics,
-#            metric_name}
+# one point per subset size: {n_samples, metrics, metrics_std, draws_by_metric,
+#                             n_bootstrap, metric, metric_std, draws, diagnostics}
 
 fit = fit_convergence_exponential(
     [e["n_samples"] for e in curve for _ in e["draws"]],
@@ -83,28 +83,43 @@ fit = fit_convergence_exponential(
 fit["c"], fit["r_squared"]  # irreducible floor + fit quality
 ```
 
-### Choosing what the curve tracks
+### Which metric to look at
 
-`metric` picks which quantity the series follows. Every name is computed from
-data the CV pass already produces per bootstrap draw, so **switching metric
-costs no extra cross-validation** (V16wq) — it is a different reading of the
-same runs:
+The sweep takes **no metric argument**: every point already carries all of them,
+because the CV pass produces all of them — asking for MAE or the tails instead of
+RMSE costs **no extra cross-validation** (V16wq, V55nw). You choose at
+presentation time instead of paying for another sweep:
 
-| `metric` | what it is | units |
+```python
+from itis_sumo.report import render_convergence
+
+render_convergence(curve, metric="coverage95")  # axis and reference line follow the metric
+coverage95 = [point["metrics"]["coverage95"] for point in curve]  # or take the numbers
+```
+
+| token | what it is | units |
 | --- | --- | --- |
-| `"rmse"` (default) | root mean squared error | your QoI's units |
-| `"mae"` | mean absolute error | your QoI's units |
-| `"bias"` | mean **signed** error, `mean(actual − predicted)` — the systematic over/under-prediction RMSE and MAE can net away | your QoI's units, signed |
-| `"coverage95"` | fraction of held-out observations inside `predicted ± z₉₅·predicted_std` (V19cz) | fraction, 0…1 |
+| `rmse` | root mean squared error — the default, and what a point's `metric` / `metric_std` / `draws` keys still mean | your QoI's units |
+| `mae` | mean absolute error | your QoI's units |
+| `bias` | mean **signed** error, `mean(actual − predicted)` — the systematic over/under-prediction RMSE and MAE can net away | your QoI's units, signed |
+| `coverage68.27` | fraction of held-out observations inside `predicted ± 1σ·predicted_std` | fraction, 0…1 |
+| `coverage95` | … inside `predicted ± 1.96σ·predicted_std` (V19cz) | fraction, 0…1 |
+| `coverage99.73` | … inside `predicted ± 3σ·predicted_std` — the tail, and the level that needs the most points before it says anything | fraction, 0…1 |
 
-Each series point keeps the whole `compute_cv_diagnostics` bundle per draw in
-`diagnostics`, so a name not in the table is still one line of arithmetic away.
-For the three accuracy metrics `metric` is the mean over `draws`; for
-`"coverage95"` it is the coverage over all draws' held-out points **pooled**
-(one draw's tail coverage is noise below ~50 points, V19cz), while `draws` keeps
-each draw's own value. `fit_convergence_exponential` is metric-agnostic — for
-coverage the floor is the interesting number: `fit["c"] ≈ 0.95` means coverage
-settles **at** nominal, `fit["c"] < 0.95` means the variance model stays
+Read the coverage trio together: short of 0.68 already at `coverage68.27` means
+the variance model is off everywhere; fine at 68.27 but short at 99.73 means the
+centre is right and the tails are too narrow; `metrics_std` says whether the
+shortfall is larger than the redraw noise.
+
+Aggregation differs by kind on purpose. An accuracy metric is the **mean over
+draws**; a coverage metric is computed over all draws' held-out points **pooled**
+(one draw's tail coverage is noise below ~50 points, V19cz) — so a coverage number
+is not the mean of its own `draws_by_metric`, which keep each draw's value. Each
+point also keeps the whole `compute_cv_diagnostics` bundle per draw in
+`diagnostics`, so a number that is not in the table is one line of arithmetic
+away. `fit_convergence_exponential` is metric-agnostic — feed it any token's
+column; for coverage the floor is the interesting number: `fit["c"] ≈ 0.95` means
+coverage settles **at** nominal, `fit["c"] < 0.95` means the variance model stays
 miscalibrated no matter how much data you add.
 
 !!! note "The one explicitly-staged function"

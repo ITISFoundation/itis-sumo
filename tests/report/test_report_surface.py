@@ -23,6 +23,7 @@ import pandas as pd
 import pytest
 
 import itis_sumo
+from itis_sumo.engine.evaluation import _CV_METRICS
 from itis_sumo.types import (
     AlongAxesResult,
     AxisSweep,
@@ -158,6 +159,64 @@ def _sobol_result() -> SobolResult:
     )
 
 
+_CONVERGENCE_SPREAD = 0.1
+
+
+def _convergence_series() -> list[dict[str, Any]]:
+    """A two-size convergence series in the shape `compute_cv_convergence` returns.
+
+    Every metric family token at each size (the accuracy trio plus V19cz's
+    coverage levels), the three legacy RMSE keys that mean its `rmse` entry, and
+    two bootstrap draws per metric at a fixed spread — enough for a rendering to
+    show a line, an error bar and a cloud per metric without any of them being
+    equal by accident.
+    """
+    per_size = [
+        (
+            10,
+            {
+                "rmse": 0.5,
+                "mae": 0.42,
+                "bias": 0.1,
+                "coverage68.27": 0.62,
+                "coverage95": 0.90,
+                "coverage99.73": 0.97,
+            },
+        ),
+        (
+            20,
+            {
+                "rmse": 0.3,
+                "mae": 0.25,
+                "bias": -0.02,
+                "coverage68.27": 0.68,
+                "coverage95": 0.94,
+                "coverage99.73": 0.99,
+            },
+        ),
+    ]
+    series = []
+    for n_samples, metrics in per_size:
+        draws_by_metric = {
+            name: [value - _CONVERGENCE_SPREAD, value + _CONVERGENCE_SPREAD]
+            for name, value in metrics.items()
+        }
+        series.append(
+            {
+                "n_samples": n_samples,
+                "metrics": metrics,
+                "metrics_std": dict.fromkeys(metrics, _CONVERGENCE_SPREAD),
+                "draws_by_metric": draws_by_metric,
+                "n_bootstrap": 2,
+                "metric": metrics["rmse"],
+                "metric_std": _CONVERGENCE_SPREAD,
+                "draws": draws_by_metric["rmse"],
+                "diagnostics": [],
+            }
+        )
+    return series
+
+
 def _synthetics() -> dict[str, Any]:
     draws = UncertaintyDraws(
         response="stress",
@@ -233,26 +292,7 @@ def _synthetics() -> dict[str, Any]:
             "cohens_d": 0.2,
             "actual": [1.0, 2.0],  # non-scalar: must be left out of the table
         },
-        "convergence": [
-            {
-                "n_samples": 10,
-                "metric": 0.5,
-                "metric_std": 0.1,
-                "n_bootstrap": 2,
-                "draws": [0.4, 0.6],
-                "diagnostics": [],
-                "metric_name": "rmse",
-            },
-            {
-                "n_samples": 20,
-                "metric": 0.3,
-                "metric_std": 0.05,
-                "n_bootstrap": 2,
-                "draws": [0.25, 0.35],
-                "diagnostics": [],
-                "metric_name": "rmse",
-            },
-        ],
+        "convergence": _convergence_series(),
         "convergence_fit": {"a": 1.0, "b": 0.1, "r_squared": 0.98},
         "sobol": _sobol_result(),
         "correlations": CorrelationResult(
@@ -348,42 +388,99 @@ def test_uncertainty_summary_renders_scalars_only_and_bins_separately() -> None:
     assert bins["bin_end"].iloc[0] == pytest.approx(bins["bin_start"].iloc[1])
 
 
-def test_render_convergence_labels_the_axis_with_the_series_own_metric() -> None:
-    """A MAE or coverage sweep must not arrive labelled RMSE: the axis follows
-    `metric_name`, and a coverage sweep gets its nominal 95% reference line."""
-    base = _synthetics()["convergence"]
+def test_render_convergence_plots_the_metric_you_ask_for() -> None:
+    """One sweep returns every metric, so WHICH curve you see is decided here:
+    line, legend name and axis all follow `metric`, and nothing is recomputed."""
+    series = _synthetics()["convergence"]
 
-    mae = report.render_convergence(
-        [{**entry, "metric_name": "mae"} for entry in base],
-    )
+    default = report.render_convergence(series)
+    assert list(default.data[0].y) == pytest.approx([0.5, 0.3])
+    assert default.data[0].name == "rmse"
+    assert default.layout.yaxis.title.text == "RMSE (original units)"
+
+    mae = report.render_convergence(series, metric="mae")
+    assert list(mae.data[0].y) == pytest.approx([0.42, 0.25])
     assert mae.layout.yaxis.title.text == "MAE (original units)"
     assert "mae" in mae.layout.title.text
+    assert not mae.layout.shapes, "an accuracy curve has no nominal level"
 
-    coverage = report.render_convergence(
-        [{**entry, "metric_name": "coverage95"} for entry in base]
-    )
-    assert coverage.layout.yaxis.title.text == "95% interval coverage (fraction)"
-    assert list(coverage.layout.yaxis.range) == [0.0, 1.0]
-    assert coverage.layout.shapes, "a coverage plot needs its nominal reference line"
-
-    # a metric this build does not know still plots, wearing its own name
-    future = report.render_convergence(
-        [{**entry, "metric_name": "crps"} for entry in base]
-    )
-    assert future.layout.yaxis.title.text == "crps"
+    # the tokens are matched the way a human types them
+    bias = report.render_convergence(series, metric=" BIAS ")
+    assert list(bias.data[0].y) == pytest.approx([0.1, -0.02])
+    assert bias.layout.yaxis.title.text == "signed bias (original units)"
 
 
-def test_render_convergence_defaults_for_a_metric_blind_series() -> None:
-    """Back-compat: a series produced before `metric_name` existed renders
-    exactly as it always did."""
+def test_render_convergence_frames_coverage_against_its_own_nominal_level() -> None:
+    """A coverage curve is a fraction read against a level: the 0-1 axis and that
+    level's line come from the token in play, so 68.27 and 99.73 do not render as
+    the same question."""
+    series = _synthetics()["convergence"]
+
+    tail = report.render_convergence(series, metric="coverage99.73")
+    assert list(tail.data[0].y) == pytest.approx([0.97, 0.99])
+    assert tail.layout.yaxis.title.text == "99.73% interval coverage (fraction)"
+    assert list(tail.layout.yaxis.range) == [0.0, 1.0]
+    assert tail.layout.shapes, "a coverage plot needs its nominal reference line"
+    assert tail.layout.shapes[0].y0 == pytest.approx(0.9973)
+
+    one_sigma = report.render_convergence(series, metric="coverage68.27")
+    assert one_sigma.layout.yaxis.title.text == "68.27% interval coverage (fraction)"
+    assert one_sigma.layout.shapes[0].y0 == pytest.approx(0.6827)
+
+
+def test_render_convergence_reads_spread_from_the_series() -> None:
+    """V54hz: error bars are the point's own `metrics_std` and the cloud is its own
+    `draws_by_metric` for that metric — the rendering derives no statistic."""
+    series = _synthetics()["convergence"]
+
+    figure = report.render_convergence(series, metric="coverage95")
+    assert list(figure.data[0].error_y.array) == pytest.approx([0.1, 0.1])
+    assert list(figure.data[1].y) == pytest.approx([0.8, 1.0, 0.84, 1.04])
+    assert list(figure.data[1].x) == [10, 10, 20, 20]
+
+
+def test_render_convergence_fails_loud_on_a_metric_it_cannot_plot() -> None:
+    series = _synthetics()["convergence"]
+
+    with pytest.raises(ValueError, match="no 'r2' metric"):
+        report.render_convergence(series, metric="r2")
+    wrong: Any = 0.95  # what a caller who never read the docstring sends
+    with pytest.raises(TypeError, match="metric must be"):
+        report.render_convergence(series, metric=wrong)
+
+
+def test_render_convergence_still_renders_a_series_without_a_metric_family() -> None:
+    """Back-compat (V23rp): a hand-built or pre-family series carries only the
+    historical RMSE keys and renders as the RMSE sweep it always was; asking it
+    for another metric says so instead of plotting RMSE under a MAE label."""
     legacy = [
-        {k: v for k, v in entry.items() if k != "metric_name"}
-        for entry in _synthetics()["convergence"]
+        {
+            "n_samples": point["n_samples"],
+            "metric": point["metric"],
+            "metric_std": point["metric_std"],
+            "n_bootstrap": point["n_bootstrap"],
+            "draws": point["draws"],
+            "diagnostics": [],
+        }
+        for point in _synthetics()["convergence"]
     ]
+
     figure = report.render_convergence(legacy)
-    assert figure.layout.title.text == "CV convergence"
-    assert figure.layout.yaxis.title.text == "metric"
-    assert not figure.layout.shapes
+    assert list(figure.data[0].y) == pytest.approx([0.5, 0.3])
+    assert figure.layout.yaxis.title.text == "RMSE (original units)"
+
+    with pytest.raises(ValueError, match="historical RMSE reading"):
+        report.render_convergence(legacy, metric="mae")
+
+
+def test_every_engine_metric_wears_a_label() -> None:
+    """Contract between the two sides of V54hz: the engine's metric family is what
+    the presentation table knows, so a level added to the engine's coverage
+    defaults cannot arrive in a report as an unlabelled axis."""
+    presentation = report.figures._METRIC_PRESENTATION
+
+    assert set(_CV_METRICS) <= set(presentation)
+    assert all(label for label, _ in presentation.values())
 
 
 def test_cv_diagnostics_table_drops_the_pair_arrays() -> None:

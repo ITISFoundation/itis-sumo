@@ -44,27 +44,49 @@ __all__ = [
     "render_uncertainty",
 ]
 
-# Axis vocabulary for `render_convergence`, keyed by the `metric_name` the
-# series carries. This is presentation, not a statistic: the numbers stay the
-# producing function's, only the label of the axis they sit on is chosen here
-# (V54hz). A metric the table does not know still plots, labelled by its own
-# token, so a future engine-side metric never renders as a mystery axis.
-_METRIC_AXIS_LABELS: dict[str, str] = {
-    "rmse": "RMSE (original units)",
-    "mae": "MAE (original units)",
-    "bias": "signed bias (original units)",
-    "coverage95": "95% interval coverage (fraction)",
+# Presentation for the metric family `compute_cv_convergence` returns, keyed by
+# its metric tokens: the wording of the axis the metric sits on, and for a
+# coverage token the nominal level its curve is read against (a definition, like
+# render_cross_validation's parity line — layout decoration, not a statistic, and
+# the numbers themselves stay the engine's: V54hz). A token this table does not
+# know still plots, labelled by its own name, so an engine-side metric added
+# later never renders as a mystery axis.
+_METRIC_PRESENTATION: dict[str, tuple[str, float | None]] = {
+    "rmse": ("RMSE (original units)", None),
+    "mae": ("MAE (original units)", None),
+    "bias": ("signed bias (original units)", None),
+    "coverage68.27": ("68.27% interval coverage (fraction)", 0.6827),
+    "coverage95": ("95% interval coverage (fraction)", 0.95),
+    "coverage99.73": ("99.73% interval coverage (fraction)", 0.9973),
 }
-_METRIC_Y_RANGE: dict[str, tuple[float, float]] = {"coverage95": (0.0, 1.0)}
-# the nominal level a coverage curve is read against (a definition, like
-# render_cross_validation's parity line: layout decoration, not a statistic)
-_METRIC_NOMINAL: dict[str, float] = {"coverage95": 0.95}
 
 
-def _series_metric_name(series: list) -> str | None:
-    """The metric one convergence series tracks, if the entries agree on one."""
-    names = {entry.get("metric_name") for entry in series if entry.get("metric_name")}
-    return next(iter(names)) if len(names) == 1 else None
+def _convergence_point_metric(entry: dict, metric: str) -> tuple[float, float, list]:
+    """`(value, spread, per-draw cloud)` for one convergence point's `metric`.
+
+    A point from `compute_cv_convergence` carries the whole metric family; a
+    hand-written point, or one from a build that predates the family maps, carries
+    only the single historical RMSE reading — which is what `metric`/`metric_std`/
+    `draws` always meant, so those still render (as RMSE) rather than silently
+    becoming something else.
+    """
+    if "metrics" in entry:
+        if metric not in entry["metrics"]:
+            raise ValueError(
+                f"this convergence series has no {metric!r} metric; it has "
+                f"{', '.join(sorted(entry['metrics']))}"
+            )
+        return (
+            entry["metrics"][metric],
+            entry["metrics_std"][metric],
+            entry["draws_by_metric"][metric],
+        )
+    if metric != "rmse":
+        raise ValueError(
+            f"a convergence series without a `metrics` map carries only its "
+            f"historical RMSE reading, so {metric!r} cannot be plotted from it"
+        )
+    return entry["metric"], entry["metric_std"], entry["draws"]
 
 
 def _parity_line(values: list[float]) -> tuple[float, float]:
@@ -402,42 +424,61 @@ def render_coverage(coverage: dict, **kwargs) -> go.Figure:
 
 
 def render_convergence(series: list, **kwargs) -> go.Figure:
-    """CV metric vs training-sample count, with bootstrap draws as a cloud.
+    """One CV metric vs training-sample count, with bootstrap draws as a cloud.
 
-    Line and error bars are the series entries' own `metric`/`metric_std`;
-    the faint markers are their `draws` — spread is shown, not re-derived.
-    Consumes the list returned by `compute_cv_convergence`, for ANY metric that
-    function documents: the axis label follows each entry's `metric_name`, so a
-    MAE/bias/coverage sweep reads correctly instead of claiming to be RMSE.
-    A coverage sweep additionally gets its nominal 95% reference line (layout
-    decoration) and a fixed 0–1 axis, because "does coverage settle AT the
-    nominal level" is the whole question there.
+    `compute_cv_convergence` returns the whole metric family at every size, so
+    WHICH curve you look at is this rendering's one option, `metric` (default
+    `"rmse"`): a token of that family — `"mae"`, `"bias"`, `"coverage68.27"`,
+    `"coverage95"`, `"coverage99.73"`. The line and its error bars are the
+    series' own value and `metrics_std` for that token, the faint markers are its
+    `draws_by_metric` — spread is shown, never re-derived, and no metric is
+    recomputed here (V54hz). An unknown token fails loudly, listing the tokens the
+    series actually carries.
 
-    kwargs pass through to the plotly layout; escape hatch: the returned
-    Figure (`fig.write_html(...)`, `fig.to_image(...)`, or take `fig.data` apart).
+    A coverage metric additionally gets a fixed 0–1 axis and its nominal level as
+    a reference line, because "did coverage settle AT the nominal level or below
+    it" is the whole question there (layout decoration, like
+    render_cross_validation's parity line).
+
+    kwargs (other than `metric`) pass through to the plotly layout; escape hatch:
+    the returned Figure (`fig.write_html(...)`, `fig.to_image(...)`, or take
+    `fig.data` apart).
     """
+    metric = kwargs.pop("metric", "rmse")
+    if not isinstance(metric, str):
+        raise TypeError(
+            f"metric must be one of the convergence metric tokens, got "
+            f"{type(metric).__name__}"
+        )
+    metric = metric.strip().lower()
+    selected = [_convergence_point_metric(entry, metric) for entry in series]
+    label, nominal = _METRIC_PRESENTATION.get(metric, (metric, None))
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
             x=[entry["n_samples"] for entry in series],
-            y=[entry["metric"] for entry in series],
+            y=[value for value, _, _ in selected],
             mode="lines+markers",
-            name="metric",
+            name=metric,
             error_y={
                 "type": "data",
-                "array": [entry["metric_std"] for entry in series],
+                "array": [spread for _, spread, _ in selected],
             },
             customdata=[entry["n_bootstrap"] for entry in series],
             hovertemplate=(
-                "n=%{x}<br>metric %{y:.4g}<br>%{customdata} bootstrap draws"
-                "<extra></extra>"
+                f"n=%{{x}}<br>{metric} %{{y:.4g}}<br>%{{customdata}} bootstrap "
+                "draws<extra></extra>"
             ),
         )
     )
     fig.add_trace(
         go.Scatter(
-            x=[entry["n_samples"] for entry in series for _ in entry["draws"]],
-            y=[draw for entry in series for draw in entry["draws"]],
+            x=[
+                entry["n_samples"]
+                for entry, (_, _, draws) in zip(series, selected)
+                for _ in draws
+            ],
+            y=[draw for _, _, draws in selected for draw in draws],
             mode="markers",
             name="bootstrap draws",
             opacity=0.3,
@@ -446,22 +487,20 @@ def render_convergence(series: list, **kwargs) -> go.Figure:
         )
     )
     layout: dict = {
-        "title": "CV convergence",
+        "title": f"CV convergence — {metric}",
         "xaxis_title": "training samples",
-        "yaxis_title": "metric",
+        "yaxis_title": label,
     }
-    name = _series_metric_name(series)
-    if name is not None:
-        layout["title"] = f"CV convergence — {name}"
-        layout["yaxis_title"] = _METRIC_AXIS_LABELS.get(name, name)
-        if (y_range := _METRIC_Y_RANGE.get(name)) is not None:
-            layout["yaxis_range"] = list(y_range)
-        if (nominal := _METRIC_NOMINAL.get(name)) is not None:
-            fig.add_hline(
-                y=nominal,
-                line={"dash": "dot", "color": "black"},
-                annotation_text=f"nominal {nominal:.0%}",
-            )
+    if nominal is not None:
+        # a coverage curve is a fraction: the 0-1 axis is what makes a level
+        # drifting below its nominal line visible instead of merely low
+        layout["yaxis_range"] = [0.0, 1.0]
     fig.update_layout(**layout)
+    if nominal is not None:
+        fig.add_hline(
+            y=nominal,
+            line={"dash": "dot", "color": "black"},
+            annotation_text=f"nominal {nominal * 100:g}%",
+        )
     fig.update_layout(**kwargs)
     return fig

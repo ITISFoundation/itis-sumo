@@ -80,7 +80,8 @@ _SECTIONS: tuple[Section, ...] = (
         "convergence",
         render_convergence,
         "compute_cv_convergence() result",
-        "does more data still help, with its bootstrap spread visible",
+        "does more data still help, with its bootstrap spread visible; the `metric` "
+        "option picks which of the returned family to draw",
     ),
     Section(
         "convergence_fit",
