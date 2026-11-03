@@ -2,7 +2,9 @@
 
 Two public functions per the §I cap: the sweep, and the exponential fit whose
 `asymptotic` flag carries the zero-floor and floored variants (V18wp; the
-T56jw cap exception was folded into this kwarg by T58md).
+T56jw cap exception was folded into this kwarg by T58md). The sweep's `metric`
+option re-reads the diagnostics bundle the CV pass already produces —
+`rmse`/`mae`/`bias`/`coverage95` cost no extra rerun (V16wq, V55nw).
 """
 
 from itis_sumo.engine.evaluation import (

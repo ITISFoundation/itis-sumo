@@ -80,6 +80,7 @@ Build GP surrogates on known training data, evaluate on held-out test data.
 | E2 | CV metrics improve with more data (N = 20, 50, 100) | RMSE monotonically decreasing |
 | E3 | 95% prediction interval coverage | `~95%` of held-out points within `[y_hat ± 1.96·std_hat]` |
 | E4 | Manual vs built-in CV comparison | RMSE within 20% of each other (documents built-in CV bug) |
+| E5 | Convergence sweep with `metric="mae"` | metric == the same subset's `compute_cv_diagnostics` MAE (zero extra CV, V55nw); MAE decreasing with N |
 
 ### Category F: UQ Propagation
 

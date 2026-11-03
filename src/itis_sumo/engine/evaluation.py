@@ -760,6 +760,91 @@ def _cv_subset_diagnostics(
     )
 
 
+# --- convergence metric vocabulary -------------------------------------------
+# Every name below is derived from data the CV pass ALREADY returns per draw
+# (the `compute_cv_diagnostics` bundle), so selecting one never costs a second
+# CV rerun (V16wq). The same literal vocabulary is documented on
+# `compute_cv_convergence`, in docs/how-to/cross-validate.md, and it is what
+# `report.render_convergence` labels its axis with:
+#   rmse        accuracy: diagnostics["root_mean_squared"]   (the default)
+#   mae         accuracy: diagnostics["mean_abs"]
+#   bias        accuracy: diagnostics["mean_signed_error"], SIGNED (a systematic
+#               over/under-prediction that nets out of rmse/mae)
+#   coverage95  calibration: empirical fraction of held-out observations inside
+#               predicted +- z95 * predicted_std (V19cz), i.e. does the
+#               surrogate's own spread earn trust as N grows
+# Accuracy metrics aggregate across bootstrap draws by averaging the per-draw
+# value. `coverage95` aggregates POOLED (V19cz: per-draw tail coverage is
+# meaningless below N~50 held-out points): its `metric` is the coverage over
+# every draw's held-out points together, while `draws` still carries each draw's
+# own coverage so the cloud shows how noisy a single draw's estimate is.
+_CV_METRIC_KEYS: dict[str, str] = {
+    "rmse": "root_mean_squared",
+    "mae": "mean_abs",
+    "bias": "mean_signed_error",
+}
+_CV_COVERAGE_METRIC_LEVELS: dict[str, float] = {"coverage95": 0.95}
+# the ONE vocabulary: derived from the two tables above so it cannot drift
+# from what the readers actually implement
+_CV_METRICS: tuple[str, ...] = (
+    *_CV_METRIC_KEYS,
+    *_CV_COVERAGE_METRIC_LEVELS,
+)
+
+
+def _resolve_cv_metric(metric: str) -> str:
+    """Normalise + validate a `compute_cv_convergence` metric name.
+
+    Case-insensitive on purpose (a report author types "RMSE" as readily as
+    "rmse"); an unknown name fails at the boundary rather than quietly
+    returning RMSE.
+    """
+    if not isinstance(metric, str):
+        raise TypeError(
+            f"metric must be one of {', '.join(_CV_METRICS)}, got "
+            f"{type(metric).__name__}"
+        )
+    resolved = metric.strip().lower()
+    if resolved not in _CV_METRICS:
+        raise ValueError(
+            f"unknown convergence metric {metric!r}; choose from "
+            f"{', '.join(_CV_METRICS)}"
+        )
+    return resolved
+
+
+def _cv_draw_metric(diagnostics: dict[str, Any], metric: str) -> float:
+    """One bootstrap draw's value of `metric`, read out of its diagnostics bundle."""
+    if metric in _CV_METRIC_KEYS:
+        return float(diagnostics[_CV_METRIC_KEYS[metric]])
+    coverage = compute_coverage(
+        diagnostics["actual"],
+        diagnostics["predicted"],
+        diagnostics["predicted_std"],
+        levels=(_CV_COVERAGE_METRIC_LEVELS[metric],),
+    )
+    return float(coverage["empirical"][0])
+
+
+def _cv_pooled_metric(draw_diagnostics: list[dict[str, Any]], metric: str) -> float:
+    """`metric` over every draw's held-out points pooled (V19cz coverage rule).
+
+    Returns NaN (never raises) when no draw contributed a usable point.
+    """
+    level = _CV_COVERAGE_METRIC_LEVELS[metric]
+    pair_arrays = {
+        key: [value for diag in draw_diagnostics for value in diag[key]]
+        for key in ("actual", "predicted", "predicted_std")
+    }
+    coverage = compute_coverage(
+        pair_arrays["actual"],
+        pair_arrays["predicted"],
+        pair_arrays["predicted_std"],
+        levels=(level,),
+    )
+    return float(coverage["empirical"][0])
+
+
 def compute_cv_convergence(
     run_dir: Path,
     training_file: Path,
@@ -770,32 +855,86 @@ def compute_cv_convergence(
     max_points: int = 5,
     n_bootstrap: int = 1,
     seed: int = 42,
+    metric: str = "rmse",
 ) -> list[dict[str, Any]]:
     """Rerun manual K-fold CV at increasing training-sample-count subsets.
 
     Reuses `evaluate_sumo_manual_crossvalidation` (the same compute path
-    `/sumo_cross_validation` already runs), deriving RMSE via
-    `compute_cv_accuracy_metrics` at each step. Subset sizes are evenly spaced
+    `/sumo_cross_validation` already runs) once per subset size, then reads the
+    chosen `metric` off the diagnostics that run already produced --
+    `compute_cv_accuracy_metrics`/`compute_coverage` are re-applied to the pairs
+    in hand, never a second CV pass. Subset sizes are evenly spaced
     between `min_samples` and the full sample count, capped at `max_points` to
     bound the number of extra Dakota reruns. Returns a
-    `{n_samples, metric, metric_std, n_bootstrap, draws, diagnostics}` series for
-    accuracy-vs-N plotting -- `draws` is the raw (pre-aggregation) RMSE per
-    bootstrap draw at that size (length 1 when `n_bootstrap<=1` or at the
-    full-sample point), for callers that want the individual points rather
-    than just the mean/std (e.g. fitting a trend across the pooled draws).
-    `diagnostics` is the full `compute_cv_diagnostics` bundle per draw (V16wq) --
-    MAE/Tukey-outlier-count/paired-ttest/Cohen's-d/raw actual+predicted -- so a
-    caller wanting a different metric never needs a second CV rerun.
+    `{n_samples, metric, metric_std, n_bootstrap, draws, diagnostics,
+    metric_name}` series for accuracy-vs-N plotting -- `draws` is the raw
+    (pre-aggregation) value per bootstrap draw at that size (length 1 when
+    `n_bootstrap<=1` or at the full-sample point), for callers that want the
+    individual points rather than just the mean/std (e.g. fitting a trend across
+    the pooled draws). `diagnostics` is the full `compute_cv_diagnostics` bundle
+    per draw (V16wq) -- MAE/Tukey-outlier-count/paired-ttest/Cohen's-d/raw
+    actual+predicted+predicted_std -- so a caller wanting a different metric
+    never needs a second CV rerun.
+
+    Args:
+        run_dir: Where each subset's CV run directories are written.
+        training_file: Space-separated training table (e.g. staged via
+            `fit(..., workspace=...)`).
+        input_vars: Input variable columns.
+        output_response: Response (QoI) column.
+        N_CROSS_VALIDATION: K-fold count per subset (capped at the subset size).
+        min_samples: Smallest subset size to evaluate.
+        max_points: Cap on the number of subset sizes (bounds the reruns).
+        n_bootstrap: Distinct random subsets per size (see below); default 1.
+        seed: Subsample seed; the sweep is deterministic given it (V25sd).
+        metric: Which quantity the series tracks -- the accuracy/calibration
+            vocabulary the CV pass already produces, so switching it is FREE
+            (no extra CV rerun, V16wq):
+
+            - `"rmse"` (default) root mean squared error, original units.
+            - `"mae"` mean absolute error, original units.
+            - `"bias"` mean SIGNED error `mean(actual - predicted)`, original
+              units: a systematic offset that rmse/mae can hide.
+            - `"coverage95"` empirical fraction of held-out observations inside
+              `predicted +- z95 * predicted_std` (V19cz), a fraction in [0, 1]:
+              whether the surrogate's own spread earns trust as N grows.
+
+            Names are matched case-insensitively; an unknown name raises
+            `ValueError`, a non-string `TypeError`. For the accuracy metrics
+            `metric` is the mean of `draws`; for `"coverage95"` it is the
+            coverage over ALL draws' held-out points POOLED (V19cz: a single
+            draw's tail coverage is meaningless below ~50 points), so that one
+            number is not the mean of `draws` -- `draws` still carries each
+            draw's own value.
+            `metric_std` is the spread across draws either way.
+
+    Returns:
+        One entry per subset size, in increasing `n_samples`:
+
+            {
+                "n_samples": int,          # training samples in this subset
+                "metric": float,           # aggregate value of `metric`
+                "metric_std": float,       # std across bootstrap draws (0.0 for
+                                           # a single deterministic subset)
+                "n_bootstrap": int,        # draws that produced this point
+                "draws": [float, ...],     # per-draw `metric`
+                "diagnostics": [dict, ...],# per-draw compute_cv_diagnostics
+                                           # bundle (aligned with `draws`)
+                "metric_name": str,        # the resolved `metric` token, so a
+                                           # rendering can label its axis
+            }
 
     `n_bootstrap` (default 1, i.e. a single deterministic first-`n`-rows
     subset per size) draws that many *distinct* random subsets (no
     replacement) of each subset size below the full sample count and reports
-    the mean/std RMSE across them via a seeded `np.random.Generator` -- one
-    arbitrary subset is a noisy point estimate of "does more data help";
+    the mean/std of `metric` across them via a seeded `np.random.Generator` --
+    one arbitrary subset is a noisy point estimate of "does more data help";
     bootstrapping estimates the trend with its own spread. The full-sample
     point always runs once (`metric_std=0.0`): there is only one subset of
     that size, so bootstrapping it is meaningless.
     """
+    resolved_metric = _resolve_cv_metric(metric)
+    is_pooled = resolved_metric in _CV_COVERAGE_METRIC_LEVELS
     n_total = len(load_data(training_file))
     subset_sizes = _convergence_subset_sizes(n_total, min_samples, max_points)
     rng = np.random.default_rng(seed)
@@ -803,57 +942,66 @@ def compute_cv_convergence(
     series = []
     for n in subset_sizes:
         if n >= n_total or n_bootstrap <= 1:
-            diag = _cv_subset_diagnostics(
-                run_dir,
-                training_file,
-                input_vars,
-                output_response,
-                N_CROSS_VALIDATION,
-                n,
-                None,
-                str(n),
+            draw_diagnostics = [
+                _cv_subset_diagnostics(
+                    run_dir,
+                    training_file,
+                    input_vars,
+                    output_response,
+                    N_CROSS_VALIDATION,
+                    n,
+                    None,
+                    str(n),
+                )
+            ]
+            draw_values = [
+                _cv_draw_metric(diag, resolved_metric) for diag in draw_diagnostics
+            ]
+            # the pre-bootstrap point shape: one deterministic subset, no spread
+            metric_value = draw_values[0]
+            metric_std = 0.0
+            n_draws = 1
+        else:
+            draw_diagnostics = [
+                _cv_subset_diagnostics(
+                    run_dir,
+                    training_file,
+                    input_vars,
+                    output_response,
+                    N_CROSS_VALIDATION,
+                    n,
+                    rng.choice(n_total, size=n, replace=False).tolist(),
+                    f"{n}_draw{draw}",
+                )
+                for draw in range(n_bootstrap)
+            ]
+            draw_values = [
+                _cv_draw_metric(diag, resolved_metric) for diag in draw_diagnostics
+            ]
+            # every draw can come back NaN (e.g. too few points/fold for the surrogate to
+            # train at all) -- nanmean/nanstd on an all-NaN slice warn but still return NaN,
+            # so short-circuit instead of letting that warning through on an expected case.
+            valid_values = [value for value in draw_values if not np.isnan(value)]
+            # V19cz: tail coverage pools the drawn points themselves; an accuracy
+            # metric averages the per-draw values.
+            metric_value = (
+                _cv_pooled_metric(draw_diagnostics, resolved_metric)
+                if is_pooled
+                else (float(np.mean(valid_values)) if valid_values else float("nan"))
             )
-            rmse = diag["root_mean_squared"]
-            series.append(
-                {
-                    "n_samples": n,
-                    "metric": rmse,
-                    "metric_std": 0.0,
-                    "n_bootstrap": 1,
-                    "draws": [rmse],
-                    "diagnostics": [diag],
-                }
-            )
-            continue
-
-        draw_diagnostics = [
-            _cv_subset_diagnostics(
-                run_dir,
-                training_file,
-                input_vars,
-                output_response,
-                N_CROSS_VALIDATION,
-                n,
-                rng.choice(n_total, size=n, replace=False).tolist(),
-                f"{n}_draw{draw}",
-            )
-            for draw in range(n_bootstrap)
-        ]
-        draw_rmses = [diag["root_mean_squared"] for diag in draw_diagnostics]
-        # every draw can come back NaN (e.g. too few points/fold for the surrogate to
-        # train at all) -- nanmean/nanstd on an all-NaN slice warn but still return NaN,
-        # so short-circuit instead of letting that warning through on an expected case.
-        valid_rmses = [r for r in draw_rmses if not np.isnan(r)]
+            metric_std = float(np.std(valid_values)) if valid_values else float("nan")
+            n_draws = n_bootstrap
         series.append(
             {
                 "n_samples": n,
-                "metric": float(np.mean(valid_rmses)) if valid_rmses else float("nan"),
-                "metric_std": float(np.std(valid_rmses))
-                if valid_rmses
-                else float("nan"),
-                "n_bootstrap": n_bootstrap,
-                "draws": draw_rmses,
+                "metric": metric_value,
+                "metric_std": metric_std,
+                "n_bootstrap": n_draws,
+                "draws": draw_values,
+                # per-draw compute_cv_diagnostics bundles, aligned with `draws`
+                # (V16wq): the data every metric was read off
                 "diagnostics": draw_diagnostics,
+                "metric_name": resolved_metric,
             }
         )
 

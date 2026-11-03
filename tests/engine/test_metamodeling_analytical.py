@@ -29,10 +29,12 @@ import pytest
 from scipy.special import erfinv
 
 from itis_sumo.engine.evaluation import (
+    compute_cv_convergence,
     evaluate_sumo,
     evaluate_sumo_along_axes,
     evaluate_sumo_manual_crossvalidation,
     evaluate_sumo_on_grid,
+    fit_convergence_exponential,
 )
 from itis_sumo.tabular.processing import create_manual_uq_samples
 
@@ -235,6 +237,40 @@ class TestSurrogateAccuracy:
             rmses[n] = _rmse(expected, result["y_hat"])
 
         assert rmses[60] < rmses[15] < rmses[6]
+
+    def test_cv_convergence_tracks_mae_with_training_size(self, run_dir):
+        """`compute_cv_convergence` on f(x) = sin(x), metric="mae".
+
+        Two things at once, on the SAME CV passes: a non-RMSE metric is
+        selectable and equals the diagnostics bundle's own MAE (V16wq), and the
+        accuracy trend is monotone with training-sample count. The training rows
+        are shuffled so each first-n-rows subset is a random draw over the whole
+        domain, not a growing prefix.
+        """
+        x = np.linspace(0.0, 6 * np.pi, 24)
+        order = np.random.default_rng(7).permutation(24)
+        x, y = x[order], np.sin(x[order])
+        train_file = _write_processed(
+            pd.DataFrame({"x": x, "y": y}), run_dir / "train_processed.txt"
+        )
+
+        series = compute_cv_convergence(
+            run_dir, train_file, ["x"], "y", min_samples=10, max_points=3, metric="mae"
+        )
+
+        assert [point["n_samples"] for point in series] == [10, 17, 24]
+        assert all(point["metric_name"] == "mae" for point in series)
+        metrics = [point["metric"] for point in series]
+        assert metrics[0] > metrics[1] > metrics[2]
+        for point in series:
+            # the series number IS the bundle number for this subset (no rerun)
+            assert point["metric"] == pytest.approx(point["diagnostics"][0]["mean_abs"])
+
+        # and a trend fit reads any metric series, not just RMSE (V18wp)
+        fit = fit_convergence_exponential(
+            [point["n_samples"] for point in series], metrics, asymptotic=False
+        )
+        assert fit["r_squared"] > 0.9
 
     def test_variance_near_zero_at_training_points_grows_away(self, run_dir):
         """B8: predictive variance ~0 at training points, larger when extrapolating far away."""

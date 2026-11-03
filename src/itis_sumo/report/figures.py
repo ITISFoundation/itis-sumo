@@ -44,6 +44,28 @@ __all__ = [
     "render_uncertainty",
 ]
 
+# Axis vocabulary for `render_convergence`, keyed by the `metric_name` the
+# series carries. This is presentation, not a statistic: the numbers stay the
+# producing function's, only the label of the axis they sit on is chosen here
+# (V54hz). A metric the table does not know still plots, labelled by its own
+# token, so a future engine-side metric never renders as a mystery axis.
+_METRIC_AXIS_LABELS: dict[str, str] = {
+    "rmse": "RMSE (original units)",
+    "mae": "MAE (original units)",
+    "bias": "signed bias (original units)",
+    "coverage95": "95% interval coverage (fraction)",
+}
+_METRIC_Y_RANGE: dict[str, tuple[float, float]] = {"coverage95": (0.0, 1.0)}
+# the nominal level a coverage curve is read against (a definition, like
+# render_cross_validation's parity line: layout decoration, not a statistic)
+_METRIC_NOMINAL: dict[str, float] = {"coverage95": 0.95}
+
+
+def _series_metric_name(series: list) -> str | None:
+    """The metric one convergence series tracks, if the entries agree on one."""
+    names = {entry.get("metric_name") for entry in series if entry.get("metric_name")}
+    return next(iter(names)) if len(names) == 1 else None
+
 
 def _parity_line(values: list[float]) -> tuple[float, float]:
     usable = [v for v in values if not math.isnan(v)]
@@ -384,7 +406,12 @@ def render_convergence(series: list, **kwargs) -> go.Figure:
 
     Line and error bars are the series entries' own `metric`/`metric_std`;
     the faint markers are their `draws` — spread is shown, not re-derived.
-    Consumes the list returned by `compute_cv_convergence`.
+    Consumes the list returned by `compute_cv_convergence`, for ANY metric that
+    function documents: the axis label follows each entry's `metric_name`, so a
+    MAE/bias/coverage sweep reads correctly instead of claiming to be RMSE.
+    A coverage sweep additionally gets its nominal 95% reference line (layout
+    decoration) and a fixed 0–1 axis, because "does coverage settle AT the
+    nominal level" is the whole question there.
 
     kwargs pass through to the plotly layout; escape hatch: the returned
     Figure (`fig.write_html(...)`, `fig.to_image(...)`, or take `fig.data` apart).
@@ -418,10 +445,23 @@ def render_convergence(series: list, **kwargs) -> go.Figure:
             hoverinfo="skip",
         )
     )
-    fig.update_layout(
-        title="CV convergence",
-        xaxis_title="training samples",
-        yaxis_title="metric",
-    )
+    layout: dict = {
+        "title": "CV convergence",
+        "xaxis_title": "training samples",
+        "yaxis_title": "metric",
+    }
+    name = _series_metric_name(series)
+    if name is not None:
+        layout["title"] = f"CV convergence — {name}"
+        layout["yaxis_title"] = _METRIC_AXIS_LABELS.get(name, name)
+        if (y_range := _METRIC_Y_RANGE.get(name)) is not None:
+            layout["yaxis_range"] = list(y_range)
+        if (nominal := _METRIC_NOMINAL.get(name)) is not None:
+            fig.add_hline(
+                y=nominal,
+                line={"dash": "dot", "color": "black"},
+                annotation_text=f"nominal {nominal:.0%}",
+            )
+    fig.update_layout(**layout)
     fig.update_layout(**kwargs)
     return fig

@@ -5,7 +5,10 @@ convergence-series orchestration (Dakota-dependent `evaluate_sumo_manual_crossva
 call is monkeypatched to keep the tests fast and deterministic).
 """
 
+from typing import Any
+
 import numpy as np
+import pandas as pd
 import pytest
 
 from itis_sumo.engine.evaluation import (
@@ -552,3 +555,372 @@ class TestFitConvergenceExponential:
     def test_raises_below_three_valid_points(self):
         with pytest.raises(ValueError):
             fit_convergence_exponential([10.0, 20.0], [1.0, 0.5])
+
+
+# ---------------------------------------------------------------------------
+# Metric-selectable convergence.
+#
+# Both read data the CV pass ALREADY produces (V16wq), so every test here also
+# pins the cost claim: the number of CV reruns must not change when the caller
+# switches metric.
+# ---------------------------------------------------------------------------
+
+
+def _write_training_file(path, n_total: int, seed: int):
+    rng = np.random.default_rng(seed)
+    x1 = rng.uniform(-1, 1, n_total)
+    y = x1 * 2.0
+    path.write_text(
+        "x1 y\n" + "".join(f"{xi} {yi}\n" for xi, yi in zip(x1, y)), encoding="utf-8"
+    )
+    return path
+
+
+def _recording_cv(residual, std):
+    """A `evaluate_sumo_manual_crossvalidation` stand-in with a KNOWN output.
+
+    `residual` (`actual - predicted`, the sign convention
+    `compute_cv_accuracy_metrics` uses) and `std` are each a scalar/list cycled
+    over the held-out rows, or a `callable(subset_df) -> array`. Each call's
+    arrays are recorded, so a test can compare the series against
+    `compute_cv_accuracy_metrics`/`compute_cv_diagnostics` over exactly the same
+    pairs.
+    """
+    seen: list[dict[str, list[float]]] = []
+
+    def _column(spec, subset, n):
+        values = spec(subset) if callable(spec) else spec
+        return np.asarray(np.resize(values, n), dtype=float)
+
+    def fake_manual_cv(
+        run_dir, subset_file, input_vars, output_response, N_CROSS_VALIDATION=5
+    ):
+        subset = pd.read_csv(subset_file, sep=" ")
+        actual = subset[output_response].astype(float).to_numpy()
+        predicted = actual - _column(residual, subset, len(actual))
+        predicted_std = _column(std, subset, len(actual))
+        seen.append(
+            {
+                "actual": actual.tolist(),
+                "predicted": predicted.tolist(),
+                "predicted_std": predicted_std.tolist(),
+            }
+        )
+        return {
+            output_response: actual.tolist(),
+            output_response + "_hat": predicted.tolist(),
+            output_response + "_std_hat": predicted_std.tolist(),
+        }
+
+    return fake_manual_cv, seen
+
+
+# Chosen so rmse / mae / bias are three different numbers (a constant residual
+# would make them collapse into one) and bias comes out positive.
+_RESIDUAL_CYCLE = [0.5, -0.1, 0.2, -0.3, 0.4]
+_FLAT_STD = 0.2
+
+
+class TestComputeCvConvergenceMetric:
+    def test_metric_matches_the_bundles_own_number_for_the_same_subset(
+        self, tmp_path, monkeypatch
+    ):
+        """V16wq: `metric="mae"` (and every other accuracy name) returns exactly
+        what `compute_cv_accuracy_metrics`/`compute_cv_diagnostics` report for
+        the same subset -- the series re-reads, it does not re-compute."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=11
+        )
+        fake, seen = _recording_cv(_RESIDUAL_CYCLE, _FLAT_STD)
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        for metric, key in (
+            ("rmse", "root_mean_squared"),
+            ("mae", "mean_abs"),
+            ("bias", "mean_signed_error"),
+        ):
+            seen.clear()
+            series = compute_cv_convergence(
+                tmp_path / metric,
+                training_file,
+                ["x1"],
+                "y",
+                min_samples=5,
+                max_points=2,
+                metric=metric,
+            )
+            assert len(series) == len(seen)
+            for point, pairs in zip(series, seen):
+                metrics = compute_cv_accuracy_metrics(
+                    pairs["actual"], pairs["predicted"]
+                )
+                bundle = compute_cv_diagnostics(
+                    pairs["actual"], pairs["predicted"], pairs["predicted_std"]
+                )
+                assert point["metric_name"] == metric
+                assert point["draws"] == [pytest.approx(metrics[key])]
+                assert point["metric"] == pytest.approx(metrics[key])
+                # the bundle riding along agrees with the series number
+                assert point["diagnostics"][0][key] == pytest.approx(metrics[key])
+                assert bundle[key] == pytest.approx(metrics[key])
+
+    def test_the_three_accuracy_metrics_are_distinct_and_bias_is_signed(
+        self, tmp_path, monkeypatch
+    ):
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=12
+        )
+        fake, _ = _recording_cv(_RESIDUAL_CYCLE, _FLAT_STD)
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        values = {
+            metric: compute_cv_convergence(
+                tmp_path / metric,
+                training_file,
+                ["x1"],
+                "y",
+                min_samples=5,
+                max_points=2,
+                metric=metric,
+            )[0]["metric"]
+            for metric in ("rmse", "mae", "bias")
+        }
+
+        assert len({round(value, 9) for value in values.values()}) == 3
+        assert values["rmse"] > 0.0 and values["mae"] > 0.0
+        # only the SIGNED metric carries the direction of the residual cycle at all
+        assert values["bias"] > 0.0
+
+    def test_switching_metric_costs_no_extra_cv_rerun(self, tmp_path, monkeypatch):
+        """The whole point of V16wq: a metric is chosen from data already in hand."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=13
+        )
+        fake, seen = _recording_cv(_RESIDUAL_CYCLE, _FLAT_STD)
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        counts = {}
+        for metric in ("rmse", "mae", "bias", "coverage95", "rmse"):
+            seen.clear()
+            series = compute_cv_convergence(
+                tmp_path / metric,
+                training_file,
+                ["x1"],
+                "y",
+                min_samples=5,
+                max_points=3,
+                n_bootstrap=2,
+                metric=metric,
+            )
+            counts[metric] = len(seen)
+            # one CV rerun per (size, draw), ever
+            assert len(seen) == sum(point["n_bootstrap"] for point in series), (
+                "switching metric must not trigger an extra CV pass"
+            )
+
+        assert set(counts.values()) == {counts["rmse"]}
+        # sizes [5, 7, 10]: two draws below full size, one at it
+        assert counts["rmse"] == 2 + 2 + 1
+
+    def test_coverage95_is_pooled_over_draws_while_draws_stay_per_draw(
+        self, tmp_path, monkeypatch
+    ):
+        """V19cz: one draw's tail coverage is noise, so the aggregate covers
+        every draw's held-out points TOGETHER; `draws` keeps each draw's own
+        value, so the cloud still shows that noise."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=14
+        )
+        # std tracks |x1|, so |residual|/std straddles the 95% critical z and the
+        # per-draw coverages really differ from each other and from the pool
+        fake, seen = _recording_cv(
+            0.1, lambda subset: 0.02 + 0.1 * np.abs(subset["x1"])
+        )
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        series = compute_cv_convergence(
+            tmp_path,
+            training_file,
+            ["x1"],
+            "y",
+            min_samples=5,
+            max_points=2,
+            n_bootstrap=3,
+            metric="coverage95",
+        )
+        small, full = series
+
+        draws = seen[:3]
+        expected_metric = compute_coverage(
+            [v for pairs in draws for v in pairs["actual"]],
+            [v for pairs in draws for v in pairs["predicted"]],
+            [v for pairs in draws for v in pairs["predicted_std"]],
+            levels=(0.95,),
+        )["empirical"][0]
+        expected_draws = [
+            compute_coverage(
+                pairs["actual"],
+                pairs["predicted"],
+                pairs["predicted_std"],
+                levels=(0.95,),
+            )["empirical"][0]
+            for pairs in draws
+        ]
+
+        assert small["metric"] == pytest.approx(expected_metric)
+        assert small["draws"] == [pytest.approx(value) for value in expected_draws]
+        assert 0.0 < small["metric"] < 1.0  # not a degenerate 0/1 fixture
+        assert len({round(value, 12) for value in expected_draws}) > 1
+        # the single (full-sample) point is its own pool: metric == its only draw
+        assert full["metric"] == pytest.approx(full["draws"][0])
+        assert full["metric_std"] == 0.0
+
+    def test_metric_names_are_case_insensitive(self, tmp_path, monkeypatch):
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=15
+        )
+        fake, _ = _recording_cv(_RESIDUAL_CYCLE, _FLAT_STD)
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        loud = compute_cv_convergence(
+            tmp_path / "loud", training_file, ["x1"], "y", min_samples=5, metric=" MAE "
+        )
+        quiet = compute_cv_convergence(
+            tmp_path / "quiet", training_file, ["x1"], "y", min_samples=5, metric="mae"
+        )
+        assert loud == quiet
+        assert loud[0]["metric_name"] == "mae"
+
+    def test_unknown_metric_fails_loud(self, tmp_path):
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=16
+        )
+        with pytest.raises(ValueError, match="unknown convergence metric"):
+            compute_cv_convergence(tmp_path, training_file, ["x1"], "y", metric="r2")
+
+    def test_non_string_metric_is_a_type_error(self, tmp_path):
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=17
+        )
+        wrong: Any = 1.0  # what a caller who never read the docstring sends
+        with pytest.raises(TypeError, match="metric must be one of"):
+            compute_cv_convergence(tmp_path, training_file, ["x1"], "y", metric=wrong)
+
+    def test_default_series_shape_only_grows(self, tmp_path, monkeypatch):
+        """Additive-only guarantee: the pre-existing keys, their meaning and the
+        RMSE numbers are untouched; exactly `metric_name` is added."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 10, seed=18
+        )
+        fake, _ = _recording_cv(_RESIDUAL_CYCLE, _FLAT_STD)
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+        legacy_keys = {
+            "n_samples",
+            "metric",
+            "metric_std",
+            "n_bootstrap",
+            "draws",
+            "diagnostics",
+        }
+
+        series = compute_cv_convergence(
+            tmp_path,
+            training_file,
+            ["x1"],
+            "y",
+            min_samples=5,
+            max_points=2,
+            n_bootstrap=2,
+        )
+
+        for point in series:
+            assert legacy_keys <= set(point)
+            assert set(point) - legacy_keys == {"metric_name"}
+            # unchanged meaning: the RMSE the bundled diagnostics report
+            if point["n_bootstrap"] == 1:
+                assert point["metric"] == pytest.approx(
+                    point["diagnostics"][0]["root_mean_squared"]
+                )
+                assert point["metric_std"] == 0.0
+        assert all(point["metric_name"] == "rmse" for point in series)
+
+
+class TestFitConvergenceExponentialIsMetricAgnostic:
+    """V18wp on any metric series — for coverage the interesting question is
+    whether it settles AT the nominal level or below it, and that is exactly
+    what the floor parameter `c` answers."""
+
+    def test_recovers_a_coverage_floor_at_the_nominal_level(self):
+        level = 0.95
+        n = np.linspace(10, 200, 30)
+        values = 0.30 * np.exp(-0.05 * n) + level
+
+        fit = fit_convergence_exponential(n.tolist(), values.tolist(), asymptotic=True)
+
+        assert fit["c"] == pytest.approx(level, rel=1e-3)
+        assert fit["r_squared"] == pytest.approx(1.0, abs=1e-6)
+
+    def test_recovers_a_coverage_floor_below_the_nominal_level(self):
+        """Miscalibration that does NOT wash out with more data: the floor IS the
+        answer, and a zero-asymptote fit would have been nonsense (V19cz)."""
+        n = np.linspace(10, 200, 30)
+        values = 0.30 * np.exp(-0.05 * n) + 0.78
+
+        fit = fit_convergence_exponential(n.tolist(), values.tolist(), asymptotic=True)
+
+        assert fit["c"] == pytest.approx(0.78, rel=1e-3)
+        assert fit["c"] < 0.95
+
+    def test_fits_a_coverage_series_straight_out_of_the_convergence_run(
+        self, tmp_path, monkeypatch
+    ):
+        """No metric-specific branch anywhere: the fit takes whatever
+        `compute_cv_convergence(metric="coverage95")` produced."""
+        training_file = _write_training_file(
+            tmp_path / "df_processed_jobs.dat", 20, seed=31
+        )
+        # a genuinely improving calibration: the residual shrinks with the subset
+        # size while the reported spread varies across rows
+        fake, _ = _recording_cv(
+            lambda subset: 0.25 * np.exp(-0.15 * len(subset)),
+            lambda subset: 0.02 + 0.06 * np.abs(subset["x1"]),
+        )
+        monkeypatch.setattr(
+            "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
+        )
+
+        series = compute_cv_convergence(
+            tmp_path,
+            training_file,
+            ["x1"],
+            "y",
+            min_samples=6,
+            max_points=4,
+            n_bootstrap=2,
+            metric="coverage95",
+        )
+        coverages = [point["metric"] for point in series]
+        assert coverages[-1] > coverages[0]  # the sweep really moves
+
+        fit = fit_convergence_exponential(
+            [e["n_samples"] for e in series for _ in e["draws"]],
+            [d for e in series for d in e["draws"]],
+            asymptotic=True,
+        )
+
+        assert set(fit) == {"a", "b", "c", "r_squared"}
+        # curve_fit is unconstrained, so the floor is read as "converges to
+        # (about) full coverage" rather than clipped into [0, 1] by the fitter
+        assert fit["c"] == pytest.approx(1.0, abs=0.1)

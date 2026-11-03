@@ -241,6 +241,7 @@ def _synthetics() -> dict[str, Any]:
                 "n_bootstrap": 2,
                 "draws": [0.4, 0.6],
                 "diagnostics": [],
+                "metric_name": "rmse",
             },
             {
                 "n_samples": 20,
@@ -249,6 +250,7 @@ def _synthetics() -> dict[str, Any]:
                 "n_bootstrap": 2,
                 "draws": [0.25, 0.35],
                 "diagnostics": [],
+                "metric_name": "rmse",
             },
         ],
         "convergence_fit": {"a": 1.0, "b": 0.1, "r_squared": 0.98},
@@ -344,6 +346,44 @@ def test_uncertainty_summary_renders_scalars_only_and_bins_separately() -> None:
     bins = report.render_uncertainty_bins(summary)
     assert len(bins) == len(summary.bin_means)
     assert bins["bin_end"].iloc[0] == pytest.approx(bins["bin_start"].iloc[1])
+
+
+def test_render_convergence_labels_the_axis_with_the_series_own_metric() -> None:
+    """A MAE or coverage sweep must not arrive labelled RMSE: the axis follows
+    `metric_name`, and a coverage sweep gets its nominal 95% reference line."""
+    base = _synthetics()["convergence"]
+
+    mae = report.render_convergence(
+        [{**entry, "metric_name": "mae"} for entry in base],
+    )
+    assert mae.layout.yaxis.title.text == "MAE (original units)"
+    assert "mae" in mae.layout.title.text
+
+    coverage = report.render_convergence(
+        [{**entry, "metric_name": "coverage95"} for entry in base]
+    )
+    assert coverage.layout.yaxis.title.text == "95% interval coverage (fraction)"
+    assert list(coverage.layout.yaxis.range) == [0.0, 1.0]
+    assert coverage.layout.shapes, "a coverage plot needs its nominal reference line"
+
+    # a metric this build does not know still plots, wearing its own name
+    future = report.render_convergence(
+        [{**entry, "metric_name": "crps"} for entry in base]
+    )
+    assert future.layout.yaxis.title.text == "crps"
+
+
+def test_render_convergence_defaults_for_a_metric_blind_series() -> None:
+    """Back-compat: a series produced before `metric_name` existed renders
+    exactly as it always did."""
+    legacy = [
+        {k: v for k, v in entry.items() if k != "metric_name"}
+        for entry in _synthetics()["convergence"]
+    ]
+    figure = report.render_convergence(legacy)
+    assert figure.layout.title.text == "CV convergence"
+    assert figure.layout.yaxis.title.text == "metric"
+    assert not figure.layout.shapes
 
 
 def test_cv_diagnostics_table_drops_the_pair_arrays() -> None:

@@ -72,7 +72,8 @@ poor design coverage) rather than "just needs more points":
 from itis_sumo import compute_cv_convergence, fit_convergence_exponential
 
 curve = compute_cv_convergence(run_dir, training_file, ["width", "height"], "stress")
-# series of {n_samples, metric, metric_std, n_bootstrap, draws, diagnostics}
+# series of {n_samples, metric, metric_std, n_bootstrap, draws, diagnostics,
+#            metric_name}
 
 fit = fit_convergence_exponential(
     [e["n_samples"] for e in curve for _ in e["draws"]],
@@ -81,6 +82,30 @@ fit = fit_convergence_exponential(
 )
 fit["c"], fit["r_squared"]  # irreducible floor + fit quality
 ```
+
+### Choosing what the curve tracks
+
+`metric` picks which quantity the series follows. Every name is computed from
+data the CV pass already produces per bootstrap draw, so **switching metric
+costs no extra cross-validation** (V16wq) — it is a different reading of the
+same runs:
+
+| `metric` | what it is | units |
+| --- | --- | --- |
+| `"rmse"` (default) | root mean squared error | your QoI's units |
+| `"mae"` | mean absolute error | your QoI's units |
+| `"bias"` | mean **signed** error, `mean(actual − predicted)` — the systematic over/under-prediction RMSE and MAE can net away | your QoI's units, signed |
+| `"coverage95"` | fraction of held-out observations inside `predicted ± z₉₅·predicted_std` (V19cz) | fraction, 0…1 |
+
+Each series point keeps the whole `compute_cv_diagnostics` bundle per draw in
+`diagnostics`, so a name not in the table is still one line of arithmetic away.
+For the three accuracy metrics `metric` is the mean over `draws`; for
+`"coverage95"` it is the coverage over all draws' held-out points **pooled**
+(one draw's tail coverage is noise below ~50 points, V19cz), while `draws` keeps
+each draw's own value. `fit_convergence_exponential` is metric-agnostic — for
+coverage the floor is the interesting number: `fit["c"] ≈ 0.95` means coverage
+settles **at** nominal, `fit["c"] < 0.95` means the variance model stays
+miscalibrated no matter how much data you add.
 
 !!! note "The one explicitly-staged function"
     `compute_cv_convergence` re-runs K-fold CV per subset size, so it is the
