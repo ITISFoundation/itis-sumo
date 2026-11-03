@@ -26,7 +26,6 @@ from itis_sumo.tabular.processing import (
 # ---------------------------------------------------------------------------
 # 1. LHS Sampling
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestLhs:
     def test_output_shape(self):
         H = lhs(n=3, k=7, seed=42)
@@ -63,7 +62,6 @@ class TestLhs:
 # ---------------------------------------------------------------------------
 # 2. Grid & Sweep Sampling
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestCreateGridSamples:
     def test_2d_grid_point_count(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -118,7 +116,6 @@ class TestCreateGridSamples:
         assert (df["y"] == 7.0).all()
 
 
-@pytest.mark.unit
 class TestCreateSamplesAlongAxes:
     def test_correct_total_point_count(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -156,7 +153,6 @@ class TestCreateSamplesAlongAxes:
 # ---------------------------------------------------------------------------
 # 3. Surrogate Model Building & shared Dakota config primitives
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestDakotaConfigGeneration:
     def test_start_dakota_file_contains_environment(self):
         result = start_dakota_file()
@@ -238,7 +234,6 @@ class TestDakotaConfigGeneration:
 # ---------------------------------------------------------------------------
 # 4. Cross-Validation
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestKFoldEquivalentFolds:
     def test_fold_layout_frozen(self):
         # The manual-CV validation-index layout, frozen as a literal. It was
@@ -254,7 +249,6 @@ class TestKFoldEquivalentFolds:
 # ---------------------------------------------------------------------------
 # 5. Uncertainty Quantification
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestCreateManualUqSamples:
     def test_normal_distribution_mean_and_std(self):
         samples = create_manual_uq_samples(
@@ -347,7 +341,6 @@ class TestCreateManualUqSamples:
         assert all(v == 2.0 for v in samples["y"])
 
 
-@pytest.mark.unit
 class TestGetBoundsUniformDistributions:
     def test_get_bounds_uniform_distribution(self):
         dist = {"distribution": "uniform", "min": -1.0, "max": 5.0}
@@ -387,11 +380,9 @@ class TestGetBoundsUniformDistributions:
             get_bounds_uniform_distributions(input_vars, distributions)
 
 
-@pytest.mark.unit
 # ---------------------------------------------------------------------------
 # 6. Data Filtering
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
 class TestFilterData:
     def test_keep_idxs(self):
         df = pd.DataFrame({"a": [10, 20, 30, 40, 50], "b": [5, 4, 3, 2, 1]})
@@ -424,9 +415,6 @@ class TestFilterData:
 # ---------------------------------------------------------------------------
 # DEFERRED: MOGA / Pareto (not this round — see docs/TIER1_TIER2_UNIT_TESTS_PLAN.md)
 # ---------------------------------------------------------------------------
-@pytest.mark.unit
-@pytest.mark.unit
-@pytest.mark.unit
 class TestMogaConfigGeneration:
     def test_create_moga_optimization_has_all_blocks(self, tmp_path):
         build = tmp_path / "build.txt"

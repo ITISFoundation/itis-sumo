@@ -35,8 +35,6 @@ from itis_sumo import (
 )
 from itis_sumo.surrogate._session import SumoSession, _minimum_samples
 
-pytestmark = pytest.mark.unit
-
 VARIABLES = ["width", "height"]
 RESPONSE = "stress"
 

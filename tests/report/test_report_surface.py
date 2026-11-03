@@ -20,12 +20,9 @@ from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
-import plotly.graph_objects as go
 import pytest
 
 import itis_sumo
-from itis_sumo import report
-from itis_sumo.report import Section, sections
 from itis_sumo.types import (
     AlongAxesResult,
     AxisSweep,
@@ -43,9 +40,23 @@ from itis_sumo.types import (
     VariableDiagnostics,
 )
 
+try:
+    import plotly.graph_objects as go
+
+    from itis_sumo import report
+    from itis_sumo.report import Section, sections
+
+    print("report-depencencies imported correctly")
+
+except ImportError:
+    print("report import failed. Make sure report-extra-dependencies are installed.")
+
+
 REPO = Path(__file__).resolve().parents[2]
 
-pytestmark = pytest.mark.unit
+# this module imports plotly which is a "report" extra dependency
+# thus cannot run against core itis-sumo package
+pytestmark = pytest.mark.integration
 
 
 def test_report_all_importable_and_sorted() -> None:

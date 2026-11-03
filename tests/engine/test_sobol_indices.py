@@ -19,8 +19,6 @@ import pytest
 
 from itis_sumo.engine.evaluation import SOBOL_BASE_SAMPLES
 
-pytestmark = pytest.mark.unit
-
 
 def _ishigami(x: np.ndarray) -> np.ndarray:
     """Ishigami test function: f(x1,x2,x3) = sin(x1) + 7*sin²(x2) + 0.1*x3⁴*sin(x1).

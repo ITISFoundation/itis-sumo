@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "itis-sumo"
-version = "0.2.0a13"
+version = "0.2.0a14"
 description = "Surrogate Modeling functionality for IT'IS Foundation / ZMT Modeling Intelligence suite: build, evaluate, cross-validate surrogates + UQ + sampling, headless or embedded"
 readme = "README.md"
 # T55kd: the 6.24.13 engine wheel matrix is cp312-cp314 (6.24.8 dropped cp311,
@@ -98,9 +98,8 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ["-v", "--tb=short", "--strict-markers"]
+## unit-tests -- negation of integration & analytical (see CI configuration)
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-    "analytical: marks tests that spawn a real Dakota subprocess against known analytical functions",
+    "integration: needs more than the bare core wheel (engine execution, or the [report] extra)",
+    "analytical: spawns a real Dakota subprocess against known analytical functions",
 ]
