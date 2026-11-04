@@ -3,7 +3,7 @@
 These assert the promises SPEC makes to whoever embeds itis-sumo, independently
 of what Dakota happens to compute: the vocabulary of the public surface, what a
 caller is allowed to pass, what comes back, which errors escape, and what happens
-to working files. See SPEC V19cn, V20dm, V21pf, V22rs, V23er, V24af, V25sd.
+to working files. See SPEC V19cn, V20dm, V21pf, V22rs, V23er, V24af, V25sd, V59tp.
 """
 
 from __future__ import annotations
@@ -404,3 +404,49 @@ class TestSpecValidation:
         # requirements (e.g. the log-uniform needing a usable upper bound) are
         # enforced where the shape is interpreted.
         api.DistributionSpec("uniform", minimum=1.0)  # must not raise
+
+
+class TestTrainingSurfaceCarriesTheDeclaredScale:
+    """SPEC V59tp (B30hd): a public function that TRAINS must see the declared scale.
+
+    Every session-based function takes ``preprocessing``, so a QoI the app declares ``scale="log"``
+    is fitted in log space wherever the app asks for it. The file-based CV/convergence family takes
+    paths and column names instead, so it fits that SAME QoI linearly and reports a metric whose
+    space is inferred from whichever file the caller happened to pass: same data, same name, two
+    numbers whose difference is the transform -- and nothing anywhere says so.
+
+    T64fv owns the repair, and its NOTE says the route is conversion behind the handle, so the rule
+    lands here as an expected failure instead of as a §V line nobody runs. ``strict=True`` is what
+    keeps it honest: the day the family takes the spec, the unexpected pass breaks CI until the
+    marker comes off (V57jk's clause -- a rule named in §V must be enforced by something that can
+    fail).
+    """
+
+    # A training-file argument is what "I fit on rows handed to me as a file" looks like from
+    # outside. The DataFrame path already carries `preprocessing` everywhere (V21pf), which is why
+    # no allow-list of "real trainers" is needed here -- and why diagnostics like `analyze_dataset`
+    # are not accused of a fit they never perform.
+    TRAINING_FILE_ARGUMENTS = ("training_file", "PROCESSED_TRAINING_FILE")
+
+    @classmethod
+    def _public_trainers_without_the_spec(cls) -> list[str]:
+        offenders: list[str] = []
+        for name in api.__all__:
+            function = getattr(api, name)
+            if not inspect.isfunction(function):
+                continue
+            parameters = inspect.signature(function).parameters
+            trains_from_a_file = not parameters.keys().isdisjoint(
+                cls.TRAINING_FILE_ARGUMENTS
+            )
+            if trains_from_a_file and "preprocessing" not in parameters:
+                offenders.append(name)
+        return offenders
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="V59tp is OWED, not met: the file-based convergence family cannot see a column's "
+        "declared scale (B30hd). Remove this marker when T64fv's conversion hands it the spec.",
+    )
+    def test_every_public_trainer_takes_the_preprocessing_spec(self):
+        assert self._public_trainers_without_the_spec() == []
