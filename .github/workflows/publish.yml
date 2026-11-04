@@ -83,14 +83,55 @@ jobs:
           python -m pip install "$wheel"
           python -m pytest -m "not integration and not analytical"
 
+      # V54hz keeps plotly+marimo out of core, so the built wheel's own metadata is the ONLY way a
+      # consumer learns the extra exists. Asserted by PARSING that metadata, not grepping it: the first
+      # version demanded `extra == "report"` while hatchling writes `extra == 'report'`, so the guard
+      # could never match the artifact it guards — `v0.2.0a16` died on a CORRECT wheel (B29jm), and
+      # `a14`/`a15` had died one step earlier on B27qx's collection error, which is what hid this third
+      # defect in the same chain. tests/repo/test_publish_metadata_check.py runs the block below
+      # verbatim, over METADATA as the build actually emits it: an assertion never rehearsed against
+      # the artifact it asserts is B27qx's lesson, applied to the release path (V58dq).
       - name: Report-deps are available
         run: |
           set -euo pipefail
-          wheel="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
-          unzip -p "$wheel" '*/METADATA' \
-            | grep -E 'Requires-Dist: (plotly|marimo).*extra == "report"' \
-            | grep -q . \
-            || { echo "built wheel advertises no [report] presentation requirements"; exit 1; }
+          python - "$(find dist -maxdepth 1 -name '*.whl' -print -quit)" <<'PY'
+          # check:report-extra:start — everything between the two sentinels is executed by
+          # tests/repo/test_publish_metadata_check.py; keep it dependency-free stdlib.
+          import re
+          import sys
+          import zipfile
+          from email import message_from_string
+          from pathlib import Path
+
+          WANTED = {"plotly", "marimo"}
+          # Quote- and spacing-insensitive on purpose: which of them the backend chooses is the
+          # backend's business (B29jm), and continuation headers (the multi-line License:) are why
+          # this parses headers instead of scanning lines.
+          MARKER = re.compile(r"""extra\s*==\s*['\"]report['\"]""")
+
+          with zipfile.ZipFile(Path(sys.argv[1])) as archive:
+              name = next(n for n in archive.namelist() if n.endswith("/METADATA"))
+              metadata = message_from_string(archive.read(name).decode("utf-8"))
+
+          extras = [value.strip().lower() for value in metadata.get_all("Provides-Extra", [])]
+          if "report" not in extras:
+              sys.exit(f"built wheel advertises no [report] extra (Provides-Extra: {extras})")
+
+          gated = set()
+          for value in metadata.get_all("Requires-Dist", []):
+              if MARKER.search(value.partition(";")[2]):
+                  gated.add(re.split(r"[<>=!~;[ ]", value, maxsplit=1)[0].strip().lower())
+
+          missing = sorted(WANTED - gated)
+          if missing:
+              sys.exit(
+                  f"built wheel's [report] extra advertises none of {', '.join(missing)};"
+                  f" found {', '.join(sorted(gated)) or 'nothing'} — presentation deps belong in"
+                  " [project.optional-dependencies].report (V54hz)"
+              )
+          print(f"[report] extra carries {sorted(WANTED & gated)}")
+          # check:report-extra:end
+          PY
 
 
   # Configure Trusted Publishers for this workflow in both package indexes:
