@@ -161,6 +161,18 @@ class UncertaintySummary:
     std: float
     minimum: float
     maximum: float
+    # Pool percentiles and shape, additive (T67kb) and in the response's original
+    # units except that `skew`/`kurt` are dimensionless. `summarize_uncertainty`
+    # always fills them; a hand-built summary may omit them, hence the defaults --
+    # `None` means "this summary does not carry that statistic", never "it is 0".
+    # `bins_start`/`bins_end` stay the BINNING range, so a tail is read from `p1`
+    # and `p99` and never from a clipped histogram edge.
+    p1: float | None = None
+    p5: float | None = None
+    p95: float | None = None
+    p99: float | None = None
+    skew: float | None = None
+    kurt: float | None = None
 
 
 @dataclass(frozen=True)

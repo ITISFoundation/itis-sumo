@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 
 import itis_sumo
-from itis_sumo.engine.evaluation import _CV_METRICS
+from itis_sumo.engine.evaluation import _CV_METRICS, _UQ_METRICS
 from itis_sumo.types import (
     AlongAxesResult,
     AxisSweep,
@@ -467,6 +467,87 @@ def test_render_convergence_reads_spread_from_the_series() -> None:
     assert list(figure.data[1].x) == [10, 10, 20, 20]
 
 
+def _propagation_points(none_point: bool = False) -> list[dict]:
+    """A `SuMo.uq_convergence_curve`-shaped synthetic series: same point keys and
+    the full `uq_` token map, built here so the rendering contract is testable
+    without an engine (the real shape's acceptance is in the analytical suite)."""
+    sizes = (6, 33, 60) if none_point else (6, 60)
+    points = []
+    for n in sizes:
+        dead = none_point and n == 33
+        points.append(
+            {
+                "n_samples": n,
+                "metrics": (
+                    dict.fromkeys(_UQ_METRICS, None)
+                    if dead
+                    else {t: float(n) + i for i, t in enumerate(_UQ_METRICS)}
+                ),
+                "metrics_std": (
+                    dict.fromkeys(_UQ_METRICS, None)
+                    if dead
+                    else dict.fromkeys(_UQ_METRICS, 0.25)
+                ),
+                "draws_by_metric": (
+                    {t: [] for t in _UQ_METRICS}
+                    if dead
+                    else {t: [float(n), float(n) + 1.0] for t in _UQ_METRICS}
+                ),
+                "n_bootstrap": 0 if dead else 2,
+            }
+        )
+    return points
+
+
+def test_render_convergence_plots_a_propagation_series_without_new_rendering() -> None:
+    """V54hz + T67kb: `SuMo.uq_convergence_curve` returns the SAME point shape as
+    the CV sweep, so the existing renderer consumes it with a `uq_` token — same
+    line/cloud/error-bar machinery, no new rendering, and a title that names the
+    instrument actually in the reader's hand."""
+    figure = report.render_convergence(_propagation_points(), metric="uq_p99")
+
+    # uq_p99 is the 7th token in reading order: value = n + 6
+    assert list(figure.data[0].y) == pytest.approx([12.0, 66.0])
+    assert list(figure.data[0].error_y.array) == pytest.approx([0.25, 0.25])
+    assert list(figure.data[1].y) == pytest.approx([6.0, 7.0, 60.0, 61.0])
+    assert (
+        figure.layout.yaxis.title.text == "propagated 99th percentile (original units)"
+    )
+    assert "UQ propagation" in figure.layout.title.text
+    assert not figure.layout.shapes, "a percentile has no nominal level"
+
+
+def test_render_convergence_keeps_the_axis_when_a_point_died() -> None:
+    """A size whose every bootstrap draw failed keeps its place on the axis: the
+    line shows a GAP there, the x position survives — a gap you can see beats a
+    curve that quietly got shorter (and the renderer re-derives nothing)."""
+    figure = report.render_convergence(
+        _propagation_points(none_point=True), metric="uq_median"
+    )
+
+    assert list(figure.data[0].x) == [6, 33, 60]
+    assert figure.data[0].y[1] is None
+    assert list(figure.data[0].y)[0::2] == pytest.approx([10.0, 64.0])
+
+
+def test_propagation_labels_state_the_units_the_token_claims() -> None:
+    """Skewness under "original units" is a lie: the dimensionless shape
+    statistics must say dimensionless on the axis, and the unit-bearing tokens
+    name the response's units. Which tokens exist at all is pinned to the
+    engine's table by `test_every_engine_metric_wears_a_label`, so neither copy
+    can drift alone."""
+    presentation = report.figures._METRIC_PRESENTATION
+
+    assert all(
+        "original units" in presentation[token][0]
+        for token in _UQ_METRICS
+        if not token.endswith(("skew", "kurt"))
+    )
+    assert all(
+        "dimensionless" in presentation[token][0] for token in ("uq_skew", "uq_kurt")
+    )
+
+
 def test_render_convergence_fails_loud_on_a_metric_it_cannot_plot() -> None:
     series = _synthetics()["convergence"]
 
@@ -508,6 +589,7 @@ def test_every_engine_metric_wears_a_label() -> None:
     presentation = report.figures._METRIC_PRESENTATION
 
     assert set(_CV_METRICS) <= set(presentation)
+    assert set(_UQ_METRICS) <= set(presentation)
     assert all(label for label, _ in presentation.values())
 
 

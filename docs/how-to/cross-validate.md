@@ -149,6 +149,44 @@ miscalibrated no matter how much data you add.
     this page runs through the handle. `render_convergence` /
     `render_convergence_fit` present the curve and the fit.
 
+### The other convergence question: propagated-distribution convergence
+
+The CV sweep answers *"are the surrogate's own predictions and spread
+trustworthy at N?"*. If what you want is *"what do the **distributions I
+declared** on the inputs do to the QoI at N?"* — how the propagated tails,
+centre and shape move as the training set grows — that is
+`SuMo.uq_convergence_curve`: the surrogate is **refit at each subset size**
+and the same stated distributions are propagated through each refit.
+
+```python
+from itis_sumo import DistributionSpec, fit
+from itis_sumo.report import render_convergence
+
+model = fit(samples, ["width", "height"], "stress", workspace=run_dir)
+curve = model.uq_convergence_curve(
+    distributions={
+        "width": DistributionSpec("normal", mean=0.0, std=0.02),
+        "height": DistributionSpec("normal", mean=0.0, std=0.01),
+    },
+    min_samples=10,
+    n_bootstrap=3,
+)
+render_convergence(curve, metric="uq_p99")  # same point shape, same renderer
+```
+
+Every point carries the CV curve's point shape, so nothing new is learned to
+plot it; the tokens are `uq_mean`, `uq_std`, `uq_p1`, `uq_p5`, `uq_median`,
+`uq_p95`, `uq_p99`, `uq_skew`, `uq_kurt` — in your QoI's units except the
+last two, which are dimensionless (`uq_kurt` is excess kurtosis, and its
+sampling error is ≈ √(24/M) over the M propagated values behind it, so read
+it as shape direction, not shape value). The tail is **two-sided** on
+purpose: a QoI going negative is a lower-tail failure that an upper-tail
+curve cannot see. The last point is the number the UQ panel shows for the
+whole training set, and wild tails at small N are the expected shape of this
+instrument — the declared distributions reaching further than the subset
+ever covered — not something the sweep clips. Pass `n_histograms=1` to
+propagate the inputs alone, without the surrogate's own spread at that N.
+
 ## Reading the numbers
 
 - **RMSE / MAE / max-abs error** (`root_mean_squared`, `mean_abs`, `max_abs`)
