@@ -17,12 +17,17 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
-from typing import Self, cast
+from typing import Any, Self, cast
 
 import numpy as np
 import pandas as pd
 
 from itis_sumo.engine.evaluation import (
+    _UQ_METRIC_KEYS,
+    _UQ_METRICS,
+    _convergence_subset_sizes,
+    _cv_mean,
+    _cv_spread,
     evaluate_sobol_indices,
     evaluate_sumo,
     evaluate_sumo_along_axes,
@@ -32,6 +37,7 @@ from itis_sumo.engine.evaluation import (
     import_sumo_model,
     perform_moga_optimization,
     sample_and_propagate_uq,
+    summarize_uncertainty_samples,
 )
 from itis_sumo.engine.helpers import create_run_dir
 from itis_sumo.engine.sumo_model_store import (
@@ -47,6 +53,7 @@ from itis_sumo.errors import (
 from itis_sumo.tabular.preprocessor import DataPreprocessor
 from itis_sumo.tabular.processing import load_data
 from itis_sumo.types import (
+    DEFAULT_SEED,
     AlongAxesResult,
     AxisSweep,
     CrossValidationResult,
@@ -85,6 +92,25 @@ def _require_exact_coverage(
         raise SumoInputError(
             f"{what} must cover variables exactly; missing={missing}, unknown={unknown}"
         )
+
+
+def _uq_draw_point(
+    base: int, n_total: int, size: int, draw: int
+) -> tuple[list[int], int]:
+    """One draw's (training rows, propagation seed), deterministic per (size, draw).
+
+    The rows are a DISTINCT without-replacement subset (no training row duplicated
+    inside a subset — the same semantics `compute_cv_convergence` gives its
+    bootstrap draws), and both numbers come from a SeedSequence over
+    [base, size, draw] (NEP 19) INSTEAD OF one shared Generator consumed in sweep
+    order — so neither a point's subset nor its randomness depends on how many
+    sizes or draws came before it: raising `n_bootstrap` or adding a size to the
+    sweep leaves the other points' numbers alone instead of quietly renumbering
+    them (V25sd).
+    """
+    rng = np.random.default_rng([abs(base), size, draw])
+    rows = rng.choice(n_total, size=size, replace=False).tolist()
+    return rows, int(rng.integers(0, 2**31 - 1))
 
 
 def _stderr_tail(run_dir: Path | None) -> str:
@@ -720,6 +746,256 @@ class SumoSession:
             prediction_stds=pieces["prediction_stds"],
             propagated=[list(row) for row in pieces["propagated"]],
         )
+
+    def uq_convergence_curve(
+        self,
+        *,
+        distributions: Mapping[str, DistributionSpec],
+        min_samples: int = 5,
+        max_points: int = 5,
+        n_bootstrap: int = 1,
+        num_samples: int = 1000,
+        n_histograms: int = 100,
+        seed: int = DEFAULT_SEED,
+    ) -> list[dict[str, Any]]:
+        """How the PROPAGATED output distribution moves as the training set grows.
+
+        Refits the surrogate on each subset size and propagates the SAME stated
+        ``distributions`` through each refit, so the only thing changing along the
+        curve is how much data the surrogate saw. This is the sibling of the CV
+        convergence series, not the same question: that one asks whether the
+        surrogate's own predictions and spread are trustworthy at N, this one asks
+        what the input uncertainty you declared does to the response at N. Each
+        size therefore carries the two-sided tail (`p1`/``p5``/``median``/``p95``/
+        ``p99``) alongside ``mean``/``std``/``skew``/``kurt`` — two-sided because a
+        lower-tail failure (a QoI going negative, say) is invisible to a curve that
+        only plots the upper tail.
+
+        Composition, not a second implementation: each subset is a fresh session
+        carrying this handle's own ``preprocessing`` (V21pf keeps the column scales
+        there, so a QoI declared log is refit as log at every size), the
+        propagation is this handle's own :meth:`sample_uncertainty` (V53md), and
+        every statistic is read off the one summary point the codebase has. No
+        number here is re-derived, and the series is returned in
+        ``compute_cv_convergence``'s point shape so ``render_convergence`` consumes
+        it with ``metric="uq_p99"`` and no new rendering (V54hz).
+
+        Args:
+            distributions: Per-variable Monte-Carlo input distributions, held
+                FIXED along the curve and covering the variables exactly. They are
+                a specification, not something inferred from the subset in play —
+                the subset changes, the claim about the world does not.
+            min_samples: Smallest training subset; may not be below the
+                ``max(5, n_variables + 1)`` Dakota floor.
+            max_points: Cap on the number of subset sizes, evenly spaced from
+                ``min_samples`` to the full sample count — the same rule, and the
+                same parameter names, as `compute_cv_convergence`, so the two
+                curves share an x-axis. Bounds the number of engine runs.
+            n_bootstrap: Distinct random subsets per size (never resampling with
+                replacement, so no training row is duplicated inside a subset),
+                matching `compute_cv_convergence`'s semantics: ``metrics_std`` then
+                answers the same question on both curves. ``1`` means one
+                deterministic first-``n``-rows subset per size. The full-sample
+                point always runs once — there is only one subset of that size.
+            num_samples: Monte-Carlo draws per propagation.
+            n_histograms: Predictive-spread injections per draw, kept at
+                :meth:`sample_uncertainty`'s default so the curve's LAST point is
+                exactly the number ``summarize_uncertainty`` reports for the whole
+                training set today — the point of a convergence curve inside an app
+                is that it ends at the number the app shows. The consequence is
+                that the pool is input uncertainty PLUS the surrogate's own spread
+                at that N; ``n_histograms=1`` gives pure input propagation.
+            seed: Base seed. Per-(size, draw) seeds are derived from it (V25sd), so
+                the whole sweep is reproducible from the one number you see in the
+                result.
+
+        Returns:
+            One entry per subset size, in increasing ``n_samples``:
+
+                {
+                    "n_samples": int,          # training rows this point refit on
+                    "metrics": {token: float},  # all nine, aggregated over draws
+                    "metrics_std": {token: float},  # spread ACROSS draws (0.0 for
+                                               # a single deterministic subset)
+                    "draws_by_metric": {token: [float, ...]},  # raw per-draw value
+                    "n_bootstrap": int,        # draws that PRODUCED this point
+                    "num_samples": int,        # MC draws behind each of them
+                    "n_histograms": int,
+                    "distributions": dict,     # the spec held fixed along the curve
+                    "seed": int,               # base seed; draws derive from it
+                    "warnings": [str, ...],    # per-(size, draw) refit aborts
+                }
+
+            Tokens are ``uq_mean``, ``uq_std``, ``uq_p1``, ``uq_p5``,
+            ``uq_median``, ``uq_p95``, ``uq_p99``, ``uq_skew``, ``uq_kurt``. All
+            carry the response's ORIGINAL units (V22rs) except ``uq_skew``/
+            ``uq_kurt``, which are dimensionless — say so on the axis with
+            ``yaxis_title`` when plotting those two.
+
+            None semantics: a subset whose surrogate Dakota cannot train is
+            skipped, its reason appended to that point's ``warnings``, and the
+            point is aggregated over the draws that did land — the same warn-and-
+            continue `compute_cv_diagnostics` gives an abandoned fold (B22wk,
+            B23rt), because small subsets are exactly where a near-degenerate fit
+            is expected ⊥ exceptional. A size whose every draw failed keeps its
+            place on the axis with ``None`` metrics rather than vanishing: a gap
+            you can see beats a curve that quietly got shorter. ``n_bootstrap``
+            then reads as the number of draws that survived, which is also why the
+            raw per-draw values are returned — ``uq_skew``/``uq_kurt`` sampling
+            error is a function of that count (SE ≈ √(24/M)).
+
+            A settled tail is not automatically a measured one: at small N the
+            declared distributions can reach further than the subset ever covered,
+            and the surrogate's answer out there is extrapolation. That is the
+            expected shape of this curve — the instrument exists to show the tails
+            wild at low N ∧ settling as data grows — so nothing here clips,
+            censors, or caveats them away.
+
+        Raises:
+            SumoInputError: Distributions do not cover the variables exactly, a
+                log-scale column's distribution cannot be sampled in the fit space,
+                ``min_samples`` is below the Dakota floor, the handle is a loaded
+                model (this retrains, T57rc scope), or there is no room for a
+                single subset size.
+            SumoEngineError: Only for a failure outside the sweep's per-draw
+                handling; a refit that aborts is reported in ``warnings``.
+        """
+        if self._loaded_model_id is not None:
+            raise SumoInputError(
+                "uq_convergence_curve retrains at every subset size and is not "
+                "supported on a loaded model (T57rc scope): fit it again."
+            )
+        _require_exact_coverage(distributions, self._variables, what="Distributions")
+        # Validate the distributions against the FIT SPACE before the first engine
+        # call: inside the sweep a raise is read as a refit abort, and a caller
+        # error would otherwise come back as a curve of None instead of a message.
+        self._uq_engine_distributions(distributions)
+
+        n_total = len(self._samples)
+        floor = _minimum_samples(len(self._variables))
+        if min_samples < floor:
+            raise SumoInputError(
+                f"min_samples={min_samples} is below the {floor} samples needed to "
+                f"fit a surrogate over {len(self._variables)} variables"
+            )
+        sizes = _convergence_subset_sizes(n_total, min_samples, max_points)
+        if not sizes:
+            raise SumoInputError(
+                f"{n_total} training samples leave no room for a size between "
+                f"min_samples={min_samples} and the full count; fit on more samples "
+                "or lower min_samples"
+            )
+
+        series: list[dict[str, Any]] = []
+        for size in sizes:
+            if size >= n_total or n_bootstrap <= 1:
+                # the single-draw point shape: first `size` rows on the base seed
+                draws_spec = [(list(range(size)), seed)]
+            else:
+                draws_spec = [
+                    _uq_draw_point(seed, n_total, size, draw)
+                    for draw in range(n_bootstrap)
+                ]
+
+            draw_metrics: list[dict[str, float]] = []
+            warnings: list[str] = []
+            for draw, (rows, draw_seed) in enumerate(draws_spec):
+                try:
+                    draw_metrics.append(
+                        self._uq_propagation_metrics(
+                            rows,
+                            distributions,
+                            num_samples=num_samples,
+                            n_histograms=n_histograms,
+                            seed=draw_seed,
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001 - draw-scoped warn & continue
+                    warnings.append(
+                        f"n_samples={size} draw {draw} was skipped: refitting or "
+                        f"propagating on that subset failed ({exc})"
+                    )
+                    _logger.warning(
+                        "uq_convergence_curve: size %d draw %d skipped: %s",
+                        size,
+                        draw,
+                        exc,
+                    )
+
+            if draw_metrics:
+                draws_by_metric = {
+                    token: [metrics[token] for metrics in draw_metrics]
+                    for token in _UQ_METRICS
+                }
+                # Same aggregation the CV series uses, so `metrics_std` means one
+                # thing on both curves: mean over the draws, spread ACROSS them.
+                metrics = {
+                    token: _cv_mean(values) for token, values in draws_by_metric.items()
+                }
+                metrics_std = {
+                    token: _cv_spread(values)
+                    for token, values in draws_by_metric.items()
+                }
+            else:
+                # a comprehension, not `dict.fromkeys(..., [])`: the latter would
+                # hand every token the SAME list object
+                draws_by_metric = {token: [] for token in _UQ_METRICS}
+                metrics = {token: None for token in _UQ_METRICS}
+                metrics_std = {token: None for token in _UQ_METRICS}
+
+            series.append(
+                {
+                    "n_samples": size,
+                    "metrics": metrics,
+                    "metrics_std": metrics_std,
+                    "draws_by_metric": draws_by_metric,
+                    "n_bootstrap": len(draw_metrics),
+                    "num_samples": num_samples,
+                    "n_histograms": n_histograms,
+                    "distributions": dict(distributions),
+                    "seed": seed,
+                    "warnings": warnings,
+                }
+            )
+        return series
+
+    def _uq_propagation_metrics(
+        self,
+        rows: Sequence[int],
+        distributions: Mapping[str, DistributionSpec],
+        *,
+        num_samples: int,
+        n_histograms: int,
+        seed: int,
+    ) -> dict[str, float]:
+        """Refit on ONE subset and read the nine statistics off that propagation.
+
+        The subset session gets this handle's own ``preprocessing``, so the scale
+        each column is fit in is the declared one at every size (V21pf) ∧ the
+        preprocessing itself is re-fit on the subset, exactly as a consumer
+        refitting by hand would. Its run dir lands under this handle's run dir, so
+        the artifacts follow the handle's lifetime (V24af) ∧ a preserved subset
+        run dir is the evidence of the abort named in that point's ``warnings``.
+        """
+        assert self._run_dir is not None
+        subset = self._samples.iloc[list(rows)]
+        with SumoSession(
+            subset,
+            self._variables,
+            self._response,
+            preprocessing=self._spec,
+            workspace=self._run_dir,
+        ) as session:
+            draws = session.fit().sample_uncertainty(
+                distributions=distributions,
+                num_samples=num_samples,
+                n_histograms=n_histograms,
+                seed=seed,
+            )
+        summary = summarize_uncertainty_samples(
+            np.asarray(draws.propagated, dtype=float)
+        )
+        return {token: float(summary[key]) for token, key in _UQ_METRIC_KEYS.items()}
 
     def _uq_engine_distributions(
         self, distributions: Mapping[str, DistributionSpec]

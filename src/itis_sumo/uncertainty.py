@@ -91,7 +91,7 @@ def summarize_uncertainty(
     *,
     num_bins: int | None = None,
 ) -> UncertaintySummary:
-    """Recompute the histogram + boxplot statistics from propagated draws.
+    """Recompute the histogram, boxplot, tail and shape statistics from propagated draws.
 
     Pure function (V52rc): no engine run. Given the ``UncertaintyDraws`` from
     ``sample_uncertainty`` it reproduces exactly the bin statistics the old
@@ -125,4 +125,10 @@ def summarize_uncertainty(
         std=summary["std"],
         minimum=summary["min"],
         maximum=summary["max"],
+        p1=summary["p1"],
+        p5=summary["p5"],
+        p95=summary["p95"],
+        p99=summary["p99"],
+        skew=summary["skew"],
+        kurt=summary["kurt"],
     )

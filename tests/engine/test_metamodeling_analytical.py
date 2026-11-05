@@ -26,8 +26,10 @@ See docs/TIER1_TIER2_UNIT_TESTS_PLAN.md (Tier 3) for scope and rationale.
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import stats
 from scipy.special import erfinv
 
+from itis_sumo import fit
 from itis_sumo.engine.evaluation import (
     compute_cv_convergence,
     evaluate_sumo,
@@ -37,6 +39,7 @@ from itis_sumo.engine.evaluation import (
     fit_convergence_exponential,
 )
 from itis_sumo.tabular.processing import create_manual_uq_samples
+from itis_sumo.types import DistributionSpec
 
 
 @pytest.fixture
@@ -727,3 +730,87 @@ class TestUqPropagation:
         )
         assert np.isclose(samples.mean(), 0.0, atol=0.25)
         assert np.isclose(samples.std(), np.sqrt(4 / 3), atol=0.3)
+
+
+@pytest.mark.analytical
+class TestHandleUqConvergence:
+    """T67kb verification-suite acceptance (issue #81): the propagated distribution
+    `SuMo.uq_convergence_curve` reports at each training-sample size IS real
+    propagation, because it converges to the closed-form answer.
+
+    Each size refits the surrogate on that many rows and pushes the SAME stated
+    Gaussian through the refit. A linear QoI with a normal input has an analytic
+    answer (f = 2x+1, x ~ N(0,1) => y ~ N(1, 4)); `sin` is the weaker nonlinear
+    companion, checked against direct Monte-Carlo in numpy. Acceptance: the
+    percentiles at the full training set land on that truth, and the error at the
+    smallest size is markedly worse. The wild small-N tails are the expected
+    shape of this instrument (declared distributions reaching further than the
+    subset ever covered) and are not censored — which is exactly why they make
+    the shrinkage assertion fail loudly if propagation were faked. Determinism
+    is not re-tested here (V25sd owns it).
+    """
+
+    TAIL_TOKENS = ("uq_p1", "uq_p5", "uq_median", "uq_p95", "uq_p99")
+
+    def _errors(self, curve, reference):
+        """Max abs quantile error per point; a point whose every draw failed
+        (None metrics) becomes +inf so it can never count as converged."""
+        errors = []
+        for point in curve:
+            if point["metrics"][self.TAIL_TOKENS[0]] is None:
+                errors.append(float("inf"))
+                continue
+            errors.append(
+                max(
+                    abs(point["metrics"][token] - truth)
+                    for token, truth in zip(self.TAIL_TOKENS, reference)
+                )
+            )
+        return errors
+
+    def test_linear_normal_curve_converges_to_analytic_quantiles(self):
+        rng = np.random.default_rng(42)
+        x = np.linspace(-4.0, 4.0, 60)
+        # noise: with a noiseless line even 6 points fit exactly and the
+        # shrinkage assertion would have nothing to bite on
+        y = 2.0 * x + 1.0 + rng.normal(0.0, 0.3, x.size)
+        curve = fit(pd.DataFrame({"x": x, "y": y}), ["x"], "y").uq_convergence_curve(
+            distributions={"x": DistributionSpec("normal", mean=0.0, std=1.0)},
+            min_samples=6,
+            max_points=3,
+            num_samples=2000,
+            seed=42,
+        )
+        assert [point["n_samples"] for point in curve] == [6, 33, 60]
+
+        reference = stats.norm.ppf([0.01, 0.05, 0.50, 0.95, 0.99], loc=1.0, scale=2.0)
+        errors = self._errors(curve, reference)
+        assert errors[-1] < 0.5, (
+            f"full-training quantiles off the analytic N(1, 4): {errors[-1]:.3f}"
+        )
+        assert errors[-1] < errors[0], f"quantile error did not shrink with N: {errors}"
+
+    def test_sinusoidal_curve_error_shrinks_with_training_size(self):
+        x = np.linspace(-4.0, 4.0, 60)
+        curve = fit(
+            pd.DataFrame({"x": x, "y": np.sin(x)}), ["x"], "y"
+        ).uq_convergence_curve(
+            distributions={"x": DistributionSpec("normal", mean=0.0, std=1.0)},
+            min_samples=6,
+            max_points=3,
+            num_samples=2000,
+            seed=7,
+        )
+        truth_pool = np.sin(np.random.default_rng(0).normal(0.0, 1.0, 200_000))
+        reference = np.percentile(truth_pool, [1, 5, 50, 95, 99])
+        errors = self._errors(curve, reference)
+
+        last = curve[-1]["metrics"]
+        quantiles = [last[token] for token in self.TAIL_TOKENS]
+        assert quantiles == sorted(quantiles), "reported percentiles must be ordered"
+        assert errors[-1] < 0.2, (
+            f"full-training percentiles off direct Monte-Carlo: {errors[-1]:.3f}"
+        )
+        assert errors[-1] < errors[0], (
+            f"percentile error did not shrink with N: {errors}"
+        )

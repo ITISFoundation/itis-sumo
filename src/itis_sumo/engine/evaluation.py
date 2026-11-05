@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
 from scipy.special import erfinv
-from scipy.stats import ttest_rel
+from scipy.stats import kurtosis, skew, ttest_rel
 
 from itis_sumo.engine.dakota_object import DakotaObject
 from itis_sumo.engine.nidr import (
@@ -272,18 +272,30 @@ def propagate_manual_uq_with_uncertainty(
 def summarize_uncertainty_samples(
     values: np.ndarray, num_bins: int | None = None
 ) -> dict:
-    """Compute histogram + boxplot summary statistics from propagated UQ samples.
+    """Compute histogram + boxplot + distribution-shape statistics from UQ draws.
 
     ``values`` is ``(n_histograms, num_samples)``: histogram bin heights are
     averaged (with their std) across histogram realisations, while boxplot and
     summary statistics are computed on the flattened pool of all samples.
+
+    The percentile keys (``p1``/``p5``/``p95``/``p99``) and the shape keys
+    (``skew``/``kurt``) are properties of that flattened POOL -- they are what a
+    reader means by "the 1st percentile of the propagated response".
+    ``bins_start``/``bins_end`` are the BINNING range: the pool's p1/p99, widened
+    only when the pool is degenerate so the histogram still has bins. In the
+    ordinary case they are numerically the same pair, and nothing here lets a
+    caller pass one off as the other: the percentiles are reported on their own,
+    never as a clipped histogram edge (T67kb).
     """
     all_values_flat = values.flatten()
     if num_bins is None:
         num_bins = min(50, max(10, values.shape[1] // 10))
 
-    hist_min = float(np.percentile(all_values_flat, 1))
-    hist_max = float(np.percentile(all_values_flat, 99))
+    p1 = float(np.percentile(all_values_flat, 1))
+    p5 = float(np.percentile(all_values_flat, 5))
+    p95 = float(np.percentile(all_values_flat, 95))
+    p99 = float(np.percentile(all_values_flat, 99))
+    hist_min, hist_max = p1, p99
     if hist_min == hist_max:
         hist_range = max(1e-10, abs(hist_min) * 1e-6)
         hist_min -= hist_range
@@ -309,6 +321,22 @@ def summarize_uncertainty_samples(
         (all_values_flat < whisker_min) | (all_values_flat > whisker_max)
     ]
 
+    # scipy's bias-corrected sample skewness and Fisher (excess) kurtosis: the
+    # convention a reader checking against scipy or pandas docs expects. Both are
+    # DIMENSIONLESS where every other number here carries the response's units,
+    # and both are noisy -- SE(excess kurtosis) ~ sqrt(24/M) for a well-behaved
+    # pool, so M=1000 draws gives ~0.16: a kurtosis readout at small M is noise
+    # dressed as shape. No minimum-M gate is applied; this caveat is the contract.
+    if all_values_flat.size < 3 or float(np.std(all_values_flat)) == 0.0:
+        # A moment ratio 0/0: skewness and kurtosis are undefined on a pool this
+        # degenerate. Answered as NaN directly rather than letting scipy warn its
+        # way there -- a RuntimeWarning from inside a summary is not information.
+        skewness = float("nan")
+        excess_kurtosis = float("nan")
+    else:
+        skewness = float(skew(all_values_flat))
+        excess_kurtosis = float(kurtosis(all_values_flat))
+
     return {
         "bins_start": hist_min,
         "bins_end": hist_max,
@@ -324,6 +352,12 @@ def summarize_uncertainty_samples(
         "std": float(np.std(all_values_flat)),
         "min": float(np.min(all_values_flat)),
         "max": float(np.max(all_values_flat)),
+        "p1": p1,
+        "p5": p5,
+        "p95": p95,
+        "p99": p99,
+        "skew": skewness,
+        "kurt": excess_kurtosis,
     }
 
 
@@ -836,6 +870,26 @@ _CV_COVERAGE_METRICS: tuple[str, ...] = tuple(
 )
 # the ONE vocabulary a convergence point reports, in plotting order
 _CV_METRICS: tuple[str, ...] = (*_CV_ACCURACY_METRICS, *_CV_COVERAGE_METRICS)
+
+# The propagation family (T67kb, `SuMo.uq_convergence_curve`): each token is ONE
+# number per subset size, read off the single UQ summary point this module has
+# (`summarize_uncertainty_samples`), key by key. The `uq_` prefix is what lets
+# both convergence curves share one flat `metric=` selector vocabulary without a
+# reader needing to know which series they are holding — a p95 from a propagation
+# is not comparable to a coverage number. Order is the reading order: centre,
+# spread, lower tail, middle, upper tail, shape.
+_UQ_METRIC_KEYS: dict[str, str] = {
+    "uq_mean": "mean",
+    "uq_std": "std",
+    "uq_p1": "p1",
+    "uq_p5": "p5",
+    "uq_median": "median",
+    "uq_p95": "p95",
+    "uq_p99": "p99",
+    "uq_skew": "skew",
+    "uq_kurt": "kurt",
+}
+_UQ_METRICS: tuple[str, ...] = tuple(_UQ_METRIC_KEYS)
 
 
 def _cv_draw_metrics(diagnostics: dict[str, Any]) -> dict[str, float]:
