@@ -76,6 +76,8 @@ class TestPublicSurface:
             "SumoResultError",
             "UncertaintyDraws",
             "UncertaintySummary",
+            "UqConvergencePoint",
+            "UqConvergenceResult",
             "VariableDiagnostics",
             "VariableSpec",
             "__version__",

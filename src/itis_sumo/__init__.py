@@ -53,6 +53,8 @@ from itis_sumo.types import (
     SobolResult,
     UncertaintyDraws,
     UncertaintySummary,
+    UqConvergencePoint,
+    UqConvergenceResult,
     VariableDiagnostics,
     VariableSpec,
 )
@@ -85,6 +87,8 @@ __all__ = [
     "SumoResultError",
     "UncertaintyDraws",
     "UncertaintySummary",
+    "UqConvergencePoint",
+    "UqConvergenceResult",
     "VariableDiagnostics",
     "VariableSpec",
     "__version__",

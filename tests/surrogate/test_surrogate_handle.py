@@ -181,9 +181,9 @@ def test_preprocessor_config_round_trip():
 # ------------------------------------------------- uq_convergence_curve (T67kb)
 #
 # The sweep ASSEMBLY contract, with the per-draw refit+propagate step replaced by
-# a recorder: what these pin is sizes, subset semantics, seed derivation,
-# aggregation, and the warn-and-continue lifetime rule — never Dakota. The
-# numbers the curve CONVERGES TO are the analytical suite's job
+# a recorder: what these pin is sizing modes, subset semantics, seed derivation
+# and echoing, aggregation, and the warn-and-continue lifetime rule — never
+# Dakota. The numbers the curve CONVERGES TO are the analytical suite's job
 # (tests/engine/test_metamodeling_analytical.py, T67kb's acceptance clause).
 
 CURVE_DISTRIBUTIONS = {
@@ -210,15 +210,7 @@ def _record_propagation(monkeypatch, fail=None):
         draw = attempts.get(size, 0)
         attempts[size] = draw + 1
         if fail is None or not fail(size, draw):
-            calls.append(
-                {
-                    "size": size,
-                    "rows": list(rows),
-                    "seed": seed,
-                    "num_samples": num_samples,
-                    "n_histograms": n_histograms,
-                }
-            )
+            calls.append({"size": size, "rows": list(rows), "seed": seed})
             return {token: float(seed) for token in _UQ_METRICS}
         raise SumoEngineError(f"synthetic abort at n_samples={size}")
 
@@ -226,34 +218,60 @@ def _record_propagation(monkeypatch, fail=None):
     return calls
 
 
-def test_uq_convergence_curve_single_draw_point_shape(monkeypatch):
+def test_uq_convergence_curve_single_draw_points_and_result_provenance(monkeypatch):
     calls = _record_propagation(monkeypatch)
     model = fit(_samples(), VARIABLES, RESPONSE)
     curve = model.uq_convergence_curve(
         distributions=CURVE_DISTRIBUTIONS,
-        min_samples=5,
-        max_points=4,
+        convergence_steps=[5, 11, 18, 25],
         num_samples=137,
         n_histograms=3,
         seed=11,
     )
-    assert [point["n_samples"] for point in curve] == [5, 11, 18, 25]
+    assert curve.response == RESPONSE
+    assert curve.seed == 11
+    assert curve.num_samples == 137 and curve.n_histograms == 3
+    assert curve.distributions.keys() == CURVE_DISTRIBUTIONS.keys(), (
+        "the fixed spec is echoed ONCE, on the result — it belongs to the sweep"
+    )
+    assert [point.n_samples for point in curve.points] == [5, 11, 18, 25]
     assert [call["size"] for call in calls] == [5, 11, 18, 25]
-    for point, call in zip(curve, calls):
+    for point, call in zip(curve.points, calls):
         # the deterministic single-draw shape: first `size` rows on the base seed
         assert call["rows"] == list(range(call["size"]))
-        assert call["seed"] == 11
-        assert call["num_samples"] == 137 and call["n_histograms"] == 3
-        assert set(point["metrics"]) == set(_UQ_METRICS)
-        assert point["metrics"] == dict.fromkeys(_UQ_METRICS, 11.0)
-        assert all(spread == 0.0 for spread in point["metrics_std"].values())
-        assert point["n_bootstrap"] == 1
-        assert point["warnings"] == []
-        assert point["num_samples"] == 137 and point["n_histograms"] == 3
-        assert point["seed"] == 11
-        assert point["distributions"].keys() == CURVE_DISTRIBUTIONS.keys(), (
-            "the spec is echoed so a saved curve states what it was propagated against"
-        )
+        assert point.draw_seeds == [11], "the effective seed is echoed per point"
+        assert set(point.metrics) == set(_UQ_METRICS)
+        assert point.metrics == dict.fromkeys(_UQ_METRICS, 11.0)
+        assert all(spread == 0.0 for spread in point.metrics_std.values())
+        assert point.n_bootstrap == 1
+        assert point.warnings == []
+        assert not hasattr(point, "distributions"), "no per-point spec echo"
+    model.close()
+
+
+def test_uq_convergence_curve_sizing_modes(monkeypatch):
+    _record_propagation(monkeypatch)
+    model = fit(_samples(), VARIABLES, RESPONSE)
+
+    stepped = model.uq_convergence_curve(
+        distributions=CURVE_DISTRIBUTIONS, min_samples=5, convergence_samples_step=7
+    )
+    assert [point.n_samples for point in stepped.points] == [5, 12, 19, 25], (
+        "step walks up from min_samples and the full count is ALWAYS last"
+    )
+
+    explicit = model.uq_convergence_curve(
+        distributions=CURVE_DISTRIBUTIONS, convergence_steps=[25, 5, 11, 11]
+    )
+    assert [point.n_samples for point in explicit.points] == [5, 11, 25], (
+        "sorted, deduplicated, NOTHING added silently"
+    )
+
+    default = model.uq_convergence_curve(distributions=CURVE_DISTRIBUTIONS)
+    assert [point.n_samples for point in default.points] == [5, 10, 15, 20, 25], (
+        "with neither parameter, the evenly-spaced up-to-5 sweep CV draws by "
+        "default — the two curves share an x-axis out of the box"
+    )
     model.close()
 
 
@@ -262,18 +280,16 @@ def test_uq_convergence_curve_bootstrap_aggregates_distinct_subsets(monkeypatch)
     model = fit(_samples(), VARIABLES, RESPONSE)
     curve = model.uq_convergence_curve(
         distributions=CURVE_DISTRIBUTIONS,
-        min_samples=5,
-        max_points=2,
+        convergence_steps=[5, 25],
         n_bootstrap=3,
         seed=11,
     )
-    assert [point["n_samples"] for point in curve] == [5, 25]
-
-    first, last = curve
+    first, last = curve.points
     seeds = [call["seed"] for call in calls if call["size"] == 5]
     subsets = [call["rows"] for call in calls if call["size"] == 5]
     assert len(seeds) == 3
-    assert first["n_bootstrap"] == 3
+    assert first.n_bootstrap == 3
+    assert first.draw_seeds == seeds, "every attempted draw's seed, in order"
     for subset in subsets:
         assert len(subset) == len(set(subset)) == 5, (
             "distinct rows — never with replacement"
@@ -282,41 +298,42 @@ def test_uq_convergence_curve_bootstrap_aggregates_distinct_subsets(monkeypatch)
     assert len({frozenset(subset) for subset in subsets}) == 3, "distinct SUBSETS"
     assert len(set(seeds)) == 3, "one draw's randomness is not another draw's"
     for token in _UQ_METRICS:
-        assert first["draws_by_metric"][token] == pytest.approx(seeds)
-        assert first["metrics"][token] == pytest.approx(float(np.mean(seeds)))
-        assert first["metrics_std"][token] == pytest.approx(float(np.std(seeds)))
+        assert first.draws_by_metric[token] == pytest.approx(seeds)
+        assert first.metrics[token] == pytest.approx(float(np.mean(seeds)))
+        assert first.metrics_std[token] == pytest.approx(float(np.std(seeds)))
 
     # the full-sample point runs once: there is only one subset of that size
-    assert last["n_bootstrap"] == 1
+    assert last.n_bootstrap == 1
     assert [call["rows"] for call in calls if call["size"] == 25] == [list(range(25))]
-    assert all(spread == 0.0 for spread in last["metrics_std"].values())
+    assert all(spread == 0.0 for spread in last.metrics_std.values())
     model.close()
 
 
 def test_uq_convergence_curve_points_ignore_the_sweep_shape(monkeypatch):
-    """V25sd: a point's rows and seeds derive from (base, size, draw) alone, so
-    changing `max_points` cannot renumber the points that stayed the same."""
+    """V25sd pins bare rerun-reproducibility; what ONLY per-(size, draw) seed
+    derivation guarantees is this: two differently shaped sweeps produce
+    IDENTICAL rows and seeds for the size they share, so changing the sweep
+    cannot renumber the points it has in common."""
     model = fit(_samples(), VARIABLES, RESPONSE)
 
     calls_short = _record_propagation(monkeypatch)
     model.uq_convergence_curve(
         distributions=CURVE_DISTRIBUTIONS,
-        min_samples=5,
-        max_points=2,
+        convergence_steps=[5, 25],
         n_bootstrap=2,
         seed=11,
     )
-    calls_long = _record_propagation(monkeypatch)
+    calls_stepped = _record_propagation(monkeypatch)
     model.uq_convergence_curve(
         distributions=CURVE_DISTRIBUTIONS,
         min_samples=5,
-        max_points=4,
+        convergence_samples_step=7,
         n_bootstrap=2,
         seed=11,
     )
     short_at_5 = [(c["rows"], c["seed"]) for c in calls_short if c["size"] == 5]
-    long_at_5 = [(c["rows"], c["seed"]) for c in calls_long if c["size"] == 5]
-    assert short_at_5 == long_at_5
+    stepped_at_5 = [(c["rows"], c["seed"]) for c in calls_stepped if c["size"] == 5]
+    assert len(short_at_5) == 2 and short_at_5 == stepped_at_5
     model.close()
 
 
@@ -327,24 +344,27 @@ def test_uq_convergence_curve_warns_and_continues_per_draw(monkeypatch):
     model = fit(_samples(), VARIABLES, RESPONSE)
     curve = model.uq_convergence_curve(
         distributions=CURVE_DISTRIBUTIONS,
-        min_samples=5,
-        max_points=4,
+        convergence_steps=[5, 11, 18, 25],
         n_bootstrap=2,
         seed=11,
     )
-    by_size = {point["n_samples"]: point for point in curve}
+    by_size = {point.n_samples: point for point in curve.points}
 
     survivor = [call for call in calls if call["size"] == 18]
     assert len(survivor) == 1, "the failed draw propagated nothing"
     point = by_size[18]
-    assert len(point["warnings"]) == 1
-    assert "n_samples=18 draw 1" in point["warnings"][0]
-    assert point["n_bootstrap"] == 1, "the point reports the draws that PRODUCED it"
-    assert point["metrics"] == dict.fromkeys(_UQ_METRICS, float(survivor[0]["seed"]))
+    assert len(point.warnings) == 1
+    assert "n_samples=18 draw 1" in point.warnings[0]
+    assert len(point.draw_seeds) == 2, "the FAILED draw's seed is echoed too"
+    assert f"seed={point.draw_seeds[1]}" in point.warnings[0], (
+        "the warning names the seed that failed — re-runnable from the result"
+    )
+    assert point.n_bootstrap == 1, "the point reports the draws that PRODUCED it"
+    assert point.metrics == dict.fromkeys(_UQ_METRICS, float(survivor[0]["seed"]))
     for size in (5, 11):
-        assert by_size[size]["warnings"] == []
-        assert by_size[size]["n_bootstrap"] == 2
-    assert by_size[25]["n_bootstrap"] == 1, "the full-sample point always runs once"
+        assert by_size[size].warnings == []
+        assert by_size[size].n_bootstrap == 2
+    assert by_size[25].n_bootstrap == 1, "the full-sample point always runs once"
     model.close()
 
 
@@ -353,20 +373,20 @@ def test_uq_convergence_curve_keeps_the_axis_when_every_draw_fails(monkeypatch):
     model = fit(_samples(), VARIABLES, RESPONSE)
     curve = model.uq_convergence_curve(
         distributions=CURVE_DISTRIBUTIONS,
-        min_samples=5,
-        max_points=4,
+        convergence_steps=[5, 11, 18, 25],
         n_bootstrap=2,
         seed=11,
     )
-    assert [point["n_samples"] for point in curve] == [5, 11, 18, 25], (
+    assert [point.n_samples for point in curve.points] == [5, 11, 18, 25], (
         "a gap beats a shorter curve"
     )
-    dead = curve[1]
-    assert all(value is None for value in dead["metrics"].values())
-    assert all(value is None for value in dead["metrics_std"].values())
-    assert dead["draws_by_metric"] == {token: [] for token in _UQ_METRICS}
-    assert dead["n_bootstrap"] == 0
-    assert len(dead["warnings"]) == 2
+    dead = curve.points[1]
+    assert all(value is None for value in dead.metrics.values())
+    assert all(value is None for value in dead.metrics_std.values())
+    assert dead.draws_by_metric == {token: [] for token in _UQ_METRICS}
+    assert dead.n_bootstrap == 0
+    assert len(dead.draw_seeds) == 2, "failed draws still leave their seeds behind"
+    assert len(dead.warnings) == 2
     assert all(call["size"] != 11 for call in calls)
     model.close()
 
@@ -378,10 +398,40 @@ def test_uq_convergence_curve_rejects_caller_errors_before_the_sweep(monkeypatch
         model.uq_convergence_curve(
             distributions={"length": CURVE_DISTRIBUTIONS["length"]}
         )
+    with pytest.raises(SumoInputError, match="strictly positive"):
+        model.uq_convergence_curve(distributions=CURVE_DISTRIBUTIONS, seed=0)
+    with pytest.raises(SumoInputError, match="strictly positive"):
+        model.uq_convergence_curve(distributions=CURVE_DISTRIBUTIONS, seed=-7)
     with pytest.raises(SumoInputError, match="below the 5 samples"):
         model.uq_convergence_curve(distributions=CURVE_DISTRIBUTIONS, min_samples=4)
     with pytest.raises(SumoInputError, match="leave no room"):
         model.uq_convergence_curve(distributions=CURVE_DISTRIBUTIONS, min_samples=30)
+    with pytest.raises(SumoInputError, match="at least 1"):
+        model.uq_convergence_curve(
+            distributions=CURVE_DISTRIBUTIONS, convergence_samples_step=0
+        )
+    with pytest.raises(SumoInputError, match="mutually exclusive"):
+        model.uq_convergence_curve(
+            distributions=CURVE_DISTRIBUTIONS, min_samples=6, convergence_steps=[10, 20]
+        )
+    with pytest.raises(SumoInputError, match="mutually exclusive"):
+        model.uq_convergence_curve(
+            distributions=CURVE_DISTRIBUTIONS,
+            convergence_samples_step=3,
+            convergence_steps=[10, 20],
+        )
+    with pytest.raises(SumoInputError, match="convergence_steps must name sizes"):
+        model.uq_convergence_curve(
+            distributions=CURVE_DISTRIBUTIONS, convergence_steps=[]
+        )
+    with pytest.raises(SumoInputError, match="convergence_steps must name sizes"):
+        model.uq_convergence_curve(
+            distributions=CURVE_DISTRIBUTIONS, convergence_steps=[4]
+        )
+    with pytest.raises(SumoInputError, match="convergence_steps must name sizes"):
+        model.uq_convergence_curve(
+            distributions=CURVE_DISTRIBUTIONS, convergence_steps=[26]
+        )
     logged = fit(
         _samples(),
         VARIABLES,

@@ -945,6 +945,31 @@ def _cv_spread(values: list[float]) -> float:
     return float(np.std(valid)) if valid else float("nan")
 
 
+def _aggregate_draws(
+    draw_metrics: list[dict[str, float]], names: tuple[str, ...]
+) -> tuple[dict[str, list[float]], dict[str, float], dict[str, float]]:
+    """`(draws_by_metric, metrics, metrics_std)` over one convergence point's draws.
+
+    The shape BOTH convergence curves report (V55nw, and T67kb's reason for
+    reusing it): every metric's raw per-draw values, the aggregate over the
+    draws that produced it, and the spread ACROSS them. A single draw is the
+    pre-bootstrap point shape — the draw's own values, zero spread. A family
+    that aggregates differently for some tokens (CV's POOLED coverage, V19cz)
+    calls this and overrides those `metrics` entries; the trio shape itself is
+    shared, never re-written per call site.
+    """
+    draws_by_metric = {
+        name: [metrics[name] for metrics in draw_metrics] for name in names
+    }
+    if len(draw_metrics) == 1:
+        return draws_by_metric, dict(draw_metrics[0]), dict.fromkeys(names, 0.0)
+    return (
+        draws_by_metric,
+        {name: _cv_mean(values) for name, values in draws_by_metric.items()},
+        {name: _cv_spread(values) for name, values in draws_by_metric.items()},
+    )
+
+
 def compute_cv_convergence(
     run_dir: Path,
     training_file: Path,
@@ -1082,23 +1107,12 @@ def compute_cv_convergence(
             n_draws = n_bootstrap
 
         draw_metrics = [_cv_draw_metrics(diag) for diag in draw_diagnostics]
-        draws_by_metric = {
-            name: [metrics[name] for metrics in draw_metrics] for name in _CV_METRICS
-        }
-        if n_draws == 1:
-            # the pre-bootstrap point shape: one deterministic subset, no spread
-            aggregate = dict(draw_metrics[0])
-            spread = dict.fromkeys(_CV_METRICS, 0.0)
-        else:
+        draws_by_metric, aggregate, spread = _aggregate_draws(draw_metrics, _CV_METRICS)
+        if n_draws > 1:
             # V19cz: tail coverage pools the drawn points themselves; an accuracy
-            # metric averages the per-draw values.
-            aggregate = {
-                name: _cv_mean(draws_by_metric[name]) for name in _CV_ACCURACY_METRICS
-            }
+            # metric averages the per-draw values (that averaging is what
+            # `_aggregate_draws` already computed, and what gets overridden here).
             aggregate.update(_cv_pooled_coverage(draw_diagnostics))
-            spread = {
-                name: _cv_spread(values) for name, values in draws_by_metric.items()
-            }
         series.append(
             {
                 "n_samples": n,

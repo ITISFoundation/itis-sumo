@@ -38,6 +38,8 @@ from itis_sumo.types import (
     SobolResult,
     UncertaintyDraws,
     UncertaintySummary,
+    UqConvergencePoint,
+    UqConvergenceResult,
     VariableDiagnostics,
 )
 
@@ -101,6 +103,7 @@ def test_catalog_covers_the_result_types() -> None:
     nested = {
         "OutlierSummary",  # row fields of render_diagnostics
         "VariableDiagnostics",  # rendered row-wise inside DatasetDiagnostics
+        "UqConvergenceResult",  # plot its .points via render_convergence
     }
     assert results - consumed == nested
 
@@ -546,6 +549,40 @@ def test_propagation_labels_state_the_units_the_token_claims() -> None:
     assert all(
         "dimensionless" in presentation[token][0] for token in ("uq_skew", "uq_kurt")
     )
+
+
+def test_render_convergence_takes_the_typed_curve_directly() -> None:
+    """`SuMo.uq_convergence_curve` answers with a V22rs dataclass, and the
+    renderer meets it at the door: the same figure comes out whether the caller
+    passes the result, its `.points`, or plain point dicts — one renderer for
+    both sweeps (V54hz) means NORMALIZING producer shapes, not forking them."""
+    points = [
+        UqConvergencePoint(
+            n_samples=entry["n_samples"],
+            metrics=entry["metrics"],
+            metrics_std=entry["metrics_std"],
+            draws_by_metric=entry["draws_by_metric"],
+            n_bootstrap=entry["n_bootstrap"],
+            draw_seeds=[0] * max(entry["n_bootstrap"], 1),
+            warnings=[],
+        )
+        for entry in _propagation_points()
+    ]
+    result = UqConvergenceResult(
+        response="stress",
+        seed=11,
+        distributions={},
+        num_samples=1000,
+        n_histograms=100,
+        points=points,
+    )
+
+    from_dicts = report.render_convergence(_propagation_points(), metric="uq_p99")
+    from_result = report.render_convergence(result, metric="uq_p99")
+    assert [list(t.y) for t in from_result.data] == [list(t.y) for t in from_dicts.data]
+    assert from_result.layout.title.text == from_dicts.layout.title.text
+    from_points = report.render_convergence(result.points, metric="uq_p99")
+    assert [list(t.y) for t in from_points.data] == [list(t.y) for t in from_dicts.data]
 
 
 def test_render_convergence_fails_loud_on_a_metric_it_cannot_plot() -> None:

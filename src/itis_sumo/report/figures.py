@@ -17,6 +17,7 @@ presentation deps never sit in core, and core never imports this package).
 from __future__ import annotations
 
 import math
+from dataclasses import asdict, is_dataclass
 
 import plotly.graph_objects as go
 
@@ -29,6 +30,7 @@ from itis_sumo.types import (
     PredictionsResult,
     SobolResult,
     UncertaintyDraws,
+    UqConvergenceResult,
 )
 
 __all__ = [
@@ -73,14 +75,6 @@ _METRIC_PRESENTATION: dict[str, tuple[str, float | None]] = {
     "uq_skew": ("propagated skewness (dimensionless)", None),
     "uq_kurt": ("propagated excess kurtosis (dimensionless)", None),
 }
-
-# Which sweep a token belongs to, for the default title only: "CV convergence —
-# uq_p99" would name the wrong instrument over the reader's own data, ∧ the token
-# lists are pinned against the engine's by tests/report/test_report_surface.py so
-# neither copy can drift into a stale label.
-_PROPAGATION_METRICS = frozenset(
-    token for token in _METRIC_PRESENTATION if token.startswith("uq_")
-)
 
 
 def _convergence_point_metric(entry: dict, metric: str) -> tuple[float, float, list]:
@@ -464,20 +458,21 @@ def render_coverage(coverage: list, **kwargs) -> go.Figure:
     return fig
 
 
-def render_convergence(series: list, **kwargs) -> go.Figure:
+def render_convergence(series: UqConvergenceResult | list, **kwargs) -> go.Figure:
     """One convergence metric vs training-sample count, with draws as a cloud.
 
     Two sweeps produce this point shape, and `metric` is which curve you look at
-    (default `"rmse"`): a token of `compute_cv_convergence`'s family — `"mae"`,
-    `"bias"`, `"coverage68"`, `"coverage95"`, `"coverage99"` — or of
-    `SuMo.uq_convergence_curve`'s propagation family (`"uq_p1"`, `"uq_p95"`,
-    `"uq_skew"`, …). The line and its error bars are the series' own value and
-    `metrics_std` for that token, the faint markers are its `draws_by_metric` —
-    spread is shown, never re-derived, and no metric is recomputed here (V54hz). An
-    unknown token fails loudly, listing the tokens the series actually carries.
+    (default `"rmse"`): a token of `compute_cv_convergence`'s family (`"mae"`,
+    `"coverage95"`, …) or of `SuMo.uq_convergence_curve`'s propagation family
+    (`"uq_p95"`, `"uq_skew"`, … — a `UqConvergenceResult` is accepted directly,
+    and so is its `.points` list or plain point dicts). The line and its error
+    bars are the series' own value and `metrics_std` for that token, the faint
+    markers are its `draws_by_metric` — spread is shown, never re-derived, and no
+    metric is recomputed here (V54hz). An unknown token fails loudly, listing the
+    tokens the series actually carries.
 
-    The y-axis label comes from the token, which is why the propagation tokens name
-    their own units; where that is not what you want — a log response, or a
+    The y-axis label comes from the token, which is why the propagation tokens
+    name their own units; where that is not what you want — a log response, or a
     dimensionless shape statistic on a shared figure — say so with `yaxis_title` /
     `yaxis_type` in kwargs, which pass through to the plotly layout. There is
     deliberately no `scale` argument here: that word names a column's scale in
@@ -500,6 +495,12 @@ def render_convergence(series: list, **kwargs) -> go.Figure:
             f"{type(metric).__name__}"
         )
     metric = metric.strip().lower()
+    # Accept a typed `UqConvergenceResult`, its `.points`, or plain point dicts:
+    # ONE renderer for both sweeps (V54hz) means meeting every producer shape
+    # at the door, not asking the caller to unpack.
+    if isinstance(series, UqConvergenceResult):
+        series = series.points
+    series = [asdict(entry) if is_dataclass(entry) else entry for entry in series]
     selected = [_convergence_point_metric(entry, metric) for entry in series]
     label, nominal = _METRIC_PRESENTATION.get(metric, (metric, None))
     fig = go.Figure()
@@ -536,9 +537,10 @@ def render_convergence(series: list, **kwargs) -> go.Figure:
         )
     )
     layout: dict = {
-        "title": (
-            "UQ propagation" if metric in _PROPAGATION_METRICS else "CV convergence"
-        )
+        # the `uq_` prefix is what tells the two sweeps apart here — a
+        # "CV convergence" title over propagation data would lie; token
+        # membership itself is pinned to the engine by test_report_surface
+        "title": ("UQ propagation" if metric.startswith("uq_") else "CV convergence")
         + f" — {metric}",
         "xaxis_title": "training samples",
         "yaxis_title": label,
