@@ -311,6 +311,61 @@ class CrossValidationResult:
 
 
 @dataclass(frozen=True)
+class CvConvergencePoint:
+    """One training-sample size of `compute_cv_convergence` (T65ux, V22rs).
+
+    `metrics` carries the WHOLE CV family (accuracy trio + coverage, V55nw);
+    `metrics_std` is the spread ACROSS the bootstrap draws that produced it and
+    `draws_by_metric` their raw values. `diagnostics` is the full
+    `compute_cv_diagnostics` bundle per draw (V16wq) — the data every number
+    beside it was read off, carried so a consumer can re-ask a question the
+    metric family does not answer without another sweep.
+
+    The `metric`/`metric_std`/`draws` reading is this series' HISTORICAL shape
+    and stays available as properties — each is the `rmse` entry of the family
+    map beside it — but they are derivations, so `dataclasses.asdict` carries
+    the family only (V22rs: one source for each number).
+    """
+
+    n_samples: int
+    metrics: Mapping[str, float]
+    metrics_std: Mapping[str, float]
+    draws_by_metric: Mapping[str, list[float]]
+    n_bootstrap: int
+    diagnostics: list[dict]
+
+    @property
+    def metric(self) -> float:
+        return self.metrics["rmse"]
+
+    @property
+    def metric_std(self) -> float:
+        return self.metrics_std["rmse"]
+
+    @property
+    def draws(self) -> list[float]:
+        return self.draws_by_metric["rmse"]
+
+
+@dataclass(frozen=True)
+class CvConvergenceResult:
+    """The CV sweep's provenance ONCE, and one point per subset size (V22rs).
+
+    Same rule as `UqConvergenceResult`: what the sweep ran WITH belongs to the
+    sweep, not to a point, so it is echoed once here — the two convergence
+    results then share their POINT shape's reading (metrics/metrics_std/
+    draws_by_metric), which is what lets `render_convergence` plot either
+    (V54hz) and know which sweep it is from the TYPE, not from token keys.
+    """
+
+    response: str
+    input_vars: list[str]
+    seed: int
+    n_bootstrap: int
+    points: list[CvConvergencePoint]
+
+
+@dataclass(frozen=True)
 class UqConvergencePoint:
     """One training-sample size of `SuMo.uq_convergence_curve` (T67kb).
 

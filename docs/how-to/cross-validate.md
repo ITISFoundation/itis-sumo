@@ -85,12 +85,13 @@ poor design coverage) rather than "just needs more points":
 from itis_sumo import compute_cv_convergence, fit_convergence_exponential
 
 curve = compute_cv_convergence(run_dir, training_file, ["width", "height"], "stress")
-# one point per subset size: {n_samples, metrics, metrics_std, draws_by_metric,
-#                             n_bootstrap, metric, metric_std, draws, diagnostics}
+# a typed CvConvergenceResult: provenance once, then one point per subset
+# size — {n_samples, metrics, metrics_std, draws_by_metric, n_bootstrap,
+# diagnostics} (the `metric`/`draws` RMSE reading is a property derivation)
 
 fit = fit_convergence_exponential(
-    [e["n_samples"] for e in curve for _ in e["draws"]],
-    [d for e in curve for d in e["draws"]],
+    [point.n_samples for point in curve.points for _ in point.draws],
+    [draw for point in curve.points for draw in point.draws],
     asymptotic=True,  # a raw error metric floors above zero (V18wp)
 )
 fit["c"], fit["r_squared"]  # irreducible floor + fit quality
@@ -107,12 +108,12 @@ presentation time instead of paying for another sweep:
 from itis_sumo.report import render_convergence
 
 render_convergence(curve, metric="coverage95")  # axis and reference line follow the metric
-coverage95 = [point["metrics"]["coverage95"] for point in curve]  # or take the numbers
+coverage95 = [point.metrics["coverage95"] for point in curve.points]  # or the numbers
 ```
 
 | token | what it is | units |
 | --- | --- | --- |
-| `rmse` | root mean squared error — the default, and what a point's `metric` / `metric_std` / `draws` keys still mean | your QoI's units |
+| `rmse` | root mean squared error — the default, and what a point's `metric` / `metric_std` / `draws` properties still mean | your QoI's units |
 | `mae` | mean absolute error | your QoI's units |
 | `bias` | mean **signed** error, `mean(actual − predicted)` — the systematic over/under-prediction RMSE and MAE can net away | your QoI's units, signed |
 | `coverage68` | fraction of held-out observations inside `predicted ± 0.99σ·predicted_std` — the one-sigma interval at a round 68% target | fraction, 0…1 |

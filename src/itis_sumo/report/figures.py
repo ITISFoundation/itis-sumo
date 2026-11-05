@@ -25,11 +25,14 @@ from itis_sumo.types import (
     AlongAxesResult,
     CorrelationResult,
     CrossValidationResult,
+    CvConvergencePoint,
+    CvConvergenceResult,
     GridResult,
     ParetoFrontResult,
     PredictionsResult,
     SobolResult,
     UncertaintyDraws,
+    UqConvergencePoint,
     UqConvergenceResult,
 )
 
@@ -74,6 +77,18 @@ _METRIC_PRESENTATION: dict[str, tuple[str, float | None]] = {
     "uq_p99": ("propagated 99th percentile (original units)", None),
     "uq_skew": ("propagated skewness (dimensionless)", None),
     "uq_kurt": ("propagated excess kurtosis (dimensionless)", None),
+}
+
+# Which sweep a TYPE belongs to, for the default title only: the sweep's
+# identity is a fact about the dataclass its producer returned, ⊥ token-key
+# sniffing — a "CV convergence" title over propagation data would lie, and the
+# producer's type says which it is. A hand-written plain-dict series carries no
+# type to consult and claims no family either.
+_SWEEP_TITLES: dict[type, str] = {
+    CvConvergenceResult: "CV convergence",
+    CvConvergencePoint: "CV convergence",
+    UqConvergenceResult: "UQ propagation",
+    UqConvergencePoint: "UQ propagation",
 }
 
 
@@ -458,18 +473,23 @@ def render_coverage(coverage: list, **kwargs) -> go.Figure:
     return fig
 
 
-def render_convergence(series: UqConvergenceResult | list, **kwargs) -> go.Figure:
+def render_convergence(
+    series: CvConvergenceResult | UqConvergenceResult | list, **kwargs
+) -> go.Figure:
     """One convergence metric vs training-sample count, with draws as a cloud.
 
     Two sweeps produce this point shape, and `metric` is which curve you look at
     (default `"rmse"`): a token of `compute_cv_convergence`'s family (`"mae"`,
     `"coverage95"`, …) or of `SuMo.uq_convergence_curve`'s propagation family
-    (`"uq_p95"`, `"uq_skew"`, … — a `UqConvergenceResult` is accepted directly,
-    and so is its `.points` list or plain point dicts). The line and its error
-    bars are the series' own value and `metrics_std` for that token, the faint
-    markers are its `draws_by_metric` — spread is shown, never re-derived, and no
-    metric is recomputed here (V54hz). An unknown token fails loudly, listing the
-    tokens the series actually carries.
+    (`"uq_p95"`, `"uq_skew"`, …). Either result — `CvConvergenceResult`,
+    `UqConvergenceResult` — is accepted directly, and so are their `.points`
+    lists or plain point dicts; the default title names the sweep from the TYPE
+    handed in, and a hand-written dict series, carrying no type to consult, is
+    titled plainly. The line and its error bars are the series' own value and
+    `metrics_std` for that token, the faint markers are its `draws_by_metric` —
+    spread is shown, never re-derived, and no metric is recomputed here
+    (V54hz). An unknown token fails loudly, listing the tokens the series
+    actually carries.
 
     The y-axis label comes from the token, which is why the propagation tokens
     name their own units; where that is not what you want — a log response, or a
@@ -495,11 +515,16 @@ def render_convergence(series: UqConvergenceResult | list, **kwargs) -> go.Figur
             f"{type(metric).__name__}"
         )
     metric = metric.strip().lower()
-    # Accept a typed `UqConvergenceResult`, its `.points`, or plain point dicts:
+    # Accept a typed convergence result, its `.points`, or plain point dicts:
     # ONE renderer for both sweeps (V54hz) means meeting every producer shape
-    # at the door, not asking the caller to unpack.
-    if isinstance(series, UqConvergenceResult):
+    # at the door, not asking the caller to unpack. Which sweep the figure
+    # names in its title comes from the TYPE the caller handed in (a
+    # hand-written plain-dict series has no type, and gets no family claim).
+    if isinstance(series, (CvConvergenceResult, UqConvergenceResult)):
+        sweep = _SWEEP_TITLES[type(series)]
         series = series.points
+    else:
+        sweep = _SWEEP_TITLES.get(type(series[0])) if series else None
     series = [asdict(entry) if is_dataclass(entry) else entry for entry in series]
     selected = [_convergence_point_metric(entry, metric) for entry in series]
     label, nominal = _METRIC_PRESENTATION.get(metric, (metric, None))
@@ -537,11 +562,7 @@ def render_convergence(series: UqConvergenceResult | list, **kwargs) -> go.Figur
         )
     )
     layout: dict = {
-        # the `uq_` prefix is what tells the two sweeps apart here — a
-        # "CV convergence" title over propagation data would lie; token
-        # membership itself is pinned to the engine by test_report_surface
-        "title": ("UQ propagation" if metric.startswith("uq_") else "CV convergence")
-        + f" — {metric}",
+        "title": f"{sweep or 'Convergence'} — {metric}",
         "xaxis_title": "training samples",
         "yaxis_title": label,
     }

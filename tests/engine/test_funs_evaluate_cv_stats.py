@@ -5,8 +5,10 @@ convergence-series orchestration (Dakota-dependent `evaluate_sumo_manual_crossva
 call is monkeypatched to keep the tests fast and deterministic).
 """
 
+import dataclasses
 import inspect
 import math
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
 import numpy as np
@@ -380,21 +382,20 @@ class TestComputeCvConvergence:
 
         series = compute_cv_convergence(
             tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=3
-        )
+        ).points
 
         assert len(series) == len(call_sizes)
-        assert [point["n_samples"] for point in series] == call_sizes
+        assert [point.n_samples for point in series] == call_sizes
         assert call_sizes[0] == 5
         assert call_sizes[-1] == n_total
         for point in series:
-            assert point["metric"] == pytest.approx(0.1)
+            assert point.metric == pytest.approx(0.1)
             # V16wq: diagnostics bundle rides along, one entry per draw, no rerun
-            assert len(point["diagnostics"]) == point["n_bootstrap"]
-            assert point["diagnostics"][0]["root_mean_squared"] == pytest.approx(0.1)
+            assert len(point.diagnostics) == point.n_bootstrap
+            assert point.diagnostics[0]["root_mean_squared"] == pytest.approx(0.1)
             # T24bn/V19cz: std_hat rides along through the convergence series too
             assert all(
-                v == pytest.approx(0.0)
-                for v in point["diagnostics"][0]["predicted_std"]
+                v == pytest.approx(0.0) for v in point.diagnostics[0]["predicted_std"]
             )
 
     def test_empty_series_when_below_minimum(self, tmp_path):
@@ -406,7 +407,7 @@ class TestComputeCvConvergence:
 
         series = compute_cv_convergence(
             tmp_path, training_file, ["x1"], "y", min_samples=5
-        )
+        ).points
         assert series == []
 
 
@@ -453,29 +454,29 @@ class TestComputeCvConvergenceBootstrap:
             min_samples=5,
             max_points=2,
             n_bootstrap=4,
-        )
+        ).points
 
         # sizes: [5, 10] -- 4 bootstrap draws at n=5, exactly 1 run at n=10 (full set)
-        assert [point["n_samples"] for point in series] == [5, 10]
+        assert [point.n_samples for point in series] == [5, 10]
         assert len(seen_subsets) == 4 + 1
 
         small_point, full_point = series
-        assert small_point["n_bootstrap"] == 4
-        assert full_point["n_bootstrap"] == 1
-        assert full_point["metric_std"] == pytest.approx(0.0)
+        assert small_point.n_bootstrap == 4
+        assert full_point.n_bootstrap == 1
+        assert full_point.metric_std == pytest.approx(0.0)
 
         # the 4 draws at n=5 aren't all the same subset of rows
         small_subsets = set(seen_subsets[:4])
         assert len(small_subsets) > 1
 
         # raw per-draw values are exposed for pooled downstream analysis
-        assert len(small_point["draws"]) == 4
-        assert small_point["draws"] == pytest.approx([0.1] * 4)
-        assert full_point["draws"] == pytest.approx([0.1])
+        assert len(small_point.draws) == 4
+        assert small_point.draws == pytest.approx([0.1] * 4)
+        assert full_point.draws == pytest.approx([0.1])
 
         # V16wq: diagnostics bundle length matches draws length at each size
-        assert len(small_point["diagnostics"]) == 4
-        assert len(full_point["diagnostics"]) == 1
+        assert len(small_point.diagnostics) == 4
+        assert len(full_point.diagnostics) == 1
 
     def test_bootstrap_is_deterministic_given_seed(self, tmp_path, monkeypatch):
         training_file = tmp_path / "df_processed_jobs.dat"
@@ -515,7 +516,7 @@ class TestComputeCvConvergenceBootstrap:
             max_points=2,
             n_bootstrap=4,
             seed=7,
-        )
+        ).points
         series_b = compute_cv_convergence(
             tmp_path / "b",
             training_file,
@@ -525,7 +526,7 @@ class TestComputeCvConvergenceBootstrap:
             max_points=2,
             n_bootstrap=4,
             seed=7,
-        )
+        ).points
         assert _same_structure(series_a, series_b)
 
     def test_default_n_bootstrap_matches_pre_bootstrap_behavior(
@@ -566,12 +567,12 @@ class TestComputeCvConvergenceBootstrap:
 
         series = compute_cv_convergence(
             tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=2
-        )
+        ).points
 
         assert len(seen_subsets) == 2  # one run per size, no bootstrap fan-out
         assert seen_subsets[0] == pytest.approx(x1[:5].round(6).tolist())
         assert all(
-            point["n_bootstrap"] == 1 and point["metric_std"] == 0.0 for point in series
+            point.n_bootstrap == 1 and point.metric_std == 0.0 for point in series
         )
 
 
@@ -629,8 +630,11 @@ def _same_structure(left: Any, right: Any) -> bool:
     A convergence series is otherwise unequal to ITSELF under `==`: a surrogate
     that reports no spread yields NaN coverage (V19cz drops the zero-std points
     rather than inventing a level), and NaN != NaN. Determinism is what the
-    seeded-bootstrap tests mean to check, so compare structurally.
+    seeded-bootstrap tests mean to check, so compare structurally; the typed
+    points recurse through their fields for the same reason.
     """
+    if is_dataclass(left) and is_dataclass(right) and type(left) is type(right):
+        return _same_structure(asdict(left), asdict(right))
     if isinstance(left, dict) and isinstance(right, dict):
         return left.keys() == right.keys() and all(
             _same_structure(left[key], right[key]) for key in left
@@ -733,15 +737,15 @@ class TestComputeCvConvergenceMetricFamily:
             min_samples=5,
             max_points=3,
             n_bootstrap=2,
-        )
+        ).points
 
         assert len(series) > 1
         for point in series:
-            assert set(point["metrics"]) == _FAMILY
-            assert set(point["metrics_std"]) == _FAMILY
-            assert set(point["draws_by_metric"]) == _FAMILY
+            assert set(point.metrics) == _FAMILY
+            assert set(point.metrics_std) == _FAMILY
+            assert set(point.draws_by_metric) == _FAMILY
             for name in _FAMILY:
-                assert len(point["draws_by_metric"][name]) == point["n_bootstrap"]
+                assert len(point.draws_by_metric[name]) == point.n_bootstrap
 
     def test_the_family_is_what_the_engine_documents(self):
         """The test vocabulary above and the engine's own tokens agree (it also
@@ -771,7 +775,7 @@ class TestComputeCvConvergenceMetricFamily:
             "y",
             min_samples=5,
             max_points=2,
-        )
+        ).points
 
         assert len(series) == len(seen)
         for point, pairs in zip(series, seen):
@@ -781,11 +785,11 @@ class TestComputeCvConvergenceMetricFamily:
             )
             for name in _ACCURACY:
                 key = _ACCURACY_KEYS[name]
-                assert point["draws_by_metric"][name] == [pytest.approx(metrics[key])]
+                assert point.draws_by_metric[name] == [pytest.approx(metrics[key])]
                 # the bundle riding along agrees with the series number
-                assert point["metrics"][name] == pytest.approx(bundle[key])
+                assert point.metrics[name] == pytest.approx(bundle[key])
             for token, level in _LEVELS.items():
-                assert point["metrics"][token] == pytest.approx(
+                assert point.metrics[token] == pytest.approx(
                     compute_coverage(
                         pairs["actual"],
                         pairs["predicted"],
@@ -795,8 +799,10 @@ class TestComputeCvConvergenceMetricFamily:
                 )
 
     def test_the_rmse_named_keys_stay_the_rmse_reading(self, tmp_path, monkeypatch):
-        """Additive-only growth: the pre-family keys keep their meaning, so an
-        old consumer of this series still gets the RMSE sweep it expects."""
+        """Additive-only growth: the pre-family RMSE reading keeps its meaning,
+        so an old consumer of this series still gets the RMSE sweep it expects
+        — as a property derivation now, while the STORED shape is the family
+        maps and nothing else (V22rs: one source per number)."""
         training_file = _write_training_file(
             tmp_path / "df_processed_jobs.dat", 10, seed=13
         )
@@ -804,14 +810,6 @@ class TestComputeCvConvergenceMetricFamily:
         monkeypatch.setattr(
             "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
         )
-        legacy_keys = {
-            "n_samples",
-            "metric",
-            "metric_std",
-            "n_bootstrap",
-            "draws",
-            "diagnostics",
-        }
 
         series = compute_cv_convergence(
             tmp_path,
@@ -821,25 +819,27 @@ class TestComputeCvConvergenceMetricFamily:
             min_samples=5,
             max_points=2,
             n_bootstrap=2,
-        )
+        ).points
 
         for point in series:
-            assert legacy_keys <= set(point)
-            assert set(point) - legacy_keys == {
+            assert set(dataclasses.asdict(point)) == {
+                "n_samples",
                 "metrics",
                 "metrics_std",
                 "draws_by_metric",
-            }
-            assert point["metric"] == point["metrics"]["rmse"]
-            assert point["metric_std"] == point["metrics_std"]["rmse"]
-            assert point["draws"] == point["draws_by_metric"]["rmse"]
-            if point["n_bootstrap"] == 1:
+                "n_bootstrap",
+                "diagnostics",
+            }, "the family maps are the stored shape, once each"
+            assert point.metric == point.metrics["rmse"]
+            assert point.metric_std == point.metrics_std["rmse"]
+            assert point.draws == point.draws_by_metric["rmse"]
+            if point.n_bootstrap == 1:
                 # unchanged meaning: the RMSE the bundled diagnostics report
-                assert point["metric"] == pytest.approx(
-                    point["diagnostics"][0]["root_mean_squared"]
+                assert point.metric == pytest.approx(
+                    point.diagnostics[0]["root_mean_squared"]
                 )
-                assert point["metric_std"] == 0.0
-                assert all(value == 0.0 for value in point["metrics_std"].values())
+                assert point.metric_std == 0.0
+                assert all(value == 0.0 for value in point.metrics_std.values())
 
     def test_the_accuracy_metrics_stay_distinct_and_bias_is_signed(
         self, tmp_path, monkeypatch
@@ -852,9 +852,13 @@ class TestComputeCvConvergenceMetricFamily:
             "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
         )
 
-        metrics = compute_cv_convergence(
-            tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=2
-        )[0]["metrics"]
+        metrics = (
+            compute_cv_convergence(
+                tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=2
+            )
+            .points[0]
+            .metrics
+        )
 
         assert len({round(metrics[name], 9) for name in _ACCURACY}) == 3
         assert metrics["rmse"] > 0.0 and metrics["mae"] > 0.0
@@ -873,9 +877,13 @@ class TestComputeCvConvergenceMetricFamily:
             "itis_sumo.engine.evaluation.evaluate_sumo_manual_crossvalidation", fake
         )
 
-        metrics = compute_cv_convergence(
-            tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=2
-        )[0]["metrics"]
+        metrics = (
+            compute_cv_convergence(
+                tmp_path, training_file, ["x1"], "y", min_samples=5, max_points=2
+            )
+            .points[0]
+            .metrics
+        )
 
         assert metrics["coverage68"] <= metrics["coverage95"] <= metrics["coverage99"]
         # the fixture's residuals straddle the 68%/95%/99% multiples, so
@@ -910,7 +918,7 @@ class TestComputeCvConvergenceMetricFamily:
             min_samples=5,
             max_points=2,
             n_bootstrap=3,
-        )
+        ).points
         small, full = series
 
         draws = seen[:3]
@@ -930,20 +938,18 @@ class TestComputeCvConvergenceMetricFamily:
                 )["empirical"]
                 for pairs in draws
             ]
-            assert small["metrics"][token] == pytest.approx(expected_metric)
-            assert small["draws_by_metric"][token] == [
+            assert small.metrics[token] == pytest.approx(expected_metric)
+            assert small.draws_by_metric[token] == [
                 pytest.approx(value) for value in expected_draws
             ]
             # the single (full-sample) point is its own pool: value == its draw
-            assert full["metrics"][token] == pytest.approx(
-                full["draws_by_metric"][token][0]
-            )
-        assert 0.0 < small["metrics"]["coverage95"] < 1.0  # a straddle, not 0/1
+            assert full.metrics[token] == pytest.approx(full.draws_by_metric[token][0])
+        assert 0.0 < small.metrics["coverage95"] < 1.0  # a straddle, not 0/1
         # the draws genuinely differ at 95%; at 99 this fixture saturates at
         # 1.0, which is the level-dependence V19cz warns about
-        assert len({round(v, 12) for v in small["draws_by_metric"]["coverage95"]}) > 1
-        assert full["n_bootstrap"] == 1
-        assert all(value == 0.0 for value in full["metrics_std"].values())
+        assert len({round(v, 12) for v in small.draws_by_metric["coverage95"]}) > 1
+        assert full.n_bootstrap == 1
+        assert all(value == 0.0 for value in full.metrics_std.values())
 
     def test_the_family_costs_no_extra_cv_rerun(self, tmp_path, monkeypatch):
         """The cost claim behind returning everything (V16wq, V55nw): exactly one
@@ -964,10 +970,10 @@ class TestComputeCvConvergenceMetricFamily:
             min_samples=5,
             max_points=3,
             n_bootstrap=2,
-        )
+        ).points
 
         # sizes [5, 7, 10]: two draws below full size, one at it
-        assert len(seen) == sum(point["n_bootstrap"] for point in series) == 2 + 2 + 1
+        assert len(seen) == sum(point.n_bootstrap for point in series) == 2 + 2 + 1
 
 
 class TestFitConvergenceExponentialIsMetricAgnostic:
@@ -1022,14 +1028,14 @@ class TestFitConvergenceExponentialIsMetricAgnostic:
             min_samples=6,
             max_points=4,
             n_bootstrap=2,
-        )
-        coverages = [point["metrics"]["coverage95"] for point in series]
+        ).points
+        coverages = [point.metrics["coverage95"] for point in series]
         assert coverages[-1] > coverages[0]  # the sweep really moves
 
         coverage_draws = [
-            (e["n_samples"], draw)
+            (e.n_samples, draw)
             for e in series
-            for draw in e["draws_by_metric"]["coverage95"]
+            for draw in e.draws_by_metric["coverage95"]
         ]
         fit = fit_convergence_exponential(
             [n for n, _ in coverage_draws],

@@ -260,28 +260,28 @@ class TestSurrogateAccuracy:
 
         series = compute_cv_convergence(
             run_dir, train_file, ["x"], "y", min_samples=10, max_points=3
-        )
+        ).points
 
-        assert [point["n_samples"] for point in series] == [10, 17, 24]
-        maes = [point["metrics"]["mae"] for point in series]
+        assert [point.n_samples for point in series] == [10, 17, 24]
+        maes = [point.metrics["mae"] for point in series]
         assert maes[0] > maes[1] > maes[2]
         for point in series:
             # the family number IS the bundle number for this subset (no rerun)
-            assert point["metrics"]["mae"] == pytest.approx(
-                point["diagnostics"][0]["mean_abs"]
+            assert point.metrics["mae"] == pytest.approx(
+                point.diagnostics[0]["mean_abs"]
             )
             # nested intervals: 1sigma-inside can never exceed 3sigma-inside
             assert (
-                point["metrics"]["coverage68"]
-                <= point["metrics"]["coverage95"]
-                <= point["metrics"]["coverage99"]
+                point.metrics["coverage68"]
+                <= point.metrics["coverage95"]
+                <= point.metrics["coverage99"]
             )
         # more data does not make the surrogate's own spread less trustworthy
-        assert series[-1]["metrics"]["coverage95"] >= series[0]["metrics"]["coverage95"]
+        assert series[-1].metrics["coverage95"] >= series[0].metrics["coverage95"]
 
         # and a trend fit reads any metric's column, not just RMSE (V18wp)
         fit = fit_convergence_exponential(
-            [point["n_samples"] for point in series], maes, asymptotic=False
+            [point.n_samples for point in series], maes, asymptotic=False
         )
         assert fit["r_squared"] > 0.9
 

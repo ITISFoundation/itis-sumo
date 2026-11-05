@@ -56,6 +56,8 @@ class TestPublicSurface:
             "CVAccuracyMetrics",
             "CorrelationResult",
             "CrossValidationResult",
+            "CvConvergencePoint",
+            "CvConvergenceResult",
             "DEFAULT_SEED",
             "DatasetDiagnostics",
             "Direction",
