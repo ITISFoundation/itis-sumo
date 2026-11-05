@@ -30,6 +30,8 @@ from itis_sumo.types import (
     CorrelationResult,
     CrossValidationResult,
     CVAccuracyMetrics,
+    CvConvergencePoint,
+    CvConvergenceResult,
     DatasetDiagnostics,
     GridResult,
     OutlierSummary,
@@ -38,6 +40,8 @@ from itis_sumo.types import (
     SobolResult,
     UncertaintyDraws,
     UncertaintySummary,
+    UqConvergencePoint,
+    UqConvergenceResult,
     VariableDiagnostics,
 )
 
@@ -99,8 +103,10 @@ def test_catalog_covers_the_result_types() -> None:
         and dataclasses.is_dataclass(getattr(itis_sumo, name, None))
     }
     nested = {
+        "CvConvergenceResult",  # plot its .points via render_convergence
         "OutlierSummary",  # row fields of render_diagnostics
         "VariableDiagnostics",  # rendered row-wise inside DatasetDiagnostics
+        "UqConvergenceResult",  # plot its .points via render_convergence
     }
     assert results - consumed == nested
 
@@ -167,14 +173,14 @@ def _sobol_result() -> SobolResult:
 _CONVERGENCE_SPREAD = 0.1
 
 
-def _convergence_series() -> list[dict[str, Any]]:
+def _convergence_series() -> list[CvConvergencePoint]:
     """A two-size convergence series in the shape `compute_cv_convergence` returns.
 
     Every metric family token at each size (the accuracy trio plus the
-    sweep's coverage levels), the three legacy RMSE keys that mean its `rmse` entry, and
-    two bootstrap draws per metric at a fixed spread — enough for a rendering to
-    show a line, an error bar and a cloud per metric without any of them being
-    equal by accident.
+    sweep's coverage levels) and two bootstrap draws per metric at a fixed
+    spread — enough for a rendering to show a line, an error bar and a cloud
+    per metric without any of them being equal by accident. The legacy RMSE
+    reading is a property on the point, not a stored duplicate (V22rs).
     """
     per_size = [
         (
@@ -200,26 +206,23 @@ def _convergence_series() -> list[dict[str, Any]]:
             },
         ),
     ]
-    series = []
+    points = []
     for n_samples, metrics in per_size:
         draws_by_metric = {
             name: [value - _CONVERGENCE_SPREAD, value + _CONVERGENCE_SPREAD]
             for name, value in metrics.items()
         }
-        series.append(
-            {
-                "n_samples": n_samples,
-                "metrics": metrics,
-                "metrics_std": dict.fromkeys(metrics, _CONVERGENCE_SPREAD),
-                "draws_by_metric": draws_by_metric,
-                "n_bootstrap": 2,
-                "metric": metrics["rmse"],
-                "metric_std": _CONVERGENCE_SPREAD,
-                "draws": draws_by_metric["rmse"],
-                "diagnostics": [],
-            }
+        points.append(
+            CvConvergencePoint(
+                n_samples=n_samples,
+                metrics=metrics,
+                metrics_std=dict.fromkeys(metrics, _CONVERGENCE_SPREAD),
+                draws_by_metric=draws_by_metric,
+                n_bootstrap=2,
+                diagnostics=[],
+            )
         )
-    return series
+    return points
 
 
 def _synthetics() -> dict[str, Any]:
@@ -467,34 +470,37 @@ def test_render_convergence_reads_spread_from_the_series() -> None:
     assert list(figure.data[1].x) == [10, 10, 20, 20]
 
 
-def _propagation_points(none_point: bool = False) -> list[dict]:
-    """A `SuMo.uq_convergence_curve`-shaped synthetic series: same point keys and
-    the full `uq_` token map, built here so the rendering contract is testable
-    without an engine (the real shape's acceptance is in the analytical suite)."""
+def _propagation_points(none_point: bool = False) -> list[UqConvergencePoint]:
+    """A `SuMo.uq_convergence_curve`-shaped synthetic series: the full `uq_`
+    token map on the point dataclass, built here so the rendering contract is
+    testable without an engine (the real shape's acceptance is in the
+    analytical suite)."""
     sizes = (6, 33, 60) if none_point else (6, 60)
     points = []
     for n in sizes:
         dead = none_point and n == 33
         points.append(
-            {
-                "n_samples": n,
-                "metrics": (
+            UqConvergencePoint(
+                n_samples=n,
+                metrics=(
                     dict.fromkeys(_UQ_METRICS, None)
                     if dead
                     else {t: float(n) + i for i, t in enumerate(_UQ_METRICS)}
                 ),
-                "metrics_std": (
+                metrics_std=(
                     dict.fromkeys(_UQ_METRICS, None)
                     if dead
                     else dict.fromkeys(_UQ_METRICS, 0.25)
                 ),
-                "draws_by_metric": (
+                draws_by_metric=(
                     {t: [] for t in _UQ_METRICS}
                     if dead
                     else {t: [float(n), float(n) + 1.0] for t in _UQ_METRICS}
                 ),
-                "n_bootstrap": 0 if dead else 2,
-            }
+                n_bootstrap=0 if dead else 2,
+                draw_seeds=[],
+                warnings=[],
+            )
         )
     return points
 
@@ -548,6 +554,49 @@ def test_propagation_labels_state_the_units_the_token_claims() -> None:
     )
 
 
+def test_render_convergence_takes_the_typed_curve_directly() -> None:
+    """`SuMo.uq_convergence_curve` answers with a V22rs dataclass, and the
+    renderer meets it at the door: the same figure comes out whether the caller
+    passes the result, its `.points`, or plain point dicts — one renderer for
+    both sweeps (V54hz) means NORMALIZING producer shapes, not forking them.
+    The sweep the title names comes from the TYPE handed in: plain dicts carry
+    no type to consult, so they take the neutral title instead of a key-sniffed
+    guess (V22rs is what gives a series its family name)."""
+    points = _propagation_points()
+    result = UqConvergenceResult(
+        response="stress",
+        seed=11,
+        distributions={},
+        num_samples=1000,
+        n_histograms=100,
+        points=points,
+    )
+
+    from_dicts = report.render_convergence(
+        [dataclasses.asdict(point) for point in points], metric="uq_p99"
+    )
+    from_result = report.render_convergence(result, metric="uq_p99")
+    assert [list(t.y) for t in from_result.data] == [list(t.y) for t in from_dicts.data]
+    assert from_result.layout.title.text == "UQ propagation — uq_p99"
+    assert from_dicts.layout.title.text == "Convergence — uq_p99"
+    from_points = report.render_convergence(result.points, metric="uq_p99")
+    assert [list(t.y) for t in from_points.data] == [list(t.y) for t in from_dicts.data]
+    assert from_points.layout.title.text == "UQ propagation — uq_p99"
+
+    cv = CvConvergenceResult(
+        response="stress",
+        input_vars=["width"],
+        seed=7,
+        n_bootstrap=2,
+        points=_convergence_series(),
+    )
+    from_cv_result = report.render_convergence(cv)
+    assert [list(t.y) for t in from_cv_result.data] == [
+        list(t.y) for t in report.render_convergence(_convergence_series()).data
+    ]
+    assert from_cv_result.layout.title.text == "CV convergence — rmse"
+
+
 def test_render_convergence_fails_loud_on_a_metric_it_cannot_plot() -> None:
     series = _synthetics()["convergence"]
 
@@ -564,11 +613,11 @@ def test_render_convergence_still_renders_a_series_without_a_metric_family() -> 
     for another metric says so instead of plotting RMSE under a MAE label."""
     legacy = [
         {
-            "n_samples": point["n_samples"],
-            "metric": point["metric"],
-            "metric_std": point["metric_std"],
-            "n_bootstrap": point["n_bootstrap"],
-            "draws": point["draws"],
+            "n_samples": point.n_samples,
+            "metric": point.metric,
+            "metric_std": point.metric_std,
+            "n_bootstrap": point.n_bootstrap,
+            "draws": point.draws,
             "diagnostics": [],
         }
         for point in _synthetics()["convergence"]

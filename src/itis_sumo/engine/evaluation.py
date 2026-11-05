@@ -37,6 +37,7 @@ from itis_sumo.tabular.processing import (
     sanitize_varnames,
     scale_distribution,
 )
+from itis_sumo.types import CvConvergencePoint, CvConvergenceResult
 
 _logger = logging.getLogger(__name__)
 
@@ -945,6 +946,31 @@ def _cv_spread(values: list[float]) -> float:
     return float(np.std(valid)) if valid else float("nan")
 
 
+def _aggregate_draws(
+    draw_metrics: list[dict[str, float]], names: tuple[str, ...]
+) -> tuple[dict[str, list[float]], dict[str, float], dict[str, float]]:
+    """`(draws_by_metric, metrics, metrics_std)` over one convergence point's draws.
+
+    The shape BOTH convergence curves report (V55nw, and T67kb's reason for
+    reusing it): every metric's raw per-draw values, the aggregate over the
+    draws that produced it, and the spread ACROSS them. A single draw is the
+    pre-bootstrap point shape — the draw's own values, zero spread. A family
+    that aggregates differently for some tokens (CV's POOLED coverage, V19cz)
+    calls this and overrides those `metrics` entries; the trio shape itself is
+    shared, never re-written per call site.
+    """
+    draws_by_metric = {
+        name: [metrics[name] for metrics in draw_metrics] for name in names
+    }
+    if len(draw_metrics) == 1:
+        return draws_by_metric, dict(draw_metrics[0]), dict.fromkeys(names, 0.0)
+    return (
+        draws_by_metric,
+        {name: _cv_mean(values) for name, values in draws_by_metric.items()},
+        {name: _cv_spread(values) for name, values in draws_by_metric.items()},
+    )
+
+
 def compute_cv_convergence(
     run_dir: Path,
     training_file: Path,
@@ -955,7 +981,7 @@ def compute_cv_convergence(
     max_points: int = 5,
     n_bootstrap: int = 1,
     seed: int = 42,
-) -> list[dict[str, Any]]:
+) -> CvConvergenceResult:
     """Rerun manual K-fold CV at increasing training-sample-count subsets.
 
     Reuses `evaluate_sumo_manual_crossvalidation` (the same compute path
@@ -985,7 +1011,10 @@ def compute_cv_convergence(
         seed: Subsample seed; the sweep is deterministic given it (V25sd).
 
     Returns:
-        One entry per subset size, in increasing `n_samples`:
+        A ``CvConvergenceResult``: the sweep's provenance ONCE (``response``,
+        ``input_vars``, ``seed``, ``n_bootstrap`` — V22rs, echoing what the
+        sweep ran with once, not per point) and one ``CvConvergencePoint`` per
+        subset size, in increasing ``n_samples``:
 
             {
                 "n_samples": int,            # training samples in this subset
@@ -999,21 +1028,20 @@ def compute_cv_convergence(
                                              # subset)
                 "draws_by_metric": {token: [float, ...]},  # raw per-draw values
                 "n_bootstrap": int,          # draws that produced this point
-                "metric": float,             # == metrics["rmse"]
-                "metric_std": float,         # == metrics_std["rmse"]
-                "draws": [float, ...],       # == draws_by_metric["rmse"]
                 "diagnostics": [dict, ...],  # per-draw compute_cv_diagnostics
-                                             # bundle (aligned with `draws`)
+                                             # bundle (aligned with the draws)
             }
 
-        The three RMSE-named keys are this series' historical shape and
-        mean exactly what they meant before: each is the `rmse` entry of the
-        family map beside it. `draws_by_metric` holds the raw (pre-aggregation)
-        value per bootstrap draw -- length 1 when `n_bootstrap<=1` or at the
-        full-sample point -- for callers that want the individual points rather
-        than the aggregate (e.g. fitting a trend across the pooled draws).
-        `diagnostics` is the full `compute_cv_diagnostics` bundle per draw
-        (V16wq), the data every number above was read off.
+        The series' historical RMSE reading survives as POINT PROPERTIES
+        (``point.metric``/``point.metric_std``/``point.draws``), each exactly
+        the `rmse` entry of the family map beside it — a derivation, so
+        ``dataclasses.asdict`` carries the family only. ``draws_by_metric``
+        holds the raw (pre-aggregation) value per bootstrap draw -- length 1
+        when `n_bootstrap<=1` or at the full-sample point -- for callers that
+        want the individual points rather than the aggregate (e.g. fitting a
+        trend across the pooled draws). `diagnostics` is the full
+        `compute_cv_diagnostics` bundle per draw (V16wq), the data every
+        number above was read off.
 
     Notes:
         Aggregation differs by metric on purpose: an accuracy metric is the MEAN
@@ -1049,7 +1077,7 @@ def compute_cv_convergence(
     subset_sizes = _convergence_subset_sizes(n_total, min_samples, max_points)
     rng = np.random.default_rng(seed)
 
-    series = []
+    series: list[CvConvergencePoint] = []
     for n in subset_sizes:
         if n >= n_total or n_bootstrap <= 1:
             draw_diagnostics = [
@@ -1082,42 +1110,32 @@ def compute_cv_convergence(
             n_draws = n_bootstrap
 
         draw_metrics = [_cv_draw_metrics(diag) for diag in draw_diagnostics]
-        draws_by_metric = {
-            name: [metrics[name] for metrics in draw_metrics] for name in _CV_METRICS
-        }
-        if n_draws == 1:
-            # the pre-bootstrap point shape: one deterministic subset, no spread
-            aggregate = dict(draw_metrics[0])
-            spread = dict.fromkeys(_CV_METRICS, 0.0)
-        else:
+        draws_by_metric, aggregate, spread = _aggregate_draws(draw_metrics, _CV_METRICS)
+        if n_draws > 1:
             # V19cz: tail coverage pools the drawn points themselves; an accuracy
-            # metric averages the per-draw values.
-            aggregate = {
-                name: _cv_mean(draws_by_metric[name]) for name in _CV_ACCURACY_METRICS
-            }
+            # metric averages the per-draw values (that averaging is what
+            # `_aggregate_draws` already computed, and what gets overridden here).
             aggregate.update(_cv_pooled_coverage(draw_diagnostics))
-            spread = {
-                name: _cv_spread(values) for name, values in draws_by_metric.items()
-            }
         series.append(
-            {
-                "n_samples": n,
-                "metrics": aggregate,
-                "metrics_std": spread,
-                "draws_by_metric": draws_by_metric,
-                "n_bootstrap": n_draws,
-                # the series' historical RMSE reading: three keys that
-                # predate the family maps, each exactly its `rmse` entry
-                "metric": aggregate["rmse"],
-                "metric_std": spread["rmse"],
-                "draws": draws_by_metric["rmse"],
-                # per-draw compute_cv_diagnostics bundles, aligned with `draws`
-                # (V16wq): the data every number above was read off
-                "diagnostics": draw_diagnostics,
-            }
+            CvConvergencePoint(
+                n_samples=n,
+                metrics=aggregate,
+                metrics_std=spread,
+                draws_by_metric=draws_by_metric,
+                n_bootstrap=n_draws,
+                # per-draw compute_cv_diagnostics bundles, aligned with the
+                # draws (V16wq): the data every number above was read off
+                diagnostics=draw_diagnostics,
+            )
         )
 
-    return series
+    return CvConvergenceResult(
+        response=output_response,
+        input_vars=list(input_vars),
+        seed=seed,
+        n_bootstrap=n_bootstrap,
+        points=series,
+    )
 
 
 def fit_convergence_exponential(

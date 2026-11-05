@@ -85,12 +85,13 @@ poor design coverage) rather than "just needs more points":
 from itis_sumo import compute_cv_convergence, fit_convergence_exponential
 
 curve = compute_cv_convergence(run_dir, training_file, ["width", "height"], "stress")
-# one point per subset size: {n_samples, metrics, metrics_std, draws_by_metric,
-#                             n_bootstrap, metric, metric_std, draws, diagnostics}
+# a typed CvConvergenceResult: provenance once, then one point per subset
+# size — {n_samples, metrics, metrics_std, draws_by_metric, n_bootstrap,
+# diagnostics} (the `metric`/`draws` RMSE reading is a property derivation)
 
 fit = fit_convergence_exponential(
-    [e["n_samples"] for e in curve for _ in e["draws"]],
-    [d for e in curve for d in e["draws"]],
+    [point.n_samples for point in curve.points for _ in point.draws],
+    [draw for point in curve.points for draw in point.draws],
     asymptotic=True,  # a raw error metric floors above zero (V18wp)
 )
 fit["c"], fit["r_squared"]  # irreducible floor + fit quality
@@ -107,12 +108,12 @@ presentation time instead of paying for another sweep:
 from itis_sumo.report import render_convergence
 
 render_convergence(curve, metric="coverage95")  # axis and reference line follow the metric
-coverage95 = [point["metrics"]["coverage95"] for point in curve]  # or take the numbers
+coverage95 = [point.metrics["coverage95"] for point in curve.points]  # or the numbers
 ```
 
 | token | what it is | units |
 | --- | --- | --- |
-| `rmse` | root mean squared error — the default, and what a point's `metric` / `metric_std` / `draws` keys still mean | your QoI's units |
+| `rmse` | root mean squared error — the default, and what a point's `metric` / `metric_std` / `draws` properties still mean | your QoI's units |
 | `mae` | mean absolute error | your QoI's units |
 | `bias` | mean **signed** error, `mean(actual − predicted)` — the systematic over/under-prediction RMSE and MAE can net away | your QoI's units, signed |
 | `coverage68` | fraction of held-out observations inside `predicted ± 0.99σ·predicted_std` — the one-sigma interval at a round 68% target | fraction, 0…1 |
@@ -168,24 +169,35 @@ curve = model.uq_convergence_curve(
         "width": DistributionSpec("normal", mean=0.0, std=0.02),
         "height": DistributionSpec("normal", mean=0.0, std=0.01),
     },
-    min_samples=10,
+    convergence_steps=[10, 25, len(samples)],  # the Ns this curve will use
     n_bootstrap=3,
 )
-render_convergence(curve, metric="uq_p99")  # same point shape, same renderer
+render_convergence(curve, metric="uq_p99")  # takes the typed result directly
 ```
 
-Every point carries the CV curve's point shape, so nothing new is learned to
-plot it; the tokens are `uq_mean`, `uq_std`, `uq_p1`, `uq_p5`, `uq_median`,
-`uq_p95`, `uq_p99`, `uq_skew`, `uq_kurt` — in your QoI's units except the
-last two, which are dimensionless (`uq_kurt` is excess kurtosis, and its
-sampling error is ≈ √(24/M) over the M propagated values behind it, so read
-it as shape direction, not shape value). The tail is **two-sided** on
-purpose: a QoI going negative is a lower-tail failure that an upper-tail
-curve cannot see. The last point is the number the UQ panel shows for the
-whole training set, and wild tails at small N are the expected shape of this
-instrument — the declared distributions reaching further than the subset
-ever covered — not something the sweep clips. Pass `n_histograms=1` to
-propagate the inputs alone, without the surrogate's own spread at that N.
+The result is a typed, `dataclasses.asdict`-serializable object (V22rs) whose
+points carry the CV curve's shape, so nothing new is learned to plot them; the
+tokens are `uq_mean`, `uq_std`, `uq_p1`, `uq_p5`, `uq_median`, `uq_p95`,
+`uq_p99`, `uq_skew`, `uq_kurt` — in your QoI's units except the last two,
+which are dimensionless (`uq_skew`/`uq_kurt` follow scipy's bias-corrected and
+Fisher conventions, and `uq_kurt`'s sampling error is ≈ √(24/M) over the M
+propagated values behind it — read it as shape direction, not shape value).
+The tail is **two-sided** on purpose: a QoI going negative is a lower-tail
+failure that an upper-tail curve cannot see.
+
+Which sizes the sweep runs is explicit: `convergence_steps` names them
+outright (nothing is added silently), or `min_samples` +
+`convergence_samples_step` walks up to the full count, which is always the
+last point — that last point is the number the UQ panel shows for the whole
+training set. With neither given you get the same evenly-spaced, up-to-5-point
+sweep `compute_cv_convergence` draws, so the two curves share an x-axis out of
+the box. Wild tails at small N are the expected shape of this instrument —
+the declared distributions reaching further than the subset ever covered —
+not something the sweep clips. `seed` must be a strictly positive integer
+(Dakota's own constraint, stated here so you get a clear error instead of an
+engine failure); every point echoes the `draw_seeds` its draws actually ran
+with, so a warning is re-runnable from the result alone. Pass `n_histograms=1`
+to propagate the inputs alone, without the surrogate's own spread at that N.
 
 ## Reading the numbers
 

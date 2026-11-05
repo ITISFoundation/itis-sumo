@@ -29,7 +29,7 @@ import pytest
 from scipy import stats
 from scipy.special import erfinv
 
-from itis_sumo import fit
+from itis_sumo import fit, summarize_uncertainty
 from itis_sumo.engine.evaluation import (
     compute_cv_convergence,
     evaluate_sumo,
@@ -260,28 +260,28 @@ class TestSurrogateAccuracy:
 
         series = compute_cv_convergence(
             run_dir, train_file, ["x"], "y", min_samples=10, max_points=3
-        )
+        ).points
 
-        assert [point["n_samples"] for point in series] == [10, 17, 24]
-        maes = [point["metrics"]["mae"] for point in series]
+        assert [point.n_samples for point in series] == [10, 17, 24]
+        maes = [point.metrics["mae"] for point in series]
         assert maes[0] > maes[1] > maes[2]
         for point in series:
             # the family number IS the bundle number for this subset (no rerun)
-            assert point["metrics"]["mae"] == pytest.approx(
-                point["diagnostics"][0]["mean_abs"]
+            assert point.metrics["mae"] == pytest.approx(
+                point.diagnostics[0]["mean_abs"]
             )
             # nested intervals: 1sigma-inside can never exceed 3sigma-inside
             assert (
-                point["metrics"]["coverage68"]
-                <= point["metrics"]["coverage95"]
-                <= point["metrics"]["coverage99"]
+                point.metrics["coverage68"]
+                <= point.metrics["coverage95"]
+                <= point.metrics["coverage99"]
             )
         # more data does not make the surrogate's own spread less trustworthy
-        assert series[-1]["metrics"]["coverage95"] >= series[0]["metrics"]["coverage95"]
+        assert series[-1].metrics["coverage95"] >= series[0].metrics["coverage95"]
 
         # and a trend fit reads any metric's column, not just RMSE (V18wp)
         fit = fit_convergence_exponential(
-            [point["n_samples"] for point in series], maes, asymptotic=False
+            [point.n_samples for point in series], maes, asymptotic=False
         )
         assert fit["r_squared"] > 0.9
 
@@ -752,17 +752,17 @@ class TestHandleUqConvergence:
 
     TAIL_TOKENS = ("uq_p1", "uq_p5", "uq_median", "uq_p95", "uq_p99")
 
-    def _errors(self, curve, reference):
+    def _errors(self, points, reference):
         """Max abs quantile error per point; a point whose every draw failed
         (None metrics) becomes +inf so it can never count as converged."""
         errors = []
-        for point in curve:
-            if point["metrics"][self.TAIL_TOKENS[0]] is None:
+        for point in points:
+            if point.metrics[self.TAIL_TOKENS[0]] is None:
                 errors.append(float("inf"))
                 continue
             errors.append(
                 max(
-                    abs(point["metrics"][token] - truth)
+                    abs(point.metrics[token] - truth)
                     for token, truth in zip(self.TAIL_TOKENS, reference)
                 )
             )
@@ -776,15 +776,14 @@ class TestHandleUqConvergence:
         y = 2.0 * x + 1.0 + rng.normal(0.0, 0.3, x.size)
         curve = fit(pd.DataFrame({"x": x, "y": y}), ["x"], "y").uq_convergence_curve(
             distributions={"x": DistributionSpec("normal", mean=0.0, std=1.0)},
-            min_samples=6,
-            max_points=3,
+            convergence_steps=[6, 33, 60],
             num_samples=2000,
             seed=42,
         )
-        assert [point["n_samples"] for point in curve] == [6, 33, 60]
+        assert [point.n_samples for point in curve.points] == [6, 33, 60]
 
         reference = stats.norm.ppf([0.01, 0.05, 0.50, 0.95, 0.99], loc=1.0, scale=2.0)
-        errors = self._errors(curve, reference)
+        errors = self._errors(curve.points, reference)
         assert errors[-1] < 0.5, (
             f"full-training quantiles off the analytic N(1, 4): {errors[-1]:.3f}"
         )
@@ -796,17 +795,18 @@ class TestHandleUqConvergence:
             pd.DataFrame({"x": x, "y": np.sin(x)}), ["x"], "y"
         ).uq_convergence_curve(
             distributions={"x": DistributionSpec("normal", mean=0.0, std=1.0)},
-            min_samples=6,
-            max_points=3,
+            convergence_steps=[6, 33, 60],
             num_samples=2000,
             seed=7,
         )
         truth_pool = np.sin(np.random.default_rng(0).normal(0.0, 1.0, 200_000))
         reference = np.percentile(truth_pool, [1, 5, 50, 95, 99])
-        errors = self._errors(curve, reference)
+        errors = self._errors(curve.points, reference)
 
-        last = curve[-1]["metrics"]
-        quantiles = [last[token] for token in self.TAIL_TOKENS]
+        last = curve.points[-1].metrics
+        raw = [last[token] for token in self.TAIL_TOKENS]
+        assert all(value is not None for value in raw), "a dead point is not ordered"
+        quantiles = [value for value in raw if value is not None]
         assert quantiles == sorted(quantiles), "reported percentiles must be ordered"
         assert errors[-1] < 0.2, (
             f"full-training percentiles off direct Monte-Carlo: {errors[-1]:.3f}"
@@ -814,3 +814,43 @@ class TestHandleUqConvergence:
         assert errors[-1] < errors[0], (
             f"percentile error did not shrink with N: {errors}"
         )
+
+    def test_full_sample_point_equals_the_app_panel_number(self):
+        """§C's rationale for the `n_histograms=100` default: the curve's last
+        point is what `summarize_uncertainty` reports for the whole training set
+        TODAY — a convergence curve inside an app ends at the number the app's
+        UQ panel shows. The defaults matched by construction, but nothing
+        asserted the EQUALITY, so drift in either path would silently break the
+        promise. Both pipelines are seeded and deterministic, so this asserts
+        exactness, not tolerance.
+        """
+        rng = np.random.default_rng(42)
+        x = np.linspace(-4.0, 4.0, 60)
+        y = 2.0 * x + 1.0 + rng.normal(0.0, 0.3, x.size)
+        handle = fit(pd.DataFrame({"x": x, "y": y}), ["x"], "y")
+        spec = {"x": DistributionSpec("normal", mean=0.0, std=1.0)}
+        curve = handle.uq_convergence_curve(
+            distributions=spec, convergence_steps=[60], num_samples=2000, seed=42
+        )
+        panel = summarize_uncertainty(
+            handle.sample_uncertainty(
+                distributions=spec,
+                num_samples=2000,
+                n_histograms=100,
+                seed=42,
+            )
+        )
+        metrics = curve.points[0].metrics
+        for token, value in (
+            ("uq_mean", panel.mean),
+            ("uq_std", panel.std),
+            ("uq_p1", panel.p1),
+            ("uq_p5", panel.p5),
+            ("uq_median", panel.median),
+            ("uq_p95", panel.p95),
+            ("uq_p99", panel.p99),
+            ("uq_skew", panel.skew),
+            ("uq_kurt", panel.kurt),
+        ):
+            assert metrics[token] == pytest.approx(value), f"{token} off panel"
+        handle.close()
